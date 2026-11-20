@@ -836,6 +836,12 @@ class SetupAction extends _$SetupAction {
       return getProfile(setupState: state, patchConfig: realPatchConfig);
     }, title: 'build profile');
     final profileFailed = realProfile == null;
+    if (profileFailed) {
+      // Pushing the empty YAML would be accepted as a valid config with no
+      // proxies, so an active TUN would send everything DIRECT. Keep running
+      // whatever was applied last; safeRun has already shown the error.
+      return _SetupTaskResult.failed;
+    }
     final setupParams = _setupParams.copyWith(base: realProfile?.base);
     final inputs = switch (setupState) {
       final state? when !profileFailed => (

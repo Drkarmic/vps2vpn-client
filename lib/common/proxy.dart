@@ -80,9 +80,17 @@ class SystemProxyQueue {
 
   Future<void> _start(ProxyState state) async {
     try {
-      if (await _proxy.start(state.port, state.bassDomain, state.pacScript)) {
-        _applied = true;
-      } else {
+      final ok = await _proxy.start(
+        state.port,
+        state.bassDomain,
+        state.pacScript,
+      );
+      // A false result can come after some settings were already written
+      // (one network service of several, PAC but not bypass). Keep the
+      // responsibility to clear them, or the system is left pointing at a
+      // port nothing listens on once the app stops.
+      _applied = true;
+      if (!ok) {
         _logFailure();
       }
     } catch (_) {
@@ -125,5 +133,7 @@ class SystemProxyQueue {
 
 String proxyEnvCommand(int port, {required bool isWindows}) {
   final url = 'http://127.0.0.1:$port';
-  return isWindows ? 'set \$env:all_proxy=$url' : 'export all_proxy=$url';
+  // PowerShell (the default Windows terminal) assigns with `$env:NAME="..."`;
+  // `set $env:...` is neither valid PowerShell nor valid cmd.
+  return isWindows ? '\$env:all_proxy="$url"' : 'export all_proxy=$url';
 }

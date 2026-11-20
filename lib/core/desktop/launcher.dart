@@ -38,8 +38,11 @@ final class DirectCoreLauncher implements CoreProcessLauncher {
   }) async {
     final process = await _startProcess(corePath, [address]);
     process.stdout.listen((_) {});
-    process.stderr.listen((data) {
-      final error = utf8.decode(data);
+    // One decoder for the whole stream: a character split across two chunks
+    // is joined instead of throwing, and a bad byte cannot stop the logging.
+    process.stderr.transform(const Utf8Decoder(allowMalformed: true)).listen((
+      error,
+    ) {
       if (error.isNotEmpty) {
         commonPrint.log(error, logLevel: LogLevel.warning);
       }

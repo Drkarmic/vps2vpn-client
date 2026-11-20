@@ -241,6 +241,21 @@ Future<int> _package(ArgResults results) async {
       'left in libclash/ and no Rust library. Restore "build_assets: true".',
     );
   }
+  if (!dryRun) {
+    // The pinned Mihomo checkout carries two reviewed race fixes that live as
+    // hash-checked patches (tool/patches). Every package build applies them,
+    // locally as well as in CI, so a release never ships the unpatched core.
+    final patched = Process.runSync('go', [
+      'run',
+      'tool/apply_core_patches.go',
+    ], workingDirectory: root);
+    stdout.write(patched.stdout);
+    if (patched.exitCode != 0) {
+      throw PackageError(
+        'core patches did not apply cleanly: ${patched.stderr}'.trim(),
+      );
+    }
+  }
 
   final env = results['env'] as String;
   final targets = (results['targets'] as List<String>).isEmpty

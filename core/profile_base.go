@@ -436,7 +436,7 @@ func writeDocumentFile(dir, pattern string, document *yaml.Node) (string, error)
 	err = errors.Join(
 		encodeConfigMapping(writer, document.Content[0]),
 		writer.Flush(),
-		file.Chmod(0o644),
+		handOverPrivate(file),
 		file.Close(),
 	)
 	if err != nil {
@@ -472,10 +472,11 @@ func encodeConfigMapping(w io.Writer, mapping *yaml.Node) error {
 		for start := 0; start < len(value.Content); start += encodeSliceLength {
 			items := value.Content[start:min(start+encodeSliceLength, len(value.Content))]
 			slice := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: items}
+			// No clear(items) here: after inlineAliases the same list can sit
+			// under a second key too, which would then be written empty.
 			if err := encodeYamlPiece(w, slice, nil); err != nil {
 				return err
 			}
-			clear(items)
 		}
 	}
 	return nil

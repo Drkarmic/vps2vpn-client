@@ -91,6 +91,29 @@ void main() {
     expect(proxy.calls, isEmpty);
   });
 
+  test('clears a start that reported failure, which may have written '
+      'part of the settings', () async {
+    final proxy = _FakeProxy();
+    final queue = SystemProxyQueue(proxy);
+    proxy.held = Future.value(false);
+
+    await queue.apply(_state(isStart: true));
+    await queue.close();
+
+    expect(proxy.calls, ['start 7890', 'stop']);
+  });
+
+  test('copies a terminal proxy command each shell accepts', () {
+    expect(
+      proxyEnvCommand(7890, isWindows: true),
+      r'$env:all_proxy="http://127.0.0.1:7890"',
+    );
+    expect(
+      proxyEnvCommand(7890, isWindows: false),
+      'export all_proxy=http://127.0.0.1:7890',
+    );
+  });
+
   test('tries a failed stop again on close', () async {
     final proxy = _FakeProxy();
     final queue = SystemProxyQueue(proxy);

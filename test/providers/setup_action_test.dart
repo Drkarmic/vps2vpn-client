@@ -1285,8 +1285,10 @@ void main() {
     );
 
     test(
-      'a profile that fails to build still pushes the empty config to core',
+      'a profile that fails to build leaves the running config alone',
       () async {
+        // An empty config is valid to the core and has no rules, so with TUN
+        // on it would send everything DIRECT. The last good config stays.
         final profile = Profile.normal(label: 'p');
         final core = _MockCoreHandlerInterface();
         when(
@@ -1317,7 +1319,8 @@ void main() {
             .applyProfile(force: true);
 
         expect(succeeded, isFalse);
-        expect(pushedConfig, isEmpty);
+        expect(pushedConfig, isNull);
+        verifyNever(() => core.setupConfig(any()));
         expect(scoped.read(currentProfileIdProvider), profile.id);
       },
     );

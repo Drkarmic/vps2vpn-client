@@ -191,3 +191,15 @@ func scheduleReclaimOwnership() {
 		reclaimOwnership(homeDir)
 	}()
 }
+
+// handOverPrivate leaves a file that carries credentials (proxy passwords,
+// controller secret) readable by its one reader only: the app user, who an
+// elevated Core gives the file to, instead of every account on the machine.
+func handOverPrivate(file *os.File) error {
+	if isElevated() {
+		if err := file.Chown(realUid, realGid); err != nil {
+			return err
+		}
+	}
+	return file.Chmod(0o600)
+}

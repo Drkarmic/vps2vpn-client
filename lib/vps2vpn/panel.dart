@@ -751,6 +751,7 @@ final vpsPanelPinsProvider = FutureProvider.autoDispose<Set<String>>((
 
 final _releaseFileName = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$');
 const _maxReleaseBytes = 512 * 1024 * 1024;
+var _downloadSeq = 0;
 
 /// Downloads a client release from the panel into [dir], always direct and
 /// over HTTPS. A self-signed panel is trusted only through [pinnedSha256],
@@ -768,13 +769,19 @@ Future<File> vpsDownloadRelease(
     throw const HttpException('Unexpected release file name');
   }
   final client = _client(base: url, pinnedSha256: pinnedSha256);
-  final part = File('${dir.path}${Platform.pathSeparator}$name.part');
+  // Each download writes its own partial file: two taps on the same release
+  // must not write into, or delete, each other's file.
+  final part = File(
+    '${dir.path}${Platform.pathSeparator}.$name.'
+    '${DateTime.now().microsecondsSinceEpoch}-${_downloadSeq++}.part',
+  );
   try {
     final req = await client.getUrl(url);
     req.followRedirects = false;
     final res = await req.close().timeout(const Duration(seconds: 15));
     if (res.statusCode != HttpStatus.ok) {
-      await res.drain<void>();
+      // No drain: an error body that never ends would hold this forever.
+      // Closing the client below drops the connection instead.
       throw HttpException('Download failed (HTTP ${res.statusCode})');
     }
     final sink = part.openWrite();
@@ -790,9 +797,9 @@ Future<File> vpsDownloadRelease(
     } finally {
       await sink.close();
     }
-    final out = File('${dir.path}${Platform.pathSeparator}$name');
-    if (await out.exists()) await out.delete();
-    return await part.rename(out.path);
+    // rename replaces an existing file in one step; deleting it first would
+    // lose the old copy whenever the rename then fails.
+    return await part.rename('${dir.path}${Platform.pathSeparator}$name');
   } catch (_) {
     if (await part.exists()) await part.delete();
     rethrow;

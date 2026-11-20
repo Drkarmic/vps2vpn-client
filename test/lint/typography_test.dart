@@ -10,6 +10,10 @@ const _typography = 'package:prism_ui/typography.dart';
 // The code editor sizes its text from the editor font-size setting.
 const _editorSizes = ['lib/pages/editor.dart', 'lib/features/editor/'];
 
+// The VPS2VPN pages draw on their own palette and type scale, built in one
+// place, vpsText; every other file there must still go through vpsText.
+const _vpsScale = 'lib/vps2vpn/kit.dart';
+
 final _textTheme = RegExp(r'\btextTheme\b');
 final _fontSize = RegExp(r'\bfontSize:');
 final _fontWeight = RegExp(r'\bfontWeight:');
@@ -28,7 +32,8 @@ void main() {
       if (entity is! File || !path.endsWith('.dart') || _isGenerated(path)) {
         continue;
       }
-      final checksSize = !_editorSizes.any(path.startsWith);
+      final checksSize =
+          !_editorSizes.any(path.startsWith) && path != _vpsScale;
       final lines = entity.readAsLinesSync();
       for (var i = 0; i < lines.length; i++) {
         final line = lines[i];

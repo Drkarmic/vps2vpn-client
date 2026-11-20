@@ -174,7 +174,9 @@ fn is_loopback_host(value: &str) -> bool {
 }
 
 fn normalize_target_path(target: &str) -> Option<&str> {
-    let path = if target.len() >= 7 && target[..7].eq_ignore_ascii_case("http://") {
+    // `get` instead of `[..7]`: byte 7 of a non-ASCII target can fall inside a
+    // character, and slicing there panics, which aborts a release build.
+    let path = if target.get(..7).is_some_and(|s| s.eq_ignore_ascii_case("http://")) {
         let rest = &target[7..];
         let (authority, path_and_query) = match rest.find(['/', '?']) {
             Some(index) => (&rest[..index], &rest[index..]),
@@ -281,6 +283,15 @@ mod tests {
         assert!(reply.contains("X-Content-Type-Options: nosniff\r\n"));
         assert!(reply.contains("Content-Length: 15\r\n"));
         assert!(reply.ends_with("\r\n\r\nfunction x() {}"));
+    }
+
+    #[test]
+    fn non_ascii_target_is_refused_without_a_panic() {
+        // byte 7 falls inside the second "é": slicing there used to panic
+        assert_eq!(normalize_target_path("/aaaaaéé"), Some("/aaaaaéé"));
+        assert_eq!(normalize_target_path("ééééé"), Some("ééééé"));
+        let reply = text(response("GET /aaaaaéé HTTP/1.1\r\n\r\n", "function x() {}"));
+        assert!(!reply.starts_with("HTTP/1.1 200 OK\r\n"));
     }
 
     #[test]

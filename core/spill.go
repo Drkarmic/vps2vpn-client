@@ -58,8 +58,9 @@ func writeSpilledResponse(data []byte) (path string, err error) {
 			_ = os.Remove(path)
 		}
 	}()
-	// An elevated Core still answers a host running as the app user.
-	if err := file.Chmod(0o644); err != nil {
+	// An elevated Core still answers a host running as the app user: the file
+	// goes to that user, not to every account (it can hold proxy passwords).
+	if err := handOverPrivate(file); err != nil {
 		_ = file.Close()
 		return "", err
 	}
