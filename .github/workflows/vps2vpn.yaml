@@ -2,6 +2,7 @@ name: vps2vpn Windows
 
 # Builds the Windows installer, then installs it on the throwaway runner and
 # checks the takeover end to end (see .github/scripts/takeover-e2e.ps1).
+# The upstream release workflows are removed: they publish to FlClash channels.
 on:
   push:
     branches: [vps2vpn]
