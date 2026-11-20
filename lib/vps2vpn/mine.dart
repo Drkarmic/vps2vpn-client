@@ -278,6 +278,9 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
           ),
         ),
         const SizedBox(height: 24),
+        VpsSectionTitle(tr(context, '共享与工具', 'Sharing & tools')),
+        const _ShareTools(),
+        const SizedBox(height: 24),
         VpsCard(
           child: Row(
             children: [
@@ -307,6 +310,130 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// LAN sharing, a terminal proxy command and the tray behaviour: what
+/// mature clients put one click away.
+class _ShareTools extends ConsumerStatefulWidget {
+  const _ShareTools();
+
+  @override
+  ConsumerState<_ShareTools> createState() => _ShareToolsState();
+}
+
+class _ShareToolsState extends ConsumerState<_ShareTools> {
+  String? _copied;
+
+  Future<void> _copy(String key, String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    setState(() => _copied = key);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (mounted && _copied == key) setState(() => _copied = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final allowLan = ref.watch(
+      patchClashConfigProvider.select((s) => s.allowLan),
+    );
+    final port = ref.watch(patchClashConfigProvider.select((s) => s.mixedPort));
+    final localIp = ref.watch(localIpProvider);
+    final tray = ref.watch(appSettingProvider.select((s) => s.minimizeOnExit));
+    final proxy = 'http://127.0.0.1:$port';
+    final commands = <(String, String)>[
+      (
+        'PowerShell',
+        '\$env:HTTP_PROXY="$proxy"; \$env:HTTPS_PROXY="$proxy"; \$env:ALL_PROXY="$proxy"',
+      ),
+      (
+        'CMD',
+        'set HTTP_PROXY=$proxy && set HTTPS_PROXY=$proxy && set ALL_PROXY=$proxy',
+      ),
+      (
+        'Bash',
+        'export http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy',
+      ),
+    ];
+    final lanAddress = localIp == null || localIp.isEmpty
+        ? null
+        : '$localIp:$port';
+    return VpsCard(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: Column(
+        children: [
+          VpsRow(
+            icon: VpsIcon.globe,
+            title: tr(context, '局域网共享', 'Share on LAN'),
+            subtitle: allowLan && lanAddress != null
+                ? tr(
+                    context,
+                    '同一网络的设备填写代理 $lanAddress',
+                    'Other devices use proxy $lanAddress',
+                  )
+                : tr(
+                    context,
+                    '让同一 Wi-Fi 下的手机、电视等设备也走你的线路',
+                    'Let phones and TVs on your Wi-Fi use this line',
+                  ),
+            trailing: VpsSwitch(
+              value: allowLan,
+              onChanged: (v) => ref
+                  .read(patchClashConfigProvider.notifier)
+                  .update((s) => s.copyWith(allowLan: v)),
+            ),
+          ),
+          Container(height: 1, color: p.line),
+          VpsRow(
+            icon: VpsIcon.file,
+            title: tr(context, '终端代理', 'Terminal proxy'),
+            subtitle: tr(
+              context,
+              '复制命令到终端，让 git、npm、pip 等也走代理（本窗口有效）',
+              'Paste into a terminal so git, npm, pip use the proxy',
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(48, 0, 0, 14),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final (name, cmd) in commands)
+                    VpsButton(
+                      label: _copied == name
+                          ? tr(context, '已复制', 'Copied')
+                          : name,
+                      icon: VpsIcon.paste,
+                      onTap: () => _copy(name, cmd),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          Container(height: 1, color: p.line),
+          VpsRow(
+            icon: VpsIcon.shield,
+            title: tr(context, '关闭窗口时留在托盘', 'Keep running in tray'),
+            subtitle: tr(
+              context,
+              '点 × 只隐藏窗口，连接不中断',
+              'Closing the window keeps the connection',
+            ),
+            trailing: VpsSwitch(
+              value: tray,
+              onChanged: (v) => ref
+                  .read(appSettingProvider.notifier)
+                  .update((s) => s.copyWith(minimizeOnExit: v)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
