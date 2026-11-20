@@ -148,10 +148,12 @@ end;
 // windows/runner/Runner.rc.
 procedure RemoveUserData;
 begin
-  DelTree(ExpandConstant('{userappdata}\com.follow\clash'), True, True, True);
-  DelTree(ExpandConstant('{localappdata}\com.follow\clash'), True, True, True);
-  RemoveDir(ExpandConstant('{userappdata}\com.follow'));
-  RemoveDir(ExpandConstant('{localappdata}\com.follow'));
+  // vps2vpn's own folders only. com.follow\clash belongs to FlClash, which
+  // may be installed next to us; never touch it.
+  DelTree(ExpandConstant('{userappdata}\vps2vpn\vps2vpn'), True, True, True);
+  DelTree(ExpandConstant('{localappdata}\vps2vpn\vps2vpn'), True, True, True);
+  RemoveDir(ExpandConstant('{userappdata}\vps2vpn'));
+  RemoveDir(ExpandConstant('{localappdata}\vps2vpn'));
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
