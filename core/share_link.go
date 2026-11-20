@@ -220,11 +220,18 @@ func wsEarlyDataPath(network string, opts proxyFields) string {
 // The plain Xray form fixes alterId at 0, so only a legacy alterId falls back
 // to the base64 JSON of v2rayN.
 func encodeVmess(f proxyFields) string {
-	// Neither the legacy v2rayN JSON format nor Mihomo's Xray-style
-	// VMess link decoder retains skip-cert-verify. Do not export a link
-	// that silently changes the source proxy's TLS trust policy.
-	if f.flag("tls") && f.flag("skip-cert-verify") {
-		return ""
+	// The pinned Xray and legacy v2rayN decoders do not carry an override
+	// for certificate verification, custom trust names, or mTLS credentials.
+	if f.flag("tls") {
+		if f.flag("skip-cert-verify") || hasUnencodedTLSIdentity(f) {
+			return ""
+		}
+		// Xray-style VMess can preserve pcs=fingerprint; legacy v2rayN JSON
+		// has no equivalent field and would silently discard the cert pin.
+		alterID := f.str("alterId")
+		if alterID != "" && alterID != "0" && f.str("fingerprint") != "" {
+			return ""
+		}
 	}
 	if alterID := f.str("alterId"); alterID == "" || alterID == "0" {
 		query := vShareQuery(f)
@@ -280,9 +287,21 @@ func encodeVmess(f proxyFields) string {
 	return "vmess://" + base64.StdEncoding.EncodeToString(data)
 }
 
+// VLESS and VMess share links cannot express these certificate identity
+// requirements in either the pinned Xray or legacy v2rayN decoder.
+func hasUnencodedTLSIdentity(f proxyFields) bool {
+	for _, key := range []string{"name-cert-verify", "certificate", "private-key"} {
+		if f.str(key) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func encodeVless(f proxyFields) string {
-	// The pinned Xray share-link decoder does not parse allowInsecure.
-	if f.flag("tls") && f.flag("skip-cert-verify") {
+	// The pinned Xray share-link decoder has no representation for disabled
+	// certificate checks, custom verification names or mTLS credentials.
+	if f.flag("tls") && (f.flag("skip-cert-verify") || hasUnencodedTLSIdentity(f)) {
 		return ""
 	}
 	query := vShareQuery(f)
