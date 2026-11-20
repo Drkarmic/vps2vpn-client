@@ -13,6 +13,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/providers/routed_probe.dart';
 import 'package:fl_clash/providers/service_status.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -280,7 +281,7 @@ class _HeroState extends ConsumerState<_Hero> {
             '流量正经由你的服务器加密传输',
             'Traffic is encrypted through your server',
           )
-        : tr(context, '点击右侧按钮建立连接', 'Press connect to start');
+        : tr(context, '轻点"连接"，即刻接入你的私有线路', 'Tap Connect to use your private line');
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -371,11 +372,11 @@ class _HeroState extends ConsumerState<_Hero> {
                   Container(
                     width: 1,
                     height: 30,
-                    margin: const EdgeInsets.symmetric(horizontal: 18),
+                    margin: EdgeInsets.symmetric(horizontal: wide ? 18 : 10),
                     color: p.line,
                   ),
                 Expanded(
-                  flex: i == 1 ? 2 : 1,
+                  flex: i == 1 && wide ? 2 : 1,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -695,16 +696,21 @@ class _RingPainter extends CustomPainter {
         ..color = track,
     );
     if (!on) return;
+    // The gradient spans only the arc, and the arc starts a little past 0
+    // so its round cap never samples the violet end of the sweep.
+    const start = 0.12;
+    const sweep = math.pi * 1.4;
     canvas.drawArc(
       rect,
-      0,
-      math.pi * 1.4,
+      start,
+      sweep,
       false,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.5
         ..strokeCap = StrokeCap.round
         ..shader = const SweepGradient(
+          endAngle: start + sweep,
           colors: [Color(0x00FF8A70), vpsCoralSoft, vpsCoralDeep, vpsViolet],
           stops: [0, 0.35, 0.7, 1],
         ).createShader(rect),
@@ -775,6 +781,18 @@ class _Stats extends ConsumerWidget {
           : tr(context, '已到期', 'Expired');
     }
     final p = VpsPalette.of(context);
+    final groups = ref.watch(currentGroupsStateProvider).value;
+    final main = mainGroup(groups);
+    if (main != null && ref.watch(isStartProvider)) vpsAutoTestOnce(ref, main);
+    final latency = main == null
+        ? null
+        : ref.watch(delayProvider(proxyName: main.name, testUrl: main.testUrl));
+    final line = main == null
+        ? null
+        : friendlyLineName(
+            context,
+            ref.watch(selectedProxyNameProvider(main.name)) ?? '',
+          );
     final tiles = [
       _Stat(
         icon: VpsIcon.arrowDown,
@@ -803,12 +821,16 @@ class _Stats extends ConsumerWidget {
           foot: left != null ? expire : null,
         )
       else
+        // Uptime is already in the hero; the line's latency says more here.
         _Stat(
-          icon: VpsIcon.sun,
-          label: tr(context, '连接时长', 'Uptime'),
-          value: ref.watch(isStartProvider)
-              ? getTimeText(ref.watch(runTimeProvider))
-              : '—',
+          icon: VpsIcon.bolt,
+          label: tr(context, '当前延迟', 'Latency'),
+          value: switch (latency) {
+            null => '—',
+            < 0 => tr(context, '超时', 'Timeout'),
+            final d => '$d ms',
+          },
+          foot: line,
         ),
     ];
     return VpsCard(

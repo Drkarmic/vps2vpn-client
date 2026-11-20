@@ -3,14 +3,18 @@ package core
 // vps2vpn smart lines: added on top of whatever the subscription brings,
 // never replacing it.
 //
-//   - "⚡ 智能线路" (fallback): the lines ordered fast-first (Hysteria2/TUIC,
-//     then REALITY, then the rest). When the ISP throttles UDP and the fast
-//     line stops answering, traffic moves to REALITY within about a minute and
-//     comes back on its own once the fast line answers again. It becomes the
-//     first choice of the subscription's first selector, so new users get it
-//     without doing anything; a choice the user made is kept.
-//   - "🤖 AI 专线" (fallback): the same lines, but those on the primary server
-//     first, so AI sites keep seeing one exit IP (a changing IP is what makes
+//   - "⚡ 智能线路" (fallback): every protocol of the primary server (the
+//     subscription's first line) fast-first (Hysteria2/TUIC, then REALITY,
+//     then the rest), and only after them the other servers. When the ISP
+//     throttles UDP and the fast line stops answering, traffic moves to
+//     REALITY on the same machine within about a minute, so the exit IP does
+//     not change; it comes back on its own once the fast line answers again.
+//     Another server (another IP) is used only when the whole primary server
+//     is unreachable. It becomes the first choice of the subscription's first
+//     selector, so new users get it without doing anything; a choice the user
+//     made is kept.
+//   - "🤖 AI 专线" (fallback): the same order, but slower to give up on a
+//     line, so AI sites keep seeing one exit IP (a changing IP is what makes
 //     them ask for verification or flag the account). Only added, with its
 //     rules, when the subscription does not route AI sites itself: curated
 //     rules always win.
@@ -123,7 +127,16 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 	if len(lines) < 2 || vpsHasGroup(raw, vpsSmartGroup) {
 		return
 	}
-	sort.SliceStable(lines, func(i, j int) bool { return lines[i].rank < lines[j].rank })
+	// The primary server is the one the subscription lists first. Its lines
+	// come first so a protocol switch never changes the exit IP.
+	primary := lines[0].server
+	sort.SliceStable(lines, func(i, j int) bool {
+		pi, pj := lines[i].server == primary, lines[j].server == primary
+		if pi != pj {
+			return pi
+		}
+		return lines[i].rank < lines[j].rank
+	})
 	smart := make([]string, len(lines))
 	for i, l := range lines {
 		smart[i] = l.name
@@ -151,20 +164,7 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 	if userRules < 0 || vpsRoutesAI(raw.Rule) || vpsHasGroup(raw, vpsAIGroup) {
 		return
 	}
-	primary := lines[0].server
-	ai := make([]line, len(lines))
-	copy(ai, lines)
-	sort.SliceStable(ai, func(i, j int) bool {
-		pi, pj := ai[i].server == primary, ai[j].server == primary
-		if pi != pj {
-			return pi
-		}
-		return ai[i].rank < ai[j].rank
-	})
-	aiNames := make([]string, len(ai))
-	for i, l := range ai {
-		aiNames[i] = l.name
-	}
+	aiNames := append([]string(nil), smart...)
 	raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
 		"name":             vpsAIGroup,
 		"type":             "fallback",

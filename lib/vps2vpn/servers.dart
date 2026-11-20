@@ -39,9 +39,45 @@ class VpsServersPage extends ConsumerStatefulWidget {
   ConsumerState<VpsServersPage> createState() => _VpsServersPageState();
 }
 
+/// Groups already speed-tested since the app started, so opening the page
+/// again does not fire another round of probes.
+final _autoTested = <String>{};
+
+/// Speed-tests [group] once per app session, after the current frame.
+void vpsAutoTestOnce(WidgetRef ref, Group group) {
+  if (group.name.isEmpty || group.all.isEmpty) return;
+  if (!_autoTested.add(group.name)) return;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    ref
+        .read(proxiesActionProvider.notifier)
+        .delayTest(group.all, group.testUrl);
+  });
+}
+
+/// Remembered for the whole app session, like the selected tab.
+final _byLatency = ValueNotifier<bool>(true);
+
+/// Sort key: answered lines by latency, then untested, then timeouts.
+int _rank(int? d) => switch (d) {
+  null || 0 => 1 << 20,
+  < 0 => 1 << 21,
+  final v => v,
+};
+
+bool _isPinned(String name) =>
+    name == vpsSmartGroupName || name == vpsAIGroupName;
+
 class _VpsServersPageState extends ConsumerState<VpsServersPage> {
   String? _groupName;
   bool _testing = false;
+
+  void _autoTest(Group group) {
+    if (group.name.isEmpty || group.all.isEmpty) return;
+    if (!_autoTested.add(group.name)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _test(group);
+    });
+  }
 
   Future<void> _test(Group group) async {
     if (_testing) return;
@@ -115,6 +151,38 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
 
     final selected = ref.watch(selectedProxyNameProvider(group.name));
     final selectable = group.type == GroupType.Selector;
+    _autoTest(group);
+    final byLatency = _byLatency.value;
+    final delays = {
+      for (final proxy in group.all)
+        proxy.name: ref.watch(
+          delayProvider(proxyName: proxy.name, testUrl: group.testUrl),
+        ),
+    };
+    // The fastest real node (the smart/AI groups are not nodes).
+    String? fastest;
+    var best = 1 << 30;
+    for (final proxy in group.all) {
+      final d = delays[proxy.name];
+      if (_isPinned(proxy.name) || d == null || d <= 0) continue;
+      if (d < best) {
+        best = d;
+        fastest = proxy.name;
+      }
+    }
+    final proxies = [...group.all];
+    if (byLatency) {
+      // Stable sort keeps the subscription order among equals; the smart and
+      // AI lines stay on top because they are choices, not servers.
+      final order = {for (final (i, x) in proxies.indexed) x.name: i};
+      proxies.sort((a, b) {
+        final pa = _isPinned(a.name) ? 0 : 1;
+        final pb = _isPinned(b.name) ? 0 : 1;
+        if (pa != pb) return pa - pb;
+        final c = _rank(delays[a.name]).compareTo(_rank(delays[b.name]));
+        return c != 0 ? c : order[a.name]!.compareTo(order[b.name]!);
+      });
+    }
     return VpsPage(
       title: tr(context, '节点', 'Nodes'),
       subtitle: selectable
@@ -128,21 +196,36 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
         onTap: () => _test(group),
       ),
       children: [
-        if (groups.length > 1) ...[
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final g in groups)
-                _GroupTab(
-                  label: friendlyLineName(context, g.name),
-                  selected: g.name == group.name,
-                  onTap: () => setState(() => _groupName = g.name),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: groups.length > 1
+                  ? Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final g in groups)
+                          _GroupTab(
+                            label: friendlyLineName(context, g.name),
+                            selected: g.name == group.name,
+                            onTap: () => setState(() => _groupName = g.name),
+                          ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            const SizedBox(width: 12),
+            _GroupTab(
+              label: byLatency
+                  ? tr(context, '按延迟 ↑', 'By latency ↑')
+                  : tr(context, '默认顺序', 'Default order'),
+              selected: false,
+              onTap: () => setState(() => _byLatency.value = !_byLatency.value),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
         LayoutBuilder(
           builder: (context, c) {
             final cols = c.maxWidth >= 820 ? 3 : (c.maxWidth >= 520 ? 2 : 1);
@@ -151,12 +234,14 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
               spacing: 12,
               runSpacing: 12,
               children: [
-                for (final proxy in group.all)
+                for (final proxy in proxies)
                   SizedBox(
+                    key: ValueKey(proxy.name),
                     width: w,
                     child: _ProxyCard(
                       proxy: proxy,
                       testUrl: group.testUrl,
+                      fastest: proxy.name == fastest,
                       selected: proxy.name == selected,
                       onTap: selectable
                           ? () => ref
@@ -223,12 +308,14 @@ class _ProxyCard extends ConsumerWidget {
     required this.proxy,
     required this.testUrl,
     required this.selected,
+    this.fastest = false,
     this.onTap,
   });
 
   final Proxy proxy;
   final String? testUrl;
   final bool selected;
+  final bool fastest;
   final VoidCallback? onTap;
 
   @override
@@ -270,19 +357,47 @@ class _ProxyCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  friendlyLineName(context, proxy.name),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: vpsText(p, size: 14, weight: FontWeight.w600),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        friendlyLineName(context, proxy.name),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: vpsText(p, size: 14, weight: FontWeight.w600),
+                      ),
+                    ),
+                    if (fastest) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: p.good.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          tr(context, '最快', 'Fastest'),
+                          style: vpsText(
+                            p,
+                            size: 10.5,
+                            weight: FontWeight.w600,
+                            color: p.good,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
                   proxy.name == vpsSmartGroupName
                       ? tr(
                           context,
-                          '推荐 · 优选最快协议，故障自动切换',
-                          'Recommended · fastest protocol, auto failover',
+                          '推荐 · 出口 IP 不变，协议受限自动切换',
+                          'Recommended · same exit IP, auto protocol switch',
                         )
                       : proxy.name == vpsAIGroupName
                       ? tr(context, 'AI 服务固定出口', 'Steady exit for AI')

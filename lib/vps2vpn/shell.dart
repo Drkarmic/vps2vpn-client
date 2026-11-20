@@ -4,6 +4,8 @@
 
 import 'dart:io';
 
+import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/check.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
@@ -114,7 +116,6 @@ class _SideNav extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = VpsPalette.of(context);
-    final isStart = ref.watch(isStartProvider);
     return Container(
       width: 224,
       decoration: BoxDecoration(
@@ -164,43 +165,119 @@ class _SideNav extends ConsumerWidget {
               ),
             ),
           const Spacer(),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: p.card,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: p.line),
-            ),
-            child: Row(
+          const _SideStatus(),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom of the sidebar: connection state, the line in use and live speed.
+/// Tapping it opens the overview.
+class _SideStatus extends ConsumerWidget {
+  const _SideStatus();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = VpsPalette.of(context);
+    final on = ref.watch(isStartProvider);
+    final hasProfile = ref.watch(profilesProvider.select((s) => s.isNotEmpty));
+    final group = mainGroup(ref.watch(currentGroupsStateProvider).value);
+    final line = group == null
+        ? null
+        : ref.watch(selectedProxyNameProvider(group.name));
+    final now = on
+        ? ref.watch(trafficsProvider).list.safeLast(const Traffic())
+        : const Traffic();
+    final title = !hasProfile
+        ? tr(context, '未导入订阅', 'No subscription')
+        : on
+        ? tr(context, '已连接', 'Connected')
+        : tr(context, '未连接', 'Not connected');
+    final small = vpsText(p, size: 11.5, color: p.soft, tabular: true);
+    return VpsPressable(
+      onTap: () => vpsTab.value = vpsTabHome,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+        decoration: BoxDecoration(
+          color: p.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: p.line),
+          boxShadow: p.raise,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
-                  width: 10,
-                  height: 10,
+                  width: 8,
+                  height: 8,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isStart ? p.good : p.muted,
-                    boxShadow: isStart
+                    color: on ? p.good : p.muted,
+                    boxShadow: on
                         ? [
                             BoxShadow(
-                              color: p.good.withValues(alpha: 0.6),
+                              color: p.good.withValues(alpha: 0.55),
                               blurRadius: 8,
                             ),
                           ]
                         : const [],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  isStart
-                      ? tr(context, '已连接', 'Connected')
-                      : tr(context, '未连接', 'Not connected'),
-                  style: vpsText(p, size: 13, weight: FontWeight.w600),
-                ),
+                const SizedBox(width: 9),
+                Text(title, style: vpsText(p, size: 13, weight: FontWeight.w600)),
               ],
             ),
-          ),
-        ],
+            if (hasProfile && line != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                friendlyLineName(context, line),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: vpsText(p, size: 12, color: p.soft),
+              ),
+            ],
+            AnimatedSize(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topLeft,
+              child: on
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Container(
+                        padding: const EdgeInsets.only(top: 10),
+                        decoration: BoxDecoration(
+                          border: Border(top: BorderSide(color: p.line)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '↓ ${now.down.traffic.show}/s',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: small,
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                '↑ ${now.up.traffic.show}/s',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: small,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+          ],
+        ),
       ),
     );
   }

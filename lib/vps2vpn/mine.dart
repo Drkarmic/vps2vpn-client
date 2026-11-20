@@ -231,8 +231,8 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 title: tr(context, '智能线路', 'Smart lines'),
                 subtitle: tr(
                   context,
-                  '协议优选与故障自动切换，AI 服务固定出口',
-                  'Protocol preference, auto failover, steady AI exit',
+                  '出口 IP 不变，协议受限时自动切换；AI 服务固定出口',
+                  'Same exit IP; switches protocol when one is blocked',
                 ),
                 trailing: VpsSwitch(
                   value: smart,

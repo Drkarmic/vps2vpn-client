@@ -45,8 +45,10 @@ func TestVps2vpnEnhanceAddsSmartAndAI(t *testing.T) {
 		t.Fatal("no smart group")
 	}
 	got := smart["proxies"].([]string)
-	// Fast lines first (in subscription order), REALITY after.
-	want := []string{"US-HY2", "SG-HY2", "SG-REALITY"}
+	// The primary server (the subscription's first line, SG) keeps every
+	// protocol ahead of any other server, fast first: switching protocol
+	// never changes the exit IP. The US server is the last resort.
+	want := []string{"SG-HY2", "SG-REALITY", "US-HY2"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("smart order %v, want %v", got, want)
@@ -56,8 +58,8 @@ func TestVps2vpnEnhanceAddsSmartAndAI(t *testing.T) {
 		t.Fatalf("selector first = %v", first)
 	}
 	ai := vpsGroup(raw, vpsAIGroup)["proxies"].([]string)
-	// Primary server (of the fastest line) first: one exit IP for AI.
-	if ai[0] != "US-HY2" || ai[1] != "SG-HY2" || ai[2] != "SG-REALITY" {
+	// Same order for AI: one exit IP unless the whole primary server is down.
+	if ai[0] != "SG-HY2" || ai[1] != "SG-REALITY" || ai[2] != "US-HY2" {
 		t.Fatalf("ai order %v", ai)
 	}
 	if raw.Rule[0] != "DOMAIN-SUFFIX,anthropic.com,"+vpsAIGroup || raw.Rule[len(raw.Rule)-1] != "MATCH,Proxy" {
