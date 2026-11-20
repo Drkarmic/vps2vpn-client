@@ -183,8 +183,9 @@ Future<List<String>> quitRivals(
     if (!canKill()) break; // disconnect/takeover disable cancels pending kills
     if (pid <= 0) continue;
     try {
-      // /T includes its child processes, /F handles tray applications.
-      await run('taskkill', ['/F', '/T', '/PID', '$pid']);
+      // /T would also kill descendants that were never in the observed
+      // rival list, including unrelated processes launched by the app.
+      await run('taskkill', ['/F', '/PID', '$pid']);
     } catch (_) {}
   }
   if (!canKill()) return rivalNames(rivals);
