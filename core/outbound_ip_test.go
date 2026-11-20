@@ -77,10 +77,10 @@ func TestMentionsIpNeedsAWholeAddress(t *testing.T) {
 
 func TestMentionsIpSkipsLocalAddresses(t *testing.T) {
 	for _, body := range []string{
-		""ip=192.168.1.1nloc=US",
+		"ip=192.168.1.1\nloc=US",
 		`{"ip":"10.20.30.40","country":"US"}`,
-		""ip=172.16.0.9nloc=US",
-		""ip=100.64.12.34nloc=US",
+		"ip=172.16.0.9\nloc=US",
+		"ip=100.64.12.34\nloc=US",
 		`{"ip":"fd00::1","country_code":"US"}`,
 		`{"ip":"::ffff:192.168.1.1","cc":"US"}`,
 	} {
