@@ -109,6 +109,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   ),
                 ),
         ),
+        const VpsUpdateCard(),
         const VpsAccountCard(),
         for (final profile in profiles)
           Padding(

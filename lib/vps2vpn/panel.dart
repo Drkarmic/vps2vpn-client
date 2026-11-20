@@ -69,6 +69,56 @@ class VpsAiStatus {
   }
 }
 
+/// A newer client the owner published on the panel (optional).
+class VpsClientRelease {
+  const VpsClientRelease({
+    required this.version,
+    required this.url,
+    this.notes,
+  });
+
+  final String version;
+  final Uri url;
+  final String? notes;
+
+  static VpsClientRelease? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final version = '${json['version'] ?? ''}'.trim().replaceFirst('v', '');
+    final url = Uri.tryParse('${json['url'] ?? ''}');
+    if (version.isEmpty ||
+        url == null ||
+        !(url.isScheme('http') || url.isScheme('https'))) {
+      return null;
+    }
+    final notes = json['notes'];
+    return VpsClientRelease(
+      version: version,
+      url: url,
+      notes: notes is String && notes.isNotEmpty ? notes : null,
+    );
+  }
+
+  /// True when this release is newer than [current]; false when either
+  /// version is not plain numbers.
+  bool newerThan(String current) {
+    List<int>? parse(String v) {
+      final parts = v.split('+').first.split('.');
+      final nums = parts.map(int.tryParse).toList();
+      return nums.contains(null) ? null : nums.cast<int>();
+    }
+
+    final a = parse(version);
+    final b = parse(current);
+    if (a == null || b == null) return false;
+    for (var i = 0; i < 3; i++) {
+      final x = i < a.length ? a[i] : 0;
+      final y = i < b.length ? b[i] : 0;
+      if (x != y) return x > y;
+    }
+    return false;
+  }
+}
+
 class VpsMember {
   const VpsMember({
     required this.name,
@@ -79,6 +129,7 @@ class VpsMember {
     this.quotaGb = 0,
     this.expireAt,
     this.ai,
+    this.client,
   });
 
   final String name;
@@ -93,6 +144,7 @@ class VpsMember {
   final double quotaGb;
   final DateTime? expireAt;
   final VpsAiStatus? ai;
+  final VpsClientRelease? client;
 
   int get used => usedUp + usedDown;
 
@@ -115,6 +167,7 @@ class VpsMember {
           ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
           : null,
       ai: VpsAiStatus.fromJson(json['ai']),
+      client: VpsClientRelease.fromJson(json['client']),
     );
   }
 }

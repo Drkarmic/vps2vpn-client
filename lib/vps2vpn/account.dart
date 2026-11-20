@@ -4,10 +4,12 @@
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 String _ago(BuildContext context, DateTime at) {
   final d = DateTime.now().difference(at);
@@ -234,6 +236,78 @@ class VpsAccountCard extends ConsumerWidget {
                 ),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String? _appVersion() {
+  try {
+    return globalState.packageInfo.version;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Settings page: the owner published a newer client on the panel. Opens
+/// the download in the browser; never downloads or installs by itself.
+class VpsUpdateCard extends ConsumerWidget {
+  const VpsUpdateCard({super.key, this.currentVersion});
+
+  /// For tests; the app's own version otherwise.
+  final String? currentVersion;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final release = ref.watch(vpsMemberProvider).value?.member?.client;
+    final current = currentVersion ?? _appVersion();
+    if (release == null || current == null || !release.newerThan(current)) {
+      return const SizedBox.shrink();
+    }
+    final p = VpsPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: VpsCard(
+        highlight: true,
+        padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+        child: Row(
+          children: [
+            VpsIconView(VpsIcon.sparkle, size: 19, color: p.accent),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr(
+                      context,
+                      '有新版本 ${release.version}',
+                      'Version ${release.version} is available',
+                    ),
+                    style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    release.notes ??
+                        tr(
+                          context,
+                          '当前 $current，下载后运行安装包即可升级',
+                          'You have $current; run the downloaded installer',
+                        ),
+                    style: vpsText(p, size: 13, color: p.soft, height: 1.45),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            VpsButton(
+              label: tr(context, '下载', 'Download'),
+              filled: true,
+              onTap: () =>
+                  launchUrl(release.url, mode: LaunchMode.externalApplication),
+            ),
           ],
         ),
       ),

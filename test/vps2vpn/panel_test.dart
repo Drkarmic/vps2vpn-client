@@ -55,6 +55,23 @@ void main() {
     expect(VpsMember.fromJson({'expire_at': 0}).expireAt, isNull);
   });
 
+  test('a published client is offered only when it is newer', () {
+    final r = VpsClientRelease.fromJson({
+      'version': 'v1.4.0',
+      'url': 'https://1.2.3.4:43470/dl/vps2vpn-setup.exe',
+    })!;
+    expect(r.version, '1.4.0');
+    expect(r.newerThan('1.3.9'), isTrue);
+    expect(r.newerThan('1.4.0+12'), isFalse);
+    expect(r.newerThan('1.10.0'), isFalse);
+    expect(r.newerThan('dev'), isFalse);
+    expect(
+      VpsClientRelease.fromJson({'version': '2.0', 'url': 'file:///c:/x'}),
+      isNull,
+    );
+    expect(VpsClientRelease.fromJson(null), isNull);
+  });
+
   test('names the line kinds the panel knows', () {
     expect(vpsLineKind({'type': 'hysteria2'}), 'hy2');
     expect(vpsLineKind({'type': 'tuic'}), 'tuic');
