@@ -5,6 +5,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:prism_ui/color.dart';
 
 import 'preferences.dart';
+import 'system.dart';
 import 'task.dart';
 
 typedef MigrationTransform =
@@ -82,23 +83,34 @@ class _AppMigrationStore implements MigrationStore {
 class Migration {
   final MigrationStore _store;
   final MigrationTransform _migrateV0;
+  final bool _isWindows;
 
-  Migration({required MigrationStore store, MigrationTransform? migrateV0})
-    : _store = store,
-      _migrateV0 = migrateV0 ?? oldToNowTask;
+  Migration({
+    required MigrationStore store,
+    MigrationTransform? migrateV0,
+    bool? isWindows,
+  }) : _store = store,
+       _migrateV0 = migrateV0 ?? oldToNowTask,
+       _isWindows = isWindows ?? system.isWindows;
 
   static const currentVersion = 1;
 
   /// One-off setting changes for upgrades, apart from [currentVersion], which
   /// backups carry and an older app refuses when it is newer than its own.
-  static const upgradeVersion = 4;
+  static const upgradeVersion = 5;
 
-  static const Map<int, Config Function(Config config)> _upgrades = {
+  Map<int, Config Function(Config config)> get _upgrades => {
     1: _resetThemeColors,
     2: _keepGlassLook,
     3: _followSystemColors,
     4: _turnOffSidebarBlur,
+    5: _newDefaults,
   };
+
+  /// What a new install starts from beyond the `const` defaults, which cannot
+  /// tell the platform; step 5 brings existing installs the same.
+  Config _newDefaults(Config config) =>
+      _isWindows ? withWindowsStrictRoute(config) : config;
 
   Future<Config> run() async {
     final configMap = await _store.getConfigMap();
@@ -176,6 +188,9 @@ class Migration {
     }
 
     config = Config.realFromJson(data.configMap);
+    if (configMap == null) {
+      config = _newDefaults(config);
+    }
     await _store.restore(data);
     if (!await _store.saveConfig(config)) {
       // An unopenable store is reported later by the corrupt-cache dialog,
@@ -237,6 +252,31 @@ Config _followSystemColors(Config config) {
 // Releases stored sidebar blur on while its switch stayed hidden.
 Config _turnOffSidebarBlur(Config config) =>
     config.copyWith(themeProps: config.themeProps.copyWith(sidebarBlur: false));
+
+/// vps2vpn: strict-route on for the Windows TUN, as an app-wide TUN override
+/// the user can see and switch off (TUN override page, or "LAN compatibility
+/// mode" in simple-mode settings). A strict-route key the user already set,
+/// on or off, is kept; a custom profile's own key still wins (overAppTun).
+///
+/// Why: mihomo's docs say dns-hijack cannot catch DNS sent to LAN resolvers
+/// on Windows and strict-route stops Windows' multihomed DNS leak
+/// (https://wiki.metacubex.one/config/inbound/tun/). In the pinned sing-tun
+/// (v0.4.29 tun_windows.go) it adds WFP filters that block port 53 off the
+/// TUN in hijack mode and, when the TUN has no IPv6 address (`ipv6: false`),
+/// block IPv6 off the TUN, so IPv6 fails closed instead of leaking. The cost
+/// is VirtualBox/Hyper-V/LAN DNS breakage, hence the visible switch.
+Config withWindowsStrictRoute(Config config) {
+  final patch = config.patchClashConfig;
+  if (patch.tunOverrideKeys.contains(TunOverrideKey.strictRoute)) {
+    return config;
+  }
+  return config.copyWith(
+    patchClashConfig: patch.copyWith(
+      tunOverride: patch.tunOverride.copyWith(strictRoute: true),
+      tunOverrideKeys: {...patch.tunOverrideKeys, TunOverrideKey.strictRoute},
+    ),
+  );
+}
 
 bool _isV0(Map<String, Object?>? configMap) =>
     configMap?['proxiesStyle'] != null;

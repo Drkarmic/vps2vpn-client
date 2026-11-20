@@ -306,6 +306,116 @@ void main() {
         expect(await upgrade(4), isTrue);
       });
 
+      group('Windows strict-route', () {
+        PatchClashConfig patchOf(Config config) => config.patchClashConfig;
+
+        Future<PatchClashConfig> upgrade(
+          int from, {
+          required bool isWindows,
+          PatchClashConfig? patch,
+        }) async {
+          final configMap = _createConfigMap();
+          if (patch != null) {
+            configMap['patchClashConfig'] = jsonDecode(jsonEncode(patch));
+          }
+          final store = _FakeMigrationStore(
+            configMap: configMap,
+            version: Migration.currentVersion,
+            upgradeVersion: from,
+          );
+          final config = await Migration(
+            store: store,
+            isWindows: isWindows,
+          ).run();
+          return patchOf(config);
+        }
+
+        test('turns on for a Windows user who never set it, once', () async {
+          final upgraded = await upgrade(4, isWindows: true);
+          expect(
+            upgraded.tunOverrideKeys,
+            contains(TunOverrideKey.strictRoute),
+          );
+          expect(upgraded.tunOverride.strictRoute, isTrue);
+
+          final later = await upgrade(5, isWindows: true);
+          expect(later.tunOverrideKeys, isEmpty);
+        });
+
+        test('keeps a strict-route the user switched off', () async {
+          final upgraded = await upgrade(
+            4,
+            isWindows: true,
+            patch: const PatchClashConfig(
+              tunOverride: ProfileTun(mtu: 1500),
+              tunOverrideKeys: {TunOverrideKey.strictRoute, TunOverrideKey.mtu},
+            ),
+          );
+          expect(upgraded.tunOverride.strictRoute, isFalse);
+          expect(upgraded.tunOverride.mtu, 1500);
+          expect(upgraded.tunOverrideKeys, {
+            TunOverrideKey.strictRoute,
+            TunOverrideKey.mtu,
+          });
+        });
+
+        test('keeps the other TUN overrides it adds beside', () async {
+          final upgraded = await upgrade(
+            4,
+            isWindows: true,
+            patch: const PatchClashConfig(
+              tunOverride: ProfileTun(mtu: 1500),
+              tunOverrideKeys: {TunOverrideKey.mtu},
+            ),
+          );
+          expect(upgraded.tunOverride.mtu, 1500);
+          expect(upgraded.tunOverride.strictRoute, isTrue);
+          expect(upgraded.tunOverrideKeys, {
+            TunOverrideKey.mtu,
+            TunOverrideKey.strictRoute,
+          });
+        });
+
+        test('leaves other platforms alone', () async {
+          final upgraded = await upgrade(4, isWindows: false);
+          expect(upgraded.tunOverrideKeys, isEmpty);
+          expect(upgraded.tunOverride.strictRoute, isFalse);
+        });
+
+        test('a new Windows install starts with it on', () async {
+          for (final isWindows in [true, false]) {
+            final store = _FakeMigrationStore(
+              configMap: null,
+              version: 0,
+              upgradeVersion: 0,
+            );
+            final config = await Migration(
+              store: store,
+              isWindows: isWindows,
+            ).run();
+            expect(
+              patchOf(
+                config,
+              ).tunOverrideKeys.contains(TunOverrideKey.strictRoute),
+              isWindows,
+            );
+            expect(store.savedConfig, config);
+            expect(
+              store.events.where((event) => event == 'saveConfig'),
+              hasLength(1),
+            );
+          }
+        });
+
+        test('the generated config carries it into the TUN section', () {
+          final config = withWindowsStrictRoute(Config.realFromJson(null));
+          final patch = config.patchClashConfig;
+          expect(patch.tunOverride.overrideJson(patch.tunOverrideKeys), {
+            'strict-route': true,
+          });
+        });
+      });
+
       test('a new install only records it', () async {
         final store = _FakeMigrationStore(
           configMap: null,

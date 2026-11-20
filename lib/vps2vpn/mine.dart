@@ -18,6 +18,52 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/prism_ui.dart' show ThemeMode;
 
+/// vps2vpn: strict-route is on by default for the Windows TUN (see
+/// withWindowsStrictRoute in lib/common/migration.dart). This switch turns it
+/// off for VMs and LAN setups it breaks, keeping the key so the choice sticks.
+/// The TUN override page shows the same key in advanced mode.
+class _LanCompatibilityRow extends ConsumerWidget {
+  const _LanCompatibilityRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strictRoute = ref.watch(
+      patchClashConfigProvider.select(
+        (state) =>
+            state.tunOverrideKeys.contains(TunOverrideKey.strictRoute) &&
+            state.tunOverride.strictRoute,
+      ),
+    );
+    return VpsRow(
+      icon: VpsIcon.globe,
+      title: tr(context, '局域网兼容模式', 'LAN compatibility mode'),
+      subtitle: tr(
+        context,
+        '关闭严格路由。虚拟机（VirtualBox、Hyper-V）或局域网设备在虚拟网卡模式下无法使用时打开；打开后 DNS 和 IPv6 可能绕过代理',
+        'Turns strict route off. Use it if VMs (VirtualBox, Hyper-V) or LAN '
+            'devices break in TUN mode; DNS and IPv6 may then bypass the proxy',
+      ),
+      trailing: VpsSwitch(
+        value: !strictRoute,
+        // A setup-only change: CoreManager's setupPatch listener re-applies.
+        onChanged: (compatible) => ref
+            .read(patchClashConfigProvider.notifier)
+            .update(
+              (state) => state.copyWith(
+                tunOverride: state.tunOverride.copyWith(
+                  strictRoute: !compatible,
+                ),
+                tunOverrideKeys: {
+                  ...state.tunOverrideKeys,
+                  TunOverrideKey.strictRoute,
+                },
+              ),
+            ),
+      ),
+    );
+  }
+}
+
 class VpsMePage extends ConsumerStatefulWidget {
   const VpsMePage({super.key});
 
@@ -301,6 +347,10 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                       .update((s) => s.copyWith(takeover: v)),
                 ),
               ),
+              if (system.isWindows) ...[
+                Container(height: 1, color: p.line),
+                const _LanCompatibilityRow(),
+              ],
               Container(height: 1, color: p.line),
               VpsRow(
                 icon: VpsIcon.sun,
