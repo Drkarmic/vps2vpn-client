@@ -220,6 +220,12 @@ func wsEarlyDataPath(network string, opts proxyFields) string {
 // The plain Xray form fixes alterId at 0, so only a legacy alterId falls back
 // to the base64 JSON of v2rayN.
 func encodeVmess(f proxyFields) string {
+	// Neither the legacy v2rayN JSON format nor Mihomo's Xray-style
+	// VMess link decoder retains skip-cert-verify. Do not export a link
+	// that silently changes the source proxy's TLS trust policy.
+	if f.flag("tls") && f.flag("skip-cert-verify") {
+		return ""
+	}
 	if alterID := f.str("alterId"); alterID == "" || alterID == "0" {
 		query := vShareQuery(f)
 		if cipher := f.str("cipher"); cipher != "" && cipher != "auto" {
@@ -275,6 +281,10 @@ func encodeVmess(f proxyFields) string {
 }
 
 func encodeVless(f proxyFields) string {
+	// The pinned Xray share-link decoder does not parse allowInsecure.
+	if f.flag("tls") && f.flag("skip-cert-verify") {
+		return ""
+	}
 	query := vShareQuery(f)
 	setIf(query, "flow", f.str("flow"))
 	setIf(query, "encryption", f.str("encryption"))
