@@ -422,6 +422,17 @@ func encodeHysteria2(f proxyFields) string {
 }
 
 func encodeTuic(f proxyFields) string {
+	// The pinned Mihomo ConvertsV2Ray TUIC link parser deliberately drops
+	// allow_insecure and has no fields for pins, custom trust names or mTLS.
+	// Producing a link anyway silently loses these security requirements.
+	if f.flag("skip-cert-verify") {
+		return ""
+	}
+	for _, key := range []string{"fingerprint", "name-cert-verify", "certificate", "private-key"} {
+		if f.str(key) != "" {
+			return ""
+		}
+	}
 	user := url.UserPassword(f.str("uuid"), f.str("password"))
 	if f.str("uuid") == "" {
 		user = url.User(f.str("token"))
