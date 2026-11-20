@@ -1,138 +1,105 @@
 <div align="center">
 
-<img src="assets/images/icon.png" alt="FlClash" width="88">
+<img src="assets/images/icon.png" alt="vps2vpn" width="88">
 
-# FlClash
+# vps2vpn 客户端
 
-A multi-platform proxy client based on ClashMeta. Simple to use, open source and ad-free.
+把你自己的 VPS 变成一条好用的私人 VPN。打开、连接，就这么简单。
 
-**English** · [简体中文](README_zh_CN.md)
+**简体中文** · [English](#english)
 
-[![Release](https://img.shields.io/github/v/release/chen08209/FlClash?style=flat-square&label=release)](https://github.com/chen08209/FlClash/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/chen08209/FlClash/total?style=flat-square&logo=github)](https://github.com/chen08209/FlClash/releases)
-[![License](https://img.shields.io/github/license/chen08209/FlClash?style=flat-square)](LICENSE)
-[![Telegram](https://img.shields.io/badge/Telegram-channel-26A5E4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/FlClash)
+[![Release](https://img.shields.io/github/v/release/xydadada/vps2vpn-client?style=flat-square&label=release)](https://github.com/xydadada/vps2vpn-client/releases/latest)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square)
 
-[Website](https://chen08209.github.io/FlClash) · [Download](#download) · [Changelog](CHANGELOG.md) · [Build from source](#build-from-source)
+[下载](#下载) · [功能](#功能) · [常见问题](#常见问题) · [从源码构建](#从源码构建)
 
 </div>
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="snapshots/preview-dark.png">
-    <img alt="FlClash dashboard on a MacBook and a phone" src="snapshots/preview.png" width="92%">
+    <source media="(prefers-color-scheme: dark)" srcset="snapshots/vps2vpn/home-dark.png">
+    <img alt="vps2vpn 主界面" src="snapshots/vps2vpn/home-light.png" width="88%">
   </picture>
 </p>
 
-## Features
+## 下载
 
-- **One app for Android, Windows, macOS and Linux**, with x64 and ARM64 builds on the desktop.
-- **mihomo (Clash.Meta) core** with rule routing, proxy groups, latency tests, system proxy and TUN mode.
-- **Profiles** from a subscription link or a file, with a built-in editor, override scripts, and custom rules,
-  proxies and proxy groups.
-- **Live views** of connections, requests, DNS queries and logs.
-- **Material You design with Apple-style interaction**: dynamic color, light and dark themes, continuous corners,
-  sheets that snap between heights, and layouts that adapt from phones to desktops.
-- **Backup and restore** through WebDAV or a local file.
-- **Platform touches**: a Quick Settings tile, per-app proxy and Android TV support on Android; a tray menu and
-  global hotkeys on the desktop.
-- **Open source and ad-free**, licensed under GPL-3.0.
+到 [Releases](https://github.com/xydadada/vps2vpn-client/releases/latest) 下载 `vps2vpn-<版本>-windows-amd64-setup.exe`，双击安装即可（Windows 10 / 11，64 位）。
 
-## Download
+> 安装包暂未做代码签名，Windows 可能提示“未知发布者”。点“更多信息 → 仍要运行”即可。
 
-Get the latest build from [GitHub Releases](https://github.com/chen08209/FlClash/releases/latest), or open the
-[website](https://chen08209.github.io/FlClash#download), which picks the right file for your device.
+## 怎么用
 
-| Platform | Packages | Notes |
-| --- | --- | --- |
-| Android | APK for `arm64-v8a`, `armeabi-v7a` and `x86_64` | Most phones use `arm64-v8a`. Also on the F-Droid repository below. |
-| Windows 10 and later | Installer (`.exe`) or portable `.zip`, for x64 and ARM64 | Pick ARM64 on Snapdragon and other ARM laptops. |
-| macOS 12 and later | DMG for Apple Silicon and Intel | Also on Homebrew. |
-| Linux | `.deb`, `.rpm` and AppImage, for x64 and ARM64 | See the tray note below. |
+1. 打开 vps2vpn，粘贴你的订阅链接（服务器管理员给你的，形如 `https://你的服务器/s/xxxx`）。
+2. 点中间的大按钮连接。
+3. 完成。默认就是最省心的设置，不需要改任何东西。
 
-<p>
-  <a href="https://chen08209.github.io/FlClash-fdroid-repo/repo?fingerprint=789D6D32668712EF7672F9E58DEEB15FBD6DCEEC5AE7A4371EA72F2AAE8A12FD"><img alt="Get it on F-Droid" src="snapshots/get-it-on-fdroid.svg" height="56"></a>
-  <a href="https://github.com/chen08209/FlClash/releases/latest"><img alt="Get it on GitHub" src="snapshots/get-it-on-github.svg" height="56"></a>
-</p>
+## 功能
 
-**Homebrew**
+- **简洁模式（默认）**：只有 概览 / 节点 / 检测 / 设置 四个页面，深色和浅色两套主题，宽窗口侧边栏、窄窗口底部导航。
+- **高级模式**：设置里一个开关，打开后能看到完整的 Clash 功能（规则、连接、日志、配置等）。
+- **智能线路**：同一台服务器的多种协议（REALITY / Hysteria2 / TUIC）优先互相切换，某个协议被限制时自动换，出口 IP 不变；整台服务器不可用时才换服务器。
+- **AI 专线**：Claude、ChatGPT、Gemini 等固定走主服务器，避免频繁换 IP 被风控。订阅自带规则时以订阅为准。
+- **一键接管**：连接时自动关闭其他代理软件（Clash 系列、v2rayN 等），端口被占自动换，清理失效的系统代理。设置里可以关掉。
+- **账户信息**：设置页显示已用流量、到期时间、停用原因；订阅链接被更换时会提醒你。
+- **服务器视角**：检测页显示服务器自己打开 AI 网站的结果，一眼看出是网络问题还是服务器 IP 被封。
+- **线路故障自动上报**：连接后每 4 分钟悄悄测一次，连续失败才告诉管理员，恢复后再报一次。
+- **更新提醒**：管理员在面板放上新版本后，设置页会出现“有新版本”和下载按钮（不会自动安装）。
+- **干净卸载**：卸载时清掉残留的系统代理，只删除 vps2vpn 自己的数据，不碰其他软件。
 
-```bash
-brew tap chen08209/tap
-brew install --cask flclash
-```
+## 配套服务端
 
-**Linux tray icon**
+vps2vpn 客户端搭配 vps2vpn 服务端使用最好（一键部署、成员管理、流量统计、AI 可用性检测）。普通的 Clash / mihomo 订阅也能直接用，只是没有账户卡片等面板功能。
 
-The tray icon is a StatusNotifierItem. KDE Plasma, XFCE and most panels show it as is; GNOME needs the
-AppIndicator and KStatusNotifierItem Support extension.
+## 常见问题
 
-**Unattended desktop**
+**和 FlClash 有什么关系？**
+vps2vpn 基于开源项目 [FlClash](https://github.com/chen08209/FlClash) 修改，界面和功能针对“自己的 VPS”重新设计。程序名、数据目录、端口都和 FlClash 分开，可以同时安装。
 
-FlClash starts the core only after the disclaimer is accepted. Where nobody can click it, such as a container, set
-`FLCLASH_ACCEPT_DISCLAIMER=1` in the app's environment to accept it on first launch.
+**为什么连接时把我的其他代理软件关了？**
+两个代理软件同时抢系统代理会互相打架，表现为“已连接但上不了网”。这是“一键接管”功能，在 设置 里可以关闭。
 
-## Usage
+**虚拟网卡模式弹出管理员授权？**
+虚拟网卡（TUN）需要管理员权限，首次使用会弹 UAC。拒绝的话会自动退回系统代理模式。
 
-**Import a profile from a link.** Opening a link in this form imports the subscription into FlClash. The `clashmeta://`
-and `flclash://` schemes work the same way.
+## 从源码构建
 
-```text
-clash://install-config?url=<URL-encoded subscription link>
-```
-
-**Automate on Android.** Tasker, MacroDroid and similar apps can start, stop or toggle the proxy by starting an
-activity with one of these actions:
-
-```text
-com.follow.clash.action.START
-com.follow.clash.action.STOP
-com.follow.clash.action.TOGGLE
-```
-
-From a computer, the same works over adb:
+需要 Flutter 3.50、Go 1.27、Rust 和 Inno Setup 6。
 
 ```bash
-adb shell am start -a com.follow.clash.action.TOGGLE
-```
-
-## Build from source
-
-You need [Flutter](https://docs.flutter.dev/get-started/install) 3.50 (release builds use 3.50.0),
-[Go](https://go.dev/dl/) 1.27 and [Rust](https://rustup.rs/) installed through rustup. Each platform builds on its own
-host, except Android, which builds anywhere.
-
-```bash
-git clone --recursive https://github.com/chen08209/FlClash.git
-cd FlClash
+git clone --recurse-submodules https://github.com/xydadada/vps2vpn-client.git
+cd vps2vpn-client
 flutter pub get
-dart run tool/package.dart android   # or windows, macos, linux
+dart tool/package.dart windows --env stable
 ```
 
-Packages land in `dist/`. The Go core and the Rust libraries are compiled as part of the Flutter build.
+安装包输出在 `dist/`。只跑测试：`flutter test test/vps2vpn`。
 
-| Platform | Also needed |
-| --- | --- |
-| Android | Android SDK with the NDK. Add `--arch arm64` to build a single ABI. |
-| Windows | GCC (MinGW-w64) for the core and [Inno Setup](https://jrsoftware.org/isinfo.php) 6 for the installer. |
-| macOS | Xcode and Node.js. The script installs `appdmg` through npm. |
-| Linux | Debian or Ubuntu. The script installs the build packages with apt and downloads `appimagetool`. |
+## 许可与致谢
 
-Run `dart run tool/package.dart --help` for the remaining options, such as `--targets` to build only some package formats or `--dry-run` to list the files a run would write.
+本项目以 [GPL-3.0](LICENSE) 发布。
 
-## Support
+- [FlClash](https://github.com/chen08209/FlClash)，作者 chen08209，GPL-3.0（原项目说明见 [docs/upstream](docs/upstream/FlClash-README.md)）
+- [mihomo (Clash.Meta)](https://github.com/MetaCubeX/mihomo)，GPL-3.0
 
-Starring the repository is the easiest way to support the project. Questions and announcements go to the
-[Telegram channel](https://t.me/FlClash); bugs and feature requests go to
-[GitHub Issues](https://github.com/chen08209/FlClash/issues).
+第三方许可全文随安装包附在 `data\legal` 目录。
 
-<a href="https://star-history.com/#chen08209/FlClash&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=chen08209/FlClash&type=Date&theme=dark">
-    <img alt="Star history" src="https://api.star-history.com/svg?repos=chen08209/FlClash&type=Date" width="640">
-  </picture>
-</a>
+---
 
-## License
+## English
 
-FlClash is released under the [GPL-3.0 license](LICENSE).
+**vps2vpn** turns your own VPS into a simple private VPN. It is a Windows client built on [FlClash](https://github.com/chen08209/FlClash) and the [mihomo](https://github.com/MetaCubeX/mihomo) core.
+
+- **Simple by default.** Four pages (Overview, Nodes, Check, Settings), dark and light themes. Advanced mode brings back every Clash page.
+- **Smart line.** Fails over between the protocols of one server first (REALITY, Hysteria2, TUIC), so your exit IP stays the same. It moves to another server only when the whole server is down.
+- **AI line.** Claude, ChatGPT and Gemini stay pinned to the main server.
+- **Takeover.** On connect it closes other proxy apps, moves off busy ports and clears stale system proxies. You can turn this off in Settings.
+- **Panel features** (with the vps2vpn server):
+  - account usage and expiry
+  - the server's own view of the AI sites
+  - automatic line-failure reports
+  - update notices
+- **Clean uninstall.** It clears its system proxy and removes only its own data.
+
+Download the installer from [Releases](https://github.com/xydadada/vps2vpn-client/releases/latest). The project is licensed under GPL-3.0.
