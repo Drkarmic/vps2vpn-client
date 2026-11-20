@@ -45,6 +45,12 @@ jobs:
             plugins/rust_api/rust
             services/helper
 
+      - name: Verify and apply pinned Mihomo concurrency fixes
+        shell: bash
+        run: |
+          go run tool/apply_core_patches.go
+          go run tool/apply_core_patches.go
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
