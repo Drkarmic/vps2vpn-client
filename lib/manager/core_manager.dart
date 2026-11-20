@@ -29,6 +29,17 @@ class _CoreContainerState extends ConsumerState<CoreManager>
     with CoreEventListener {
   CoreController get _core => ref.read(coreHandlerProvider);
 
+  // vps2vpn: see lib/common/tun_self_check.dart. Windows only, where FlClash
+  // #3020 shows TUN "on" with no adapter.
+  late final _tunSelfCheck = TunSelfCheck(
+    readStatus: () => _core.getTunStatus(),
+    currentStack: () => ref.read(patchClashConfigProvider).tun.stack,
+    switchStack: (stack) => ref
+        .read(patchClashConfigProvider.notifier)
+        .update((state) => state.copyWith.tun(stack: stack)),
+    notify: _notifyTunCheck,
+  );
+
   @override
   Widget build(BuildContext context) {
     ref.watch(vpsLineWatchProvider);
@@ -91,6 +102,14 @@ class _CoreContainerState extends ConsumerState<CoreManager>
         _syncLogStream();
       }
     });
+    if (system.isWindows) {
+      ref.listenManual(
+        patchClashConfigProvider.select((state) => state.tun.enable),
+        (_, _) => _syncTunSelfCheck(),
+      );
+      ref.listenManual(isStartProvider, (_, _) => _syncTunSelfCheck());
+      ref.listenManual(coreStatusProvider, (_, _) => _syncTunSelfCheck());
+    }
     // Every Core process starts without a log stream.
     ref.listenManual(coreStatusProvider, (prev, next) {
       if (next == CoreStatus.connected && prev != CoreStatus.connected) {
@@ -110,8 +129,45 @@ class _CoreContainerState extends ConsumerState<CoreManager>
     }
   }
 
+  /// Checks a few seconds after TUN is asked for on a running, reachable
+  /// Core; switching TUN off forgets the retry, so the next enable gets one.
+  void _syncTunSelfCheck() {
+    if (!ref.read(patchClashConfigProvider).tun.enable) {
+      _tunSelfCheck.reset();
+      return;
+    }
+    if (ref.read(isStartProvider) &&
+        ref.read(coreStatusProvider) == CoreStatus.connected &&
+        !ref.read(safeModeProvider)) {
+      _tunSelfCheck.schedule();
+    }
+  }
+
+  void _notifyTunCheck(TunCheckStep step, TunStack from, TunStack? to) {
+    final zh = currentAppLocalizations.localeName.startsWith('zh');
+    switch (step) {
+      case TunCheckStep.retry:
+        dialogs.showBanner(
+          zh
+              ? '虚拟网卡（TUN）未能用 ${from.name} 协议栈启动，已自动改用 ${to?.name} 重试'
+              : 'TUN did not start on the ${from.name} stack; retrying on ${to?.name}',
+          level: BannerLevel.warning,
+        );
+      case TunCheckStep.giveUp:
+        dialogs.showBanner(
+          zh
+              ? '虚拟网卡（TUN）未能启动。可打开「局域网兼容模式」（关闭严格路由）后重试，或改用系统代理'
+              : 'TUN could not start. Try LAN compatibility mode (strict route off), or use the system proxy',
+          level: BannerLevel.error,
+        );
+      case TunCheckStep.keep:
+        break;
+    }
+  }
+
   @override
   void dispose() {
+    _tunSelfCheck.dispose();
     coreEventManager.removeListener(this);
     super.dispose();
   }

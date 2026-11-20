@@ -65,6 +65,32 @@ func handleStopListener() {
 	bumpRouteEpoch()
 }
 
+// TunStatus says whether the TUN the config asks for is actually listening.
+// mihomo's listener.ReCreateTun only logs a failed sing_tun.New and records
+// the conf with Enable=false (listener/listener.go), so GetTunConf().Enable is
+// the core-side signal that the adapter and stack came up.
+type TunStatus struct {
+	Running   bool   `json:"running"`
+	Requested bool   `json:"requested"`
+	Up        bool   `json:"up"`
+	Stack     string `json:"stack"`
+}
+
+// Holding configMu waits out an update or setup still creating the TUN, so
+// the answer is the settled state, not one taken halfway through.
+func handleTunStatus() TunStatus {
+	configMu.Lock()
+	defer configMu.Unlock()
+	status := TunStatus{Running: isRunning.Load()}
+	if currentConfig != nil && currentConfig.General != nil {
+		status.Requested = currentConfig.General.Tun.Enable
+	}
+	tun := listener.GetTunConf()
+	status.Up = tun.Enable
+	status.Stack = tun.Stack.String()
+	return status
+}
+
 func updateListeners(cfg *config.Config) {
 	if cfg == nil || !isRunning.Load() {
 		return
