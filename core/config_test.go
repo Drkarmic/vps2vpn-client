@@ -820,6 +820,47 @@ func TestApplyConfigTellsARejectedProfileFromAFailedCall(t *testing.T) {
 	}
 }
 
+func TestRejectedProfileCannotDiscardWorkingConfigOrRelaxTLS(t *testing.T) {
+	home := t.TempDir()
+	previousHome := constant.Path.HomeDir()
+	constant.SetHomeDir(home)
+	t.Cleanup(func() { constant.SetHomeDir(previousHome) })
+	working := &config.Config{General: &config.General{}, Controller: &config.Controller{}}
+	withCurrentConfig(t, working)
+	keepTunnel(t)
+
+	previousTLS := skipCertVerify.Load()
+	previousSmart := vpsSmartEnabled.Load()
+	previousURL := currentTestURL()
+	skipCertVerify.Store(false)
+	vpsSmartEnabled.Store(false)
+	t.Cleanup(func() {
+		skipCertVerify.Store(previousTLS)
+		vpsSmartEnabled.Store(previousSmart)
+	})
+	if err := os.WriteFile(filepath.Join(home, "config.yaml"), []byte("proxies: [unterminated\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	err := applyConfig(&SetupParams{Options: CoreOptions{
+		SkipCertVerify:   true,
+		SmartLines:       true,
+		TestURL:          "https://invalid-profile.example/probe",
+		DelayTestTimeout: 15000,
+	}})
+	var rejected *MethodError
+	if !errors.As(err, &rejected) || rejected.Code != "config_rejected" {
+		t.Fatalf("applyConfig = %v, want config_rejected", err)
+	}
+	if currentConfig != working {
+		t.Fatal("invalid replacement discarded the previously active route graph")
+	}
+	if skipCertVerify.Load() || vpsSmartEnabled.Load() || currentTestURL() != previousURL {
+		t.Fatalf("invalid replacement changed network defaults: TLS=%t smart=%t testURL=%q",
+			skipCertVerify.Load(), vpsSmartEnabled.Load(), currentTestURL())
+	}
+}
+
 func TestHandleSetupConfigLeavesTheListenerAloneOnSuccess(t *testing.T) {
 	withSetupConfig(t, func(*SetupParams) error { return nil })
 

@@ -215,18 +215,21 @@ func applyConfig(params *SetupParams) error {
 	configMu.Lock()
 	defer configMu.Unlock()
 
-	applyOptions(params.Options)
+	// SmartLines participates in profile parsing. Other global options must
+	// only become active after the replacement config has passed validation.
+	previousSmart := vpsSmartEnabled.Load()
+	vpsSmartEnabled.Store(params.Options.SmartLines)
 	cfg, raw, err := loadSetupConfigWithRaw(params)
 	if err != nil {
-		// The fallback is what keeps the listeners serving while the host
-		// reports the error, but it applies a config with no proxies in it.
-		// From the UI that is indistinguishable from a subscription that went
-		// dead: the profile still lists every node, every delay test answers
-		// Timeout, and nothing routes. Name the real cause in the log.
-		logError(
-			"config apply failed, falling back to the built-in default - no proxies will be available: %v",
-			err,
-		)
+		vpsSmartEnabled.Store(previousSmart)
+		if currentConfig != nil {
+			// An invalid replacement must not discard the last working route
+			// graph or change the active TLS verification and probe options.
+			logError("config apply rejected; retaining the running proxy graph: %v", err)
+			return &MethodError{Code: "config_rejected", Message: err.Error()}
+		}
+		// A first startup has no working route graph to retain.
+		logError("initial config apply rejected; loading the built-in default with no proxies: %v", err)
 		defaultRaw := config.DefaultRawConfig()
 		fallback, fallbackErr := config.ParseRawConfig(defaultRaw)
 		if fallbackErr != nil {
@@ -236,6 +239,7 @@ func applyConfig(params *SetupParams) error {
 		raw = defaultRaw
 	}
 
+	applyOptions(params.Options)
 	currentConfig = cfg
 	setProxyDefinitionCache(runningConfigPath(), raw)
 	hub.ApplyConfig(cfg)
