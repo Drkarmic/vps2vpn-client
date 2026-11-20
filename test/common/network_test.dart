@@ -110,6 +110,51 @@ void main() {
       expect(await getLocalIpAddress(), '10.9.0.1');
     });
 
+    test('prefers a usable LAN IPv4 over a Wi-Fi link-local IPv4', () async {
+      listing([
+        _FakeInterface('wlan0', [_v4('169.254.20.4')]),
+        _FakeInterface('eth1', [_v4('192.168.50.7')]),
+      ]);
+
+      expect(await getLocalIpAddress(), '192.168.50.7');
+    });
+
+    test('does not select a Wi-Fi IPv6 link-local over reachable IPv4', () async {
+      listing([
+        _FakeInterface('wlan0', [_v6('fe80::abcd')]),
+        _FakeInterface('eth1', [_v4('10.0.0.15')]),
+      ]);
+
+      expect(await getLocalIpAddress(), '10.0.0.15');
+    });
+
+    test('retains valid IPv6 when link-local IPv4 is unusable', () async {
+      listing([
+        _FakeInterface('wlan0', [
+          _v4('169.254.0.8'),
+          _v6('2606:4700:4700::1111'),
+        ]),
+      ]);
+
+      expect(await getLocalIpAddress(), '2606:4700:4700::1111');
+    });
+
+    test('does not advertise only invalid or unroutable addresses', () async {
+      listing([
+        _FakeInterface('wlan0', [
+          _v4('0.0.0.0'),
+          _v4('169.254.7.4'),
+          _v6('fe80::1'),
+          _v6('::'),
+          _v4('127.0.0.9'),
+          _v4('224.0.0.1'),
+          _v4('not-an-ip'),
+        ]),
+      ]);
+
+      expect(await getLocalIpAddress(), '');
+    });
+
     test('returns an empty string when nothing is listed', () async {
       listing([]);
 

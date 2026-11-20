@@ -34,6 +34,18 @@ extension InternetAddressExt on InternetAddress {
   }
 }
 
+/// A link-local/unspecified address cannot be advertised as a reachable
+/// LAN endpoint. IPv4 RFC1918 addresses are intentionally allowed.
+bool _usableLocalAddress(InterfaceAddress addr) {
+  final ip = InternetAddress.tryParse(addr.address);
+  return ip != null &&
+      !ip.isLinkLocal &&
+      !ip.isLoopback &&
+      !ip.isMulticast &&
+      ip.address != '0.0.0.0' &&
+      ip.address != '::';
+}
+
 Future<String?> getLocalIpAddress() async {
   final List<NetworkInterface> interfaces =
       await listNetworkInterfaces(includeLoopback: false)
@@ -45,7 +57,9 @@ Future<String?> getLocalIpAddress() async {
           return 0;
         });
   for (final interface in interfaces) {
-    final addresses = interface.addresses;
+    final addresses = interface.addresses
+        .where(_usableLocalAddress)
+        .toList();
     if (addresses.isEmpty) {
       continue;
     }
