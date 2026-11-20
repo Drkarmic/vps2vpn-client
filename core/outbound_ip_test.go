@@ -170,6 +170,65 @@ func TestOutboundIpIgnoresPublicIpInHttp200ErrorPage(t *testing.T) {
 	}
 }
 
+func TestOutboundIpRequiresTheSchemaOfTheWinningProvider(t *testing.T) {
+	cases := []struct {
+		name, source, body string
+		want               bool
+	}{
+		{
+			"geojs reject country alias", "https://get.geojs.io/v1/ip/geo.json",
+			`{"ip":"1.1.1.1","country":"US"}`, false,
+		},
+		{
+			"geojs accept country_code", "https://get.geojs.io/v1/ip/geo.json",
+			`{"ip":"1.1.1.1","country_code":"US"}`, true,
+		},
+		{
+			"ipinfo reject country_code alias", "https://ipinfo.io/json",
+			`{"ip":"1.1.1.1","country_code":"US"}`, false,
+		},
+		{
+			"ipinfo accept country", "https://ipinfo.io/json",
+			`{"ip":"1.1.1.1","country":"US"}`, true,
+		},
+		{
+			"ident reject country alias", "https://ident.me/json",
+			`{"ip":"1.1.1.1","country":"US"}`, false,
+		},
+		{
+			"ident accept cc", "https://ident.me/json",
+			`{"ip":"1.1.1.1","cc":"US"}`, true,
+		},
+		{
+			"ipquery reject flat country", "https://api.ipquery.io/?format=json",
+			`{"ip":"1.1.1.1","country_code":"US"}`, false,
+		},
+		{
+			"ipquery accept nested location", "https://api.ipquery.io/?format=json",
+			`{"ip":"1.1.1.1","location":{"country_code":"US"}}`, true,
+		},
+		{
+			"cloudflare reject JSON", "https://www.cloudflare.com/cdn-cgi/trace",
+			`{"ip":"1.1.1.1","country":"US"}`, false,
+		},
+		{
+			"cloudflare accept trace", "https://www.cloudflare.com/cdn-cgi/trace",
+			"ip=1.1.1.1\\nloc=US", true,
+		},
+		{
+			"custom URLs retain generic support", "http://127.0.0.1:1234/trace",
+			`{"ip":"1.1.1.1","country":"US"}`, true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validOutboundIpSource(tc.source, tc.body); got != tc.want {
+				t.Errorf("validOutboundIpSource(%q, %q) = %v, want %v", tc.source, tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHandleOutboundIpCancelsTheLosers(t *testing.T) {
 	withProbeProxies(t, "node-a")
 	var cancelled atomic.Bool
