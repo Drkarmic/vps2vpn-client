@@ -213,7 +213,7 @@ func TestOutboundIpRequiresTheSchemaOfTheWinningProvider(t *testing.T) {
 		},
 		{
 			"cloudflare accept trace", "https://www.cloudflare.com/cdn-cgi/trace",
-			"ip=1.1.1.1\\nloc=US", true,
+			"ip=1.1.1.1\nloc=US", true,
 		},
 		{
 			"custom URLs retain generic support", "http://127.0.0.1:1234/trace",
