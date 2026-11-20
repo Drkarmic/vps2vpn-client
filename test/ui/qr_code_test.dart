@@ -374,7 +374,10 @@ final class _Decoded {
     for (var pad = 0xEC; bit < capacity; pad ^= 0xEC ^ 0x11) {
       expect(take(8), pad, reason: 'pad codeword');
     }
-    return (eci: eci, text: utf8.decode(bytes));
+    return (
+      eci: eci,
+      text: eci == 26 ? utf8.decode(bytes) : latin1.decode(bytes),
+    );
   }
 }
 
@@ -425,10 +428,12 @@ void main() {
       expect(decoded.payload.text, text);
     });
 
-    test('text within Latin-1 carries no ECI header', () {
-      final decoded = _Decoded.of(QrMatrix.encode('café')!);
-      expect(decoded.payload.eci, isNull);
-      expect(decoded.payload.text, 'café');
+    test('text within Latin-1 uses the default byte encoding', () {
+      for (final text in ['café', 'Ångström', '£ÿ', '\u0080']) {
+        final decoded = _Decoded.of(QrMatrix.encode(text)!);
+        expect(decoded.payload.eci, isNull);
+        expect(decoded.payload.text, text);
+      }
     });
 
     test('mask selection is deterministic for the same data', () {

@@ -107,15 +107,17 @@ func loadConfigWithBase(base *SetupBase, configPath string) (*config.Config, err
 	if err := document.Decode(raw); err != nil {
 		return nil, err
 	}
-	if err := writeConfigDocument(configPath, document); err != nil {
-		return nil, err
-	}
 	// The overlay's rules (the user's own, first) stay ahead of the AI rules.
 	var overlay struct {
 		Rules []string `yaml:"rules"`
 	}
 	_ = yaml.Unmarshal([]byte(base.Overlay), &overlay)
-	vps2vpnEnhance(raw, len(overlay.Rules))
+	if err := enhanceProfileDocument(document, raw, len(overlay.Rules)); err != nil {
+		return nil, err
+	}
+	if err := writeConfigDocument(configPath, document); err != nil {
+		return nil, err
+	}
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
 		return nil, err
@@ -138,6 +140,11 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 	}
 	if err := yaml.Unmarshal([]byte(base.Overlay), &overlayDocument); err != nil {
 		return nil, err
+	}
+	for _, document := range []*yaml.Node{&profileDocument, &overlayDocument} {
+		if err := validateYamlAliases(document); err != nil {
+			return nil, err
+		}
 	}
 	profile, err := documentMapping(&profileDocument)
 	if err != nil {
@@ -163,6 +170,97 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 		retagShortIDs(root)
 	}
 	return &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}, nil
+}
+
+func enhanceProfileDocument(document *yaml.Node, raw *config.RawConfig, userRules int) error {
+	if !vpsSmartEnabled.Load() {
+		return nil
+	}
+	groupCount, ruleCount := len(raw.ProxyGroup), len(raw.Rule)
+	vps2vpnEnhance(raw, userRules)
+	root, err := documentMapping(document)
+	if err != nil {
+		return err
+	}
+	if proxies := resolveAlias(mappingValue(root, "proxies")); proxies != nil && proxies.Kind == yaml.SequenceNode {
+		for i, proxy := range raw.Proxy {
+			if vpsLineRank(proxy) != 1 || proxy["client-fingerprint"] != "chrome" {
+				continue
+			}
+			node := resolveAlias(proxies.Content[i])
+			setMappingValue(node, "client-fingerprint", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "chrome"})
+		}
+	}
+	if len(raw.ProxyGroup) > groupCount {
+		groups := resolveAlias(mappingValue(root, "proxy-groups"))
+		if groups == nil || isNull(groups) {
+			groups = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+			setMappingValue(root, "proxy-groups", groups)
+		}
+		for i, group := range raw.ProxyGroup[:groupCount] {
+			if !strings.EqualFold(fmt.Sprint(group["type"]), "select") {
+				continue
+			}
+			var members yaml.Node
+			if err := members.Encode(group["proxies"]); err != nil {
+				return err
+			}
+			setMappingValue(resolveAlias(groups.Content[i]), "proxies", &members)
+			break
+		}
+		for _, group := range raw.ProxyGroup[groupCount:] {
+			var node yaml.Node
+			if err := node.Encode(group); err != nil {
+				return err
+			}
+			groups.Content = append(groups.Content, &node)
+		}
+	}
+	if added := len(raw.Rule) - ruleCount; added > 0 {
+		rules := resolveAlias(mappingValue(root, "rules"))
+		if rules == nil || isNull(rules) {
+			rules = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+			setMappingValue(root, "rules", rules)
+		}
+		at := min(userRules, ruleCount)
+		content := make([]*yaml.Node, 0, len(raw.Rule))
+		content = append(content, rules.Content[:at]...)
+		for _, rule := range raw.Rule[at : at+added] {
+			content = append(content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: rule})
+		}
+		rules.Content = append(content, rules.Content[at:]...)
+	}
+	return nil
+}
+
+func validateYamlAliases(root *yaml.Node) error {
+	states := map[*yaml.Node]uint8{}
+	var visit func(*yaml.Node) error
+	visit = func(node *yaml.Node) error {
+		if node == nil {
+			return nil
+		}
+		if node.Kind == yaml.AliasNode {
+			return visit(node.Alias)
+		}
+		if node.Anchor != "" {
+			switch states[node] {
+			case 1:
+				return fmt.Errorf("line %d: cyclic YAML alias %q", node.Line, node.Anchor)
+			case 2:
+				return nil
+			}
+			states[node] = 1
+			defer func() { states[node] = 2 }()
+		}
+		for _, child := range node.Content {
+			if err := visit(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return visit(root)
 }
 
 func documentMapping(document *yaml.Node) (*yaml.Node, error) {

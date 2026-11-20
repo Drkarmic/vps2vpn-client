@@ -102,10 +102,13 @@ func TestReadProbeBodyStopsOnceTheMarkerArrives(t *testing.T) {
 	page := strings.Repeat("x", probeScanChunk-10) + marker + strings.Repeat("y", 4*probeScanChunk)
 	var seen int
 
-	body := readProbeBody(strings.NewReader(page), int64(len(page)), func(tail string) bool {
+	body, err := readProbeBody(strings.NewReader(page), int64(len(page)), func(tail string) bool {
 		seen++
 		return strings.Contains(tail, marker)
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if !strings.Contains(body, marker) {
 		t.Fatalf("body lost the marker that straddled two chunks")
@@ -118,7 +121,10 @@ func TestReadProbeBodyStopsOnceTheMarkerArrives(t *testing.T) {
 func TestReadProbeBodyKeepsTheCapWithoutAMarker(t *testing.T) {
 	page := strings.Repeat("x", 3*probeScanChunk)
 
-	body := readProbeBody(strings.NewReader(page), probeScanChunk+5, func(string) bool { return false })
+	body, err := readProbeBody(strings.NewReader(page), probeScanChunk+5, func(string) bool { return false })
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(body) != probeScanChunk+5 {
 		t.Errorf("body length = %d, want the cap", len(body))

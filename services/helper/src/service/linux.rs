@@ -179,12 +179,19 @@ fn unit_contents(executable: &Path, owner: Owner) -> String {
 /// The unit runs this binary as root at every boot, so one the invoking user
 /// could overwrite would turn a single polkit approval into standing root.
 fn ensure_root_owned(executable: &Path) -> Result<()> {
-    let directory = executable
-        .parent()
-        .context("helper executable has no parent directory")?;
-    for path in [executable, directory] {
-        let metadata = fs::metadata(path).with_context(|| format!("inspect {}", path.display()))?;
-        if metadata.uid() != 0 || metadata.mode() & 0o022 != 0 {
+    if !executable.is_absolute() {
+        bail!("helper executable path must be absolute");
+    }
+    for path in executable.ancestors() {
+        let metadata =
+            fs::symlink_metadata(path).with_context(|| format!("inspect {}", path.display()))?;
+        if !protected_mode(metadata.uid(), metadata.mode())
+            || if path == executable {
+                !metadata.is_file()
+            } else {
+                !metadata.is_dir()
+            }
+        {
             bail!(
                 "{} must be owned by root and not writable by group or others to run as a service; \
                  install the package instead of running an unpacked bundle",
@@ -193,6 +200,10 @@ fn ensure_root_owned(executable: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn protected_mode(uid: u32, mode: u32) -> bool {
+    uid == 0 && mode & 0o022 == 0
 }
 
 fn installed_owner_uid(unit: &str) -> Option<u32> {
@@ -351,6 +362,15 @@ impl Stream for AuthorizedIncoming {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_mutable_service_path_components() {
+        assert!(protected_mode(0, 0o755));
+        assert!(protected_mode(0, 0o644));
+        assert!(!protected_mode(1000, 0o755));
+        assert!(!protected_mode(0, 0o775));
+        assert!(!protected_mode(0, 0o1777));
+    }
 
     #[test]
     fn parses_service_commands() {

@@ -4,7 +4,8 @@
 
 import 'dart:math' as math;
 
-import 'package:prism_ui/prism_ui.dart' show BuildContextExtension;
+import 'package:prism_ui/prism_ui.dart' show AppRadius, BuildContextExtension;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 const vpsCoral = Color(0xFFFF6F61);
@@ -165,6 +166,7 @@ class VpsCard extends StatelessWidget {
     this.radius = 16,
     this.onTap,
     this.highlight = false,
+    this.selected,
   });
 
   final Widget child;
@@ -172,6 +174,7 @@ class VpsCard extends StatelessWidget {
   final double radius;
   final VoidCallback? onTap;
   final bool highlight;
+  final bool? selected;
 
   @override
   Widget build(BuildContext context) {
@@ -190,16 +193,28 @@ class VpsCard extends StatelessWidget {
       ),
       child: child,
     );
-    if (onTap == null) return box;
-    return VpsPressable(onTap: onTap!, child: box);
+    if (onTap == null) {
+      return selected == null ? box : Semantics(selected: selected, child: box);
+    }
+    return VpsPressable(onTap: onTap, selected: selected, child: box);
   }
 }
 
 /// Hover lift + press shrink + click cursor for anything tappable.
 class VpsPressable extends StatefulWidget {
-  const VpsPressable({super.key, required this.onTap, required this.child});
+  const VpsPressable({
+    super.key,
+    required this.onTap,
+    this.semanticLabel,
+    this.selected,
+    this.toggled,
+    required this.child,
+  });
 
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final String? semanticLabel;
+  final bool? selected;
+  final bool? toggled;
   final Widget child;
 
   @override
@@ -207,29 +222,83 @@ class VpsPressable extends StatefulWidget {
 }
 
 class _VpsPressableState extends State<VpsPressable> {
+  final _focusNode = FocusNode();
   bool _hover = false;
   bool _down = false;
+  bool _focused = false;
+  bool _showFocus = false;
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _activate() {
+    if (widget.onTap == null) return;
+    _focusNode.requestFocus();
+    widget.onTap!();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() {
-        _hover = false;
-        _down = false;
-      }),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => setState(() => _down = true),
-        onTapCancel: () => setState(() => _down = false),
-        onTapUp: (_) => setState(() => _down = false),
-        onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: _down ? 0.985 : (_hover ? 1.004 : 1),
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOut,
-          child: widget.child,
+    final enabled = widget.onTap != null;
+    return Semantics(
+      // A switch merges into its row (MergeSemantics), so the row reads as
+      // "Take over, on" rather than two separate nodes.
+      container: widget.toggled == null,
+      label: widget.semanticLabel,
+      button: widget.toggled == null,
+      enabled: enabled,
+      selected: widget.selected,
+      toggled: widget.toggled,
+      focusable: enabled,
+      focused: _focused,
+      onTap: enabled ? _activate : null,
+      child: FocusableActionDetector(
+        enabled: enabled,
+        focusNode: _focusNode,
+        includeFocusSemantics: false,
+        mouseCursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        onFocusChange: (value) => setState(() => _focused = value),
+        onShowFocusHighlight: (value) => setState(() => _showFocus = value),
+        onShowHoverHighlight: (value) => setState(() => _hover = value),
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: {
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              _activate();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          excludeFromSemantics: true,
+          onTapDown: enabled ? (_) => setState(() => _down = true) : null,
+          onTapCancel: enabled ? () => setState(() => _down = false) : null,
+          onTapUp: enabled ? (_) => setState(() => _down = false) : null,
+          onTap: enabled ? _activate : null,
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: ShapeDecoration(
+              shape: RoundedSuperellipseBorder(
+                borderRadius: AppRadius.sm,
+                side: _showFocus && enabled
+                    ? BorderSide(color: VpsPalette.of(context).accent, width: 2)
+                    : BorderSide.none,
+              ),
+            ),
+            child: AnimatedScale(
+              scale: enabled && _down ? 0.985 : (enabled && _hover ? 1.004 : 1),
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOut,
+              child: widget.child,
+            ),
+          ),
         ),
       ),
     );
@@ -247,14 +316,14 @@ class VpsButton extends StatelessWidget {
   });
 
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final VpsIcon? icon;
   final bool filled;
 
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    final fg = filled ? p.accentInk : p.text;
+    final fg = onTap == null ? p.muted : (filled ? p.accentInk : p.text);
     return VpsPressable(
       onTap: onTap,
       child: Container(
@@ -297,6 +366,7 @@ class VpsSwitch extends StatelessWidget {
     final p = VpsPalette.of(context);
     return VpsPressable(
       onTap: () => onChanged(!value),
+      toggled: value,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
@@ -415,6 +485,7 @@ class VpsSegmented<T> extends StatelessWidget {
                     Expanded(
                       child: VpsPressable(
                         onTap: () => onChanged(item),
+                        selected: item == value,
                         child: Center(
                           child: Text(
                             labelOf(item),
@@ -963,7 +1034,9 @@ class VpsRow extends StatelessWidget {
         ],
       ),
     );
-    if (onTap == null) return row;
+    if (onTap == null) {
+      return trailing is VpsSwitch ? MergeSemantics(child: row) : row;
+    }
     return VpsPressable(onTap: onTap!, child: row);
   }
 }

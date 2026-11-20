@@ -58,6 +58,8 @@ fn service_main(_arguments: Vec<OsString>) {
 }
 
 fn run_windows_service() -> Result<()> {
+    let executable = std::env::current_exe().context("resolve helper executable path")?;
+    let _protected_path = super::path_security::secure_executable(&executable)?;
     let owner_sid = OWNER_SID
         .get()
         .cloned()
@@ -145,6 +147,8 @@ fn run_windows_service() -> Result<()> {
 }
 
 fn install_service(owner_pid: u32) -> Result<()> {
+    let executable_path = std::env::current_exe().context("resolve helper executable path")?;
+    let _protected_path = super::path_security::secure_executable(&executable_path)?;
     let owner_sid = process_sid(owner_pid)
         .with_context(|| format!("read the account of process {owner_pid}"))?;
     let manager = ServiceManager::local_computer(
@@ -154,7 +158,6 @@ fn install_service(owner_pid: u32) -> Result<()> {
     .context("open Windows service manager")?;
     remove_existing_service(&manager)?;
 
-    let executable_path = std::env::current_exe().context("resolve helper executable path")?;
     let service_info = ServiceInfo {
         name: OsString::from(SERVICE_NAME),
         display_name: OsString::from(SERVICE_NAME),

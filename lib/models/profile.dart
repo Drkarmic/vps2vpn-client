@@ -11,8 +11,10 @@ part 'generated/profile.freezed.dart';
 part 'generated/profile.g.dart';
 
 /// Why the config at the path cannot be used, or null.
-typedef ValidateConfig =
-    Future<String?> Function(String path, String ageSecretKey);
+typedef ValidateConfig = Future<String?> Function(
+  String path,
+  String ageSecretKey,
+);
 
 @freezed
 abstract class SubscriptionInfo with _$SubscriptionInfo {
@@ -204,13 +206,16 @@ extension ProfileExtension on Profile {
   }) async {
     final path = await appPath.tempFilePath;
     final tempFile = File(path);
-    await tempFile.safeWriteAsBytes(bytes);
-    if (await validate(path, ageSecretKey) case final issue?) {
-      throw MessageException(issue);
+    try {
+      await tempFile.safeWriteAsBytes(bytes);
+      if (await validate(path, ageSecretKey) case final issue?) {
+        throw MessageException(issue);
+      }
+      final mFile = await file;
+      await tempFile.copy(mFile.path);
+      return copyWith(lastUpdateDate: DateTime.now());
+    } finally {
+      await tempFile.safeDelete().then((_) {}, onError: (Object _) {});
     }
-    final mFile = await file;
-    await tempFile.copy(mFile.path);
-    await tempFile.safeDelete();
-    return copyWith(lastUpdateDate: DateTime.now());
   }
 }

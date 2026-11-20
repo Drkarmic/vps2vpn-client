@@ -119,9 +119,32 @@ class VpsAccountCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final result = ref.watch(vpsMemberProvider).value;
+    final state = ref.watch(vpsMemberProvider);
+    final result = state.value;
     if (result == null) return const SizedBox.shrink();
     final p = VpsPalette.of(context);
+    final l10n = context.appLocalizations;
+    final refresh = VpsButton(
+      label: state.isLoading ? l10n.loading : l10n.retry,
+      icon: VpsIcon.refresh,
+      onTap: state.isLoading ? null : () => ref.invalidate(vpsMemberProvider),
+    );
+    if (result.problem case final problem?) {
+      return _frame(
+        p,
+        color: p.warn,
+        title: l10n.account,
+        status: l10n.serviceUnavailable,
+        lines: [
+          switch (problem) {
+            VpsPanelProblem.unavailable => l10n.serviceUnavailable,
+            VpsPanelProblem.httpsRequired => l10n.networkTlsError,
+            VpsPanelProblem.unreachable => l10n.networkConnectionError,
+          },
+        ],
+        action: refresh,
+      );
+    }
     if (result.linkChanged) {
       return _frame(
         p,
@@ -134,6 +157,7 @@ class VpsAccountCard extends ConsumerWidget {
             'The server no longer knows this link. Ask for the new one, copy it and tap "Import from clipboard".',
           ),
         ],
+        action: refresh,
       );
     }
     final m = result.member;
@@ -152,10 +176,10 @@ class VpsAccountCard extends ConsumerWidget {
           );
     String? expiry;
     if (m.expireAt != null) {
-      final days = m.expireAt!.difference(DateTime.now()).inDays;
-      expiry = days >= 0
-          ? tr(context, '还剩 $days 天到期', 'Expires in $days days')
-          : tr(context, '已到期', 'Expired');
+      final diff = m.expireAt!.difference(DateTime.now());
+      expiry = diff.isNegative
+          ? tr(context, '已到期', 'Expired')
+          : tr(context, '还剩 ${diff.inDays} 天到期', 'Expires in ${diff.inDays} days');
     }
     final off = !m.enabled;
     final reason = switch (m.disabledReason) {
@@ -175,6 +199,11 @@ class VpsAccountCard extends ConsumerWidget {
       status: off ? reason : tr(context, '正常', 'Active'),
       lines: [usage, ?expiry],
       progress: quota > 0 ? (m.used / quota).clamp(0.0, 1.0) : null,
+      action: VpsButton(
+        label: state.isLoading ? l10n.loading : l10n.update,
+        icon: VpsIcon.refresh,
+        onTap: state.isLoading ? null : () => ref.invalidate(vpsMemberProvider),
+      ),
     );
   }
 
@@ -185,6 +214,7 @@ class VpsAccountCard extends ConsumerWidget {
     String? status,
     List<String> lines = const [],
     double? progress,
+    Widget? action,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -218,6 +248,7 @@ class VpsAccountCard extends ConsumerWidget {
               const SizedBox(height: 6),
               Text(line, style: vpsText(p, size: 13, color: p.soft)),
             ],
+            if (action != null) ...[const SizedBox(height: 10), action],
             if (progress != null) ...[
               const SizedBox(height: 10),
               ClipRSuperellipse(

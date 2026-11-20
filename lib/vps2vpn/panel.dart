@@ -9,12 +9,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:fl_clash/common/constant.dart';
-import 'package:fl_clash/core/controller.dart';
+import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
-import 'package:flutter/foundation.dart';
+import 'package:fl_clash/vps2vpn/line_watch.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+export 'line_watch.dart' show VpsLineHealth;
 
 final _token = RegExp(r'^[A-Za-z0-9_-]{16,64}$');
 
@@ -28,8 +30,10 @@ Uri? vpsApiBase(String subUrl) {
   if (segs.length != 2 || segs[0] != 's' || !_token.hasMatch(segs[1])) {
     return null;
   }
+  // The member API is served over HTTPS only, on the same host and port,
+  // even when the subscription itself is a plain-HTTP link.
   return Uri(
-    scheme: uri.scheme,
+    scheme: 'https',
     host: uri.host,
     port: uri.hasPort ? uri.port : null,
     pathSegments: ['s', segs[1], 'api', ''],
@@ -191,15 +195,81 @@ class VpsMember {
 
 /// [member] when the panel answered; [linkChanged] when it said the token
 /// is unknown (rotated or removed), so the user has to import the new link.
+enum VpsPanelProblem { unavailable, httpsRequired, unreachable }
+
 class VpsMemberResult {
-  const VpsMemberResult({this.member, this.linkChanged = false});
+  const VpsMemberResult({this.member, this.linkChanged = false, this.problem});
 
   final VpsMember? member;
   final bool linkChanged;
+  final VpsPanelProblem? problem;
+
+  static VpsMemberResult fromResponse(Uri base, int code, String text) {
+    Object? json;
+    try {
+      json = jsonDecode(text);
+    } on FormatException {
+      json = null;
+    }
+    if (json is Map && json['service'] == 'vps2vpn') {
+      if (base.isScheme('https') &&
+          code == HttpStatus.unauthorized &&
+          json['error'] == 'token_invalid') {
+        return const VpsMemberResult(linkChanged: true);
+      }
+      if (code == HttpStatus.upgradeRequired &&
+          json['error'] == 'https_required') {
+        return const VpsMemberResult(problem: VpsPanelProblem.httpsRequired);
+      }
+    }
+    // The panel answers an unknown token with a plain 404 (no JSON, so the
+    // panel cannot be fingerprinted). Over verified HTTPS that means the
+    // link was rotated or removed.
+    if (base.isScheme('https') && code == HttpStatus.notFound) {
+      return const VpsMemberResult(linkChanged: true);
+    }
+    if (code == HttpStatus.ok &&
+        json is Map<String, Object?> &&
+        json['name'] is String &&
+        json['enabled'] is bool) {
+      return VpsMemberResult(member: VpsMember.fromJson(json));
+    }
+    return VpsMemberResult(
+      problem: code == HttpStatus.notFound || code == HttpStatus.ok
+          ? VpsPanelProblem.unavailable
+          : VpsPanelProblem.unreachable,
+    );
+  }
+}
+
+class VpsRequestScope {
+  final _clients = <HttpClient>{};
+  bool _closed = false;
+
+  bool get closed => _closed;
+
+  void attach(HttpClient client) {
+    if (_closed) {
+      client.close(force: true);
+      throw const HttpException('Panel request cancelled');
+    }
+    _clients.add(client);
+  }
+
+  void detach(HttpClient client) => _clients.remove(client);
+
+  void close() {
+    _closed = true;
+    for (final client in _clients) {
+      client.close(force: true);
+    }
+    _clients.clear();
+  }
 }
 
 HttpClient _client({int? proxyPort}) {
   final c = HttpClient()
+    ..badCertificateCallback = ((_, _, _) => false)
     ..connectionTimeout = const Duration(seconds: 6)
     ..idleTimeout = const Duration(seconds: 2);
   c.findProxy = (_) =>
@@ -211,12 +281,15 @@ Future<(int, String)> _send(
   Uri url, {
   Map<String, Object?>? body,
   int? proxyPort,
+  VpsRequestScope? scope,
 }) async {
   final client = _client(proxyPort: proxyPort);
   try {
+    scope?.attach(client);
     final req = body == null
         ? await client.getUrl(url)
         : await client.postUrl(url);
+    req.followRedirects = false;
     if (body != null) {
       // A fixed length, not chunked: the panel's server cannot read chunks.
       final bytes = utf8.encode(jsonEncode(body));
@@ -233,26 +306,33 @@ Future<(int, String)> _send(
         .timeout(const Duration(seconds: 10));
     return (res.statusCode, text);
   } finally {
+    scope?.detach(client);
     client.close(force: true);
   }
 }
 
 /// Direct first, like the subscription fetch; through our own proxy when
 /// direct fails and [proxyPort] is given.
-Future<VpsMemberResult?> fetchMember(Uri base, {int? proxyPort}) async {
+Future<VpsMemberResult?> fetchMember(
+  Uri base, {
+  int? proxyPort,
+  VpsRequestScope? scope,
+}) async {
+  var result = const VpsMemberResult(problem: VpsPanelProblem.unreachable);
   for (final port in [null, ?proxyPort]) {
+    if (scope?.closed == true) return null;
     try {
-      final (code, text) = await _send(base.resolve('me'), proxyPort: port);
-      if (code == HttpStatus.notFound) {
-        return const VpsMemberResult(linkChanged: true);
-      }
-      if (code != HttpStatus.ok) continue;
-      final json = jsonDecode(text);
-      if (json is! Map<String, Object?>) continue;
-      return VpsMemberResult(member: VpsMember.fromJson(json));
+      final (code, text) = await _send(
+        base.resolve('me'),
+        proxyPort: port,
+        scope: scope,
+      );
+      if (scope?.closed == true) return null;
+      result = VpsMemberResult.fromResponse(base, code, text);
+      if (result.member != null || result.linkChanged) return result;
     } catch (_) {}
   }
-  return null;
+  return scope?.closed == true ? null : result;
 }
 
 /// Always direct: the line being reported is the one that is down.
@@ -261,11 +341,13 @@ Future<bool> reportLine(
   required String line,
   required bool ok,
   required String host,
+  VpsRequestScope? scope,
 }) async {
   try {
     final (code, _) = await _send(
       base.resolve('report'),
       body: {'line': line, 'ok': ok, 'host': host},
+      scope: scope,
     );
     return code == HttpStatus.ok;
   } catch (_) {
@@ -283,92 +365,123 @@ String? vpsLineKind(Map<String, dynamic> def) {
   };
 }
 
-/// One report per change: [threshold] failures in a row → down; the first
-/// success after that → up again. Blips in between say nothing.
-class VpsLineHealth {
-  VpsLineHealth({this.threshold = 3});
-
-  final int threshold;
-  final _fails = <String, int>{};
-  final _down = <String>{};
-
-  /// false = report down, true = report up, null = nothing to say.
-  bool? record(String key, bool ok) {
-    if (ok) {
-      _fails.remove(key);
-      return _down.remove(key) ? true : null;
-    }
-    final n = (_fails[key] ?? 0) + 1;
-    _fails[key] = n;
-    if (n >= threshold && _down.add(key)) return false;
-    return null;
-  }
-}
-
 /// The signed-in member for the current subscription, or null when it is
-/// not a vps2vpn link (or the panel did not answer).
+/// not a vps2vpn link.
 final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
   ref,
 ) async {
-  final url = ref.watch(currentProfileProvider.select((p) => p?.url ?? ''));
+  final (_, url, _) = ref.watch(
+    currentProfileProvider.select(
+      (p) => (p?.id, p?.url ?? '', p?.lastUpdateDate),
+    ),
+  );
   final base = vpsApiBase(url);
   if (base == null) return null;
+  if (!ref.watch(appVisibleProvider)) return null;
   final on = ref.watch(isStartProvider);
-  final port = on ? ref.read(patchClashConfigProvider).mixedPort : null;
-  final keep = ref.keepAlive();
-  // Refresh now and then while someone looks.
-  final timer = Timer(const Duration(minutes: 5), keep.close);
-  ref.onDispose(timer.cancel);
-  return fetchMember(base, proxyPort: port);
+  final port = on
+      ? ref.watch(patchClashConfigProvider.select((p) => p.mixedPort))
+      : null;
+  final scope = VpsRequestScope();
+  Timer? timer;
+  var listening = true;
+  var finished = false;
+  var interval = const Duration(minutes: 5);
+  void schedule() {
+    timer?.cancel();
+    if (listening && finished && ref.mounted) {
+      timer = Timer(interval, ref.invalidateSelf);
+    }
+  }
+
+  ref.onCancel(() {
+    listening = false;
+    timer?.cancel();
+  });
+  ref.onResume(() {
+    listening = true;
+    schedule();
+  });
+  ref.onDispose(() {
+    timer?.cancel();
+    scope.close();
+  });
+  final result = await fetchMember(base, proxyPort: port, scope: scope);
+  if (result?.problem == VpsPanelProblem.unreachable) {
+    interval = const Duration(seconds: 30);
+  }
+  finished = true;
+  schedule();
+  return result;
 });
 
-Timer? _watch;
-final _health = VpsLineHealth();
-
-/// While connected, quietly tests each line of the smart group and tells the
-/// panel when one keeps failing (and when it is back), so the owner can move
-/// it to a new port. Never in safe mode or tests.
-void vpsStartLineWatch(Ref ref) {
-  _watch?.cancel();
-  if (safeModeBuild || Platform.environment.containsKey('FLUTTER_TEST')) {
+final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
+  if (ref.watch(safeModeProvider) ||
+      Platform.environment.containsKey('FLUTTER_TEST') ||
+      !ref.watch(isStartProvider) ||
+      ref.watch(coreStatusProvider) != CoreStatus.connected) {
     return;
   }
-  _watch = Timer.periodic(const Duration(minutes: 4), (timer) async {
-    if (!ref.read(isStartProvider)) {
-      timer.cancel();
-      return;
-    }
-    final base = vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
-    if (base == null) return;
-    await _checkLines(ref, base);
-  });
-}
-
-Future<void> _checkLines(Ref ref, Uri base) async {
-  final groups = ref.read(groupsProvider);
-  final smart = groups.where((g) => g.name == vpsSmartGroupName).firstOrNull;
-  if (smart == null) return;
-  for (final proxy in smart.all) {
-    try {
-      final def = await coreController.getProxyDefinition(proxy.name);
-      if (def == null) continue;
-      final kind = vpsLineKind(def);
-      final host = '${def['server'] ?? ''}';
-      if (kind == null || host.isEmpty) continue;
-      final delay = await coreController.testDelay(
+  final (_, url, _) = ref.watch(
+    currentProfileProvider.select(
+      (p) => (p?.id, p?.url ?? '', p?.lastUpdateDate),
+    ),
+  );
+  final base = vpsApiBase(url);
+  if (base == null) return;
+  final core = ref.watch(coreHandlerProvider);
+  final scope = VpsRequestScope();
+  final watch = VpsLineWatch(
+    lines: () async {
+      if (!await ref.read(setupActionProvider.notifier).inputsApplied() ||
+          !ref.mounted) {
+        return [];
+      }
+      final smart = ref
+          .read(groupsProvider)
+          .where((g) => g.name == vpsSmartGroupName)
+          .firstOrNull;
+      if (smart == null) return [];
+      final lines = <VpsWatchedLine>[];
+      for (final proxy in smart.all) {
+        final def = await core.getProxyDefinition(proxy.name);
+        if (!ref.mounted) return [];
+        if (def == null) continue;
+        final kind = vpsLineKind(def);
+        final host = '${def['server'] ?? ''}';
+        if (kind == null || host.isEmpty) continue;
+        lines.add(
+          VpsWatchedLine(
+            name: proxy.name,
+            kind: kind,
+            host: host,
+            testUrl: smart.testUrl ?? defaultTestUrl,
+          ),
+        );
+      }
+      return lines;
+    },
+    probe: (line) async {
+      final delay = await core.testDelay(
         TestDelayParams(
-          proxyName: proxy.name,
-          testUrl: smart.testUrl ?? defaultTestUrl,
+          proxyName: line.name,
+          testUrl: line.testUrl,
           timeout: 5000,
         ),
       );
-      final ok = (delay.value ?? -1) > 0;
-      final change = _health.record('$kind@$host', ok);
-      if (change != null) {
-        await reportLine(base, line: kind, ok: change, host: host);
-      }
-    } catch (e) {
-      if (kDebugMode) debugPrint('vps2vpn line watch: $e');
-    }
-  }
-}
+      return (delay.value ?? -1) > 0;
+    },
+    report: (line, ok) => reportLine(
+      base,
+      line: line.kind,
+      ok: ok,
+      host: line.host,
+      scope: scope,
+    ),
+  );
+  ref.onDispose(() {
+    watch.dispose();
+    scope.close();
+  });
+  watch.start();
+});

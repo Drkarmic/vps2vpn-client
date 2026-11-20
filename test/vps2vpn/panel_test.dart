@@ -15,7 +15,7 @@ void main() {
       );
       expect(
         vpsApiBase('http://1.2.3.4:43470/s/$_tok').toString(),
-        'http://1.2.3.4:43470/s/$_tok/api/',
+        'https://1.2.3.4:43470/s/$_tok/api/',
       );
     });
 
@@ -157,7 +157,7 @@ void main() {
 
     tearDown(() => server.close(force: true));
 
-    Uri base() => vpsApiBase('http://127.0.0.1:${server.port}/s/$_tok')!;
+    Uri base() => vpsApiBase('http://127.0.0.1:${server.port}/s/$_tok')!.replace(scheme: 'http'); // plain local test server
 
     test('fetches the member', () async {
       final r = await fetchMember(base());
@@ -165,10 +165,11 @@ void main() {
       expect(r.linkChanged, isFalse);
     });
 
-    test('a 404 means the link was replaced', () async {
+    test('a 404 over plain HTTP does not mean the link was replaced', () async {
       meStatus = HttpStatus.notFound;
       final r = await fetchMember(base());
-      expect(r!.linkChanged, isTrue);
+      expect(r!.linkChanged, isFalse);
+      expect(r.problem, VpsPanelProblem.unavailable);
     });
 
     test('a report carries the header and the line', () async {
@@ -179,5 +180,32 @@ void main() {
       expect(posts.single.$1, '1');
       expect(posts.single.$2, {'line': 'hy2', 'ok': false, 'host': '1.2.3.4'});
     });
+  });
+
+  test('token rotation is only trusted over HTTPS', () {
+    final base = Uri.parse('https://panel.invalid/s/$_tok/api/');
+    final body = jsonEncode({'service': 'vps2vpn', 'error': 'token_invalid'});
+    expect(VpsMemberResult.fromResponse(base, 401, body).linkChanged, isTrue);
+    expect(
+      VpsMemberResult.fromResponse(
+        base.replace(scheme: 'http'),
+        401,
+        body,
+      ).linkChanged,
+      isFalse,
+    );
+    // The panel answers an unknown token with a bare 404.
+    expect(VpsMemberResult.fromResponse(base, 404, '').linkChanged, isTrue);
+    expect(
+      VpsMemberResult.fromResponse(base.replace(scheme: 'http'), 404, '')
+          .linkChanged,
+      isFalse,
+    );
+    final up = jsonEncode({'service': 'vps2vpn', 'error': 'https_required'});
+    expect(
+      VpsMemberResult.fromResponse(base.replace(scheme: 'http'), 426, up)
+          .problem,
+      VpsPanelProblem.httpsRequired,
+    );
   });
 }

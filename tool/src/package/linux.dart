@@ -358,7 +358,7 @@ String appImageDesktopEntry(
   Map<String, dynamic> config,
 ) {
   final binary = context.linuxBinaryName;
-  return '${_desktopEntry({'Name': config['display_name'], 'GenericName': config['generic_name'] ?? 'A Flutter Application', 'Exec': 'LD_LIBRARY_PATH=usr/lib $binary %u', 'Icon': binary, 'Type': 'Application', 'StartupNotify': config['startup_notify'] == true ? 'true' : 'false', 'StartupWMClass': context.linuxApplicationId, 'MimeType': _joined(stringList(config['supported_mime_type'])), 'Categories': _plainJoined(stringList(config['categories'])), 'Keywords': _plainJoined(stringList(config['keywords']))})}\n\n';
+  return '${_desktopEntry({'Name': config['display_name'], 'GenericName': config['generic_name'] ?? 'A Flutter Application', 'Exec': '$binary %u', 'Icon': binary, 'Type': 'Application', 'StartupNotify': config['startup_notify'] == true ? 'true' : 'false', 'StartupWMClass': context.linuxApplicationId, 'MimeType': _joined(stringList(config['supported_mime_type'])), 'Categories': _plainJoined(stringList(config['categories'])), 'Keywords': _plainJoined(stringList(config['keywords']))})}\n\n';
 }
 
 String appImageAppRun(String binary) {

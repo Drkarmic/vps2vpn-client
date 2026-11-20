@@ -1,6 +1,5 @@
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -8,18 +7,35 @@ use super::PAC_PATH;
 
 const MAX_REQUEST_BYTES: usize = 16 * 1024;
 
-static SCRIPT: Mutex<String> = Mutex::new(String::new());
-static REVISION: AtomicU64 = AtomicU64::new(0);
+#[derive(Default)]
+struct Script {
+    text: String,
+    revision: u64,
+}
+
+impl Script {
+    fn update(&mut self, text: String) -> u64 {
+        if self.text != text {
+            self.text = text;
+            self.revision = self.revision.wrapping_add(1);
+        }
+        self.revision
+    }
+}
+
+static SCRIPT: Mutex<Script> = Mutex::new(Script {
+    text: String::new(),
+    revision: 0,
+});
 
 /// Serves `script` and returns its URL. The listener stays up for the life of
-/// the process; each call gets a fresh query so systems that cache a PAC file
-/// by URL fetch the new script.
+/// the process; a changed script gets a fresh query to invalidate URL caches.
 pub fn serve(script: String) -> Option<String> {
-    *SCRIPT
+    let revision = SCRIPT
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner()) = script;
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .update(script);
     let address = (*listener_address())?;
-    let revision = REVISION.fetch_add(1, Ordering::SeqCst);
     Some(format!("http://{address}{PAC_PATH}?v={revision}"))
 }
 
@@ -53,6 +69,7 @@ fn respond(mut stream: TcpStream) {
     let script = SCRIPT
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .text
         .clone();
     let _ = stream.write_all(&response(&head, &script));
 }
@@ -101,6 +118,15 @@ mod tests {
 
     fn text(bytes: Vec<u8>) -> String {
         String::from_utf8(bytes).unwrap()
+    }
+
+    #[test]
+    fn unchanged_script_keeps_its_cache_key() {
+        let mut script = Script::default();
+        let first = script.update("one".into());
+        assert_eq!(script.update("one".into()), first);
+        assert_ne!(script.update("two".into()), first);
+        assert_eq!(script.text, "two");
     }
 
     #[test]

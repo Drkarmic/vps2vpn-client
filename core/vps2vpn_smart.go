@@ -1,26 +1,5 @@
 package core
 
-// vps2vpn smart lines: added on top of whatever the subscription brings,
-// never replacing it.
-//
-//   - "⚡ 智能线路" (fallback): every protocol of the primary server (the
-//     subscription's first line) fast-first (Hysteria2/TUIC, then REALITY,
-//     then the rest), and only after them the other servers. When the ISP
-//     throttles UDP and the fast line stops answering, traffic moves to
-//     REALITY on the same machine within about a minute, so the exit IP does
-//     not change; it comes back on its own once the fast line answers again.
-//     Another server (another IP) is used only when the whole primary server
-//     is unreachable. It becomes the first choice of the subscription's first
-//     selector, so new users get it without doing anything; a choice the user
-//     made is kept.
-//   - "🤖 AI 专线" (fallback): the same order, but slower to give up on a
-//     line, so AI sites keep seeing one exit IP (a changing IP is what makes
-//     them ask for verification or flag the account). Only added, with its
-//     rules, when the subscription does not route AI sites itself: curated
-//     rules always win.
-//   - REALITY lines without a client fingerprint get "chrome", so the TLS
-//     handshake looks like a browser's.
-
 import (
 	"fmt"
 	"sort"
@@ -34,19 +13,18 @@ const (
 	vpsSmartGroup = "⚡ 智能线路"
 	vpsAIGroup    = "🤖 AI 专线"
 	vpsProbeURL   = "https://www.gstatic.com/generate_204"
+	vpsAIProbeURL = vpsProbeURL + "#vps2vpn-ai"
 )
 
 // Set from CoreOptions.SmartLines before each config load.
 var vpsSmartEnabled atomic.Bool
 
 var vpsAIDomains = []string{
-	"anthropic.com", "claude.ai", "claude.com", "claudeusercontent.com",
-	"openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com",
-	"gemini.google.com", "generativelanguage.googleapis.com", "aistudio.google.com",
+	"anthropic.com", "claude.ai", "claude.com", "claudeusercontent.com", "clau.de",
+	"openai.com", "chatgpt.com", "oaistatic.com", "oaiusercontent.com", "sora.com",
+	"gemini.google.com", "notebooklm.google.com", "generativelanguage.googleapis.com", "aistudio.google.com",
 	"perplexity.ai", "x.ai", "grok.com",
 }
-
-var vpsAIKeywords = []string{"anthropic", "claude", "openai", "chatgpt", "gemini", "perplexity", "grok"}
 
 // vpsLineRank: lower is tried first; -1 means not a line to the outside.
 func vpsLineRank(p map[string]any) int {
@@ -74,7 +52,15 @@ func vpsName(p map[string]any) string {
 	return name
 }
 
-func vpsHasGroup(raw *config.RawConfig, name string) bool {
+func vpsNameTaken(raw *config.RawConfig, name string) bool {
+	if _, exists := raw.ProxyProvider[name]; exists {
+		return true
+	}
+	for _, p := range raw.Proxy {
+		if vpsName(p) == name {
+			return true
+		}
+	}
 	for _, g := range raw.ProxyGroup {
 		if vpsName(g) == name {
 			return true
@@ -85,10 +71,28 @@ func vpsHasGroup(raw *config.RawConfig, name string) bool {
 
 func vpsRoutesAI(rules []string) bool {
 	for _, rule := range rules {
-		lower := strings.ToLower(rule)
-		for _, k := range vpsAIKeywords {
-			if strings.Contains(lower, k) {
-				return true
+		fields := strings.SplitN(rule, ",", 3)
+		if len(fields) < 2 {
+			continue
+		}
+		kind := strings.ToUpper(strings.TrimSpace(fields[0]))
+		payload := strings.ToLower(strings.TrimSpace(fields[1]))
+		switch kind {
+		case "RULE-SET", "SUB-RULE", "GEOSITE", "DOMAIN-REGEX", "AND", "OR", "NOT":
+			return true
+		case "DOMAIN", "DOMAIN-SUFFIX":
+			payload = strings.TrimSuffix(payload, ".")
+			for _, domain := range vpsAIDomains {
+				if payload == domain || strings.HasSuffix(payload, "."+domain) ||
+					kind == "DOMAIN-SUFFIX" && strings.HasSuffix(domain, "."+payload) {
+					return true
+				}
+			}
+		case "DOMAIN-KEYWORD":
+			for _, domain := range vpsAIDomains {
+				if payload != "" && strings.Contains(domain, payload) {
+					return true
+				}
 			}
 		}
 	}
@@ -104,12 +108,12 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 	}
 	type line struct {
 		name   string
-		server string
+		server int
 		rank   int
-		order  int
 	}
 	var lines []line
-	for i, p := range raw.Proxy {
+	servers := map[string]int{}
+	for _, p := range raw.Proxy {
 		rank := vpsLineRank(p)
 		name := vpsName(p)
 		if rank < 0 || name == "" {
@@ -121,19 +125,23 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 			}
 		}
 		server, _ := p["server"].(string)
-		lines = append(lines, line{name: name, server: server, rank: rank, order: i})
+		if server == "" {
+			server = "\x00" + name
+		}
+		order, exists := servers[server]
+		if !exists {
+			order = len(servers)
+			servers[server] = order
+		}
+		lines = append(lines, line{name: name, server: order, rank: rank})
 	}
 	// One line has nothing to fall back to; a second protocol is what makes this useful.
-	if len(lines) < 2 || vpsHasGroup(raw, vpsSmartGroup) {
+	if len(lines) < 2 || vpsNameTaken(raw, vpsSmartGroup) {
 		return
 	}
-	// The primary server is the one the subscription lists first. Its lines
-	// come first so a protocol switch never changes the exit IP.
-	primary := lines[0].server
 	sort.SliceStable(lines, func(i, j int) bool {
-		pi, pj := lines[i].server == primary, lines[j].server == primary
-		if pi != pj {
-			return pi
+		if lines[i].server != lines[j].server {
+			return lines[i].server < lines[j].server
 		}
 		return lines[i].rank < lines[j].rank
 	})
@@ -156,24 +164,37 @@ func vps2vpnEnhance(raw *config.RawConfig, userRules int) {
 		if strings.ToLower(fmt.Sprint(g["type"])) != "select" {
 			continue
 		}
-		members, _ := g["proxies"].([]any)
+		var members []any
+		switch values := g["proxies"].(type) {
+		case nil:
+		case []any:
+			members = values
+		case []string:
+			for _, name := range values {
+				members = append(members, name)
+			}
+		default:
+			continue
+		}
 		g["proxies"] = append([]any{vpsSmartGroup}, members...)
 		break
 	}
 
-	if userRules < 0 || vpsRoutesAI(raw.Rule) || vpsHasGroup(raw, vpsAIGroup) {
+	if userRules < 0 || vpsRoutesAI(raw.Rule) || vpsNameTaken(raw, vpsAIGroup) {
 		return
 	}
 	aiNames := append([]string(nil), smart...)
 	raw.ProxyGroup = append(raw.ProxyGroup, map[string]any{
-		"name":             vpsAIGroup,
-		"type":             "fallback",
-		"proxies":          aiNames,
-		"url":              vpsProbeURL,
-		"interval":         120,
-		"timeout":          4000,
-		"max-failed-times": 3,
-		"lazy":             false,
+		"name":               vpsAIGroup,
+		"type":               "fallback",
+		"proxies":            aiNames,
+		"url":                vpsAIProbeURL,
+		"interval":           120,
+		"timeout":            4000,
+		"max-failed-times":   3,
+		"failure-threshold":  3,
+		"recovery-threshold": 3,
+		"lazy":               false,
 	})
 	userRules = min(userRules, len(raw.Rule))
 	rules := make([]string, 0, len(vpsAIDomains)+len(raw.Rule))

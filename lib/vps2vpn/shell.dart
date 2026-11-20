@@ -316,6 +316,7 @@ class _NavItem extends StatelessWidget {
     final p = VpsPalette.of(context);
     return VpsPressable(
       onTap: onTap,
+      selected: selected,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -382,6 +383,7 @@ class _BottomNav extends StatelessWidget {
             Expanded(
               child: VpsPressable(
                 onTap: () => vpsTab.value = i,
+                selected: i == tab,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   decoration: ShapeDecoration(

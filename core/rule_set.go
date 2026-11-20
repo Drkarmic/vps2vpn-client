@@ -7,8 +7,10 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/common/yaml"
@@ -48,6 +50,11 @@ func handleCompileRuleSet(params CompileRuleSetParams) (*RuleSetInfo, error) {
 	if !ok {
 		return nil, &MethodError{Code: "invalid_arguments", Message: "invalid rule set name"}
 	}
+	key := "rule-set:" + source
+	if !claimUpdate(key) {
+		return nil, &MethodError{Code: "rule_set_updating", Message: "rule set is already being compiled"}
+	}
+	defer releaseUpdate(key)
 	var buf []byte
 	var err error
 	if params.URL != "" {
@@ -93,25 +100,34 @@ func writeRuleSetFile(path string, buf []byte) error {
 	}
 	// The directory belongs to the user while the Core may run as root, so the
 	// temp file is created afresh rather than opened through whatever is there.
-	temp := path + ".tmp"
-	_ = os.Remove(temp)
-	file, err := os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	file, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
 	}
-	_, err = file.Write(buf)
+	temp := file.Name()
+	defer os.Remove(temp)
+	if err = file.Chmod(0o644); err == nil {
+		_, err = file.Write(buf)
+	}
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
 	if err != nil {
-		_ = os.Remove(temp)
 		return err
 	}
-	if err := os.Rename(temp, path); err != nil {
-		_ = os.Remove(temp)
-		return err
+	return renameReplacing(temp, path)
+}
+
+// renameReplacing moves temp over path. On Windows a rename onto a file that
+// another writer is replacing at the same moment fails with "Access is
+// denied" for a few milliseconds, so it is retried briefly there.
+func renameReplacing(temp, path string) error {
+	err := os.Rename(temp, path)
+	for i := 0; err != nil && runtime.GOOS == "windows" && i < 50; i++ {
+		time.Sleep(10 * time.Millisecond)
+		err = os.Rename(temp, path)
 	}
-	return nil
+	return err
 }
 
 func compileRuleSet(buf []byte, allowEmpty bool) (*RuleSetInfo, []byte, error) {

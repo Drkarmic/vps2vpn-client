@@ -98,6 +98,8 @@ $newPort = $after.patchClashConfig.'mixed-port'
 Check ($newPort -and [int]$newPort -ne $port -and [int]$newPort -ge 17890 -and [int]$newPort -lt 17990) "moved off the taken port $port (now $newPort)"
 $reg = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 "system proxy: enable=$($reg.ProxyEnable) server=$($reg.ProxyServer)"
+$ownedProxy = "$($reg.ProxyServer)"
+Check ($reg.ProxyEnable -eq 1 -and -not [string]::IsNullOrWhiteSpace($ownedProxy)) 'system proxy enabled before uninstall'
 
 # 5. Uninstall. Ending the app by force leaves our system proxy behind, as a
 # crash would; the uninstaller must clear it or the PC loses the internet.
@@ -120,7 +122,7 @@ Check (-not (Get-Process vps2vpn, vps2vpnCore, vps2vpnHelperService -ErrorAction
 Check (-not (Get-Service vps2vpnHelperService -ErrorAction SilentlyContinue)) 'helper service unregistered'
 $reg = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 "system proxy after uninstall: enable=$($reg.ProxyEnable) server=$($reg.ProxyServer)"
-Check (-not ($reg.ProxyEnable -eq 1 -and "$($reg.ProxyServer)" -match ':1?7890')) 'uninstall cleared our system proxy'
+Check (-not ($reg.ProxyEnable -eq 1 -and "$($reg.ProxyServer)" -eq $ownedProxy)) 'uninstall cleared the observed system proxy'
 Check (Test-Path (Join-Path $flclashData 'marker.txt')) "FlClash's data left untouched"
 
 if ($failures.Count) { "`n$($failures.Count) check(s) failed:"; $failures; exit 1 }

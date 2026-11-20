@@ -781,12 +781,12 @@ class _Stats extends ConsumerWidget {
       left = remain.traffic.show;
     }
     if (sub != null && sub.expire > 0) {
-      final days = DateTime.fromMillisecondsSinceEpoch(
+      final diff = DateTime.fromMillisecondsSinceEpoch(
         sub.expire * 1000,
-      ).difference(DateTime.now()).inDays;
-      expire = days >= 0
-          ? tr(context, '还剩 $days 天', '$days days left')
-          : tr(context, '已到期', 'Expired');
+      ).difference(DateTime.now());
+      expire = diff.isNegative
+          ? tr(context, '已到期', 'Expired')
+          : tr(context, '还剩 ${diff.inDays} 天', '${diff.inDays} days left');
     }
     final p = VpsPalette.of(context);
     final groups = ref.watch(currentGroupsStateProvider).value;
@@ -835,6 +835,7 @@ class _Stats extends ConsumerWidget {
           label: tr(context, '当前延迟', 'Latency'),
           value: switch (latency) {
             null => '—',
+            0 => '…',
             < 0 => tr(context, '超时', 'Timeout'),
             final d => '$d ms',
           },
