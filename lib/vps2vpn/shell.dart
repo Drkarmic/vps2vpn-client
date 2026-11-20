@@ -54,6 +54,11 @@ class VpsShell extends StatelessWidget {
                 final body = AnimatedSwitcher(
                   duration: const Duration(milliseconds: 260),
                   switchInCurve: Curves.easeOutCubic,
+                  // Pages fill the area and start at the top, short or long.
+                  layoutBuilder: (current, previous) => Stack(
+                    fit: StackFit.expand,
+                    children: [...previous, ?current],
+                  ),
                   transitionBuilder: (child, a) => FadeTransition(
                     opacity: a,
                     child: SlideTransition(
@@ -95,10 +100,10 @@ class VpsShell extends StatelessWidget {
 }
 
 List<(VpsIcon, String)> _tabs(BuildContext context) => [
-  (VpsIcon.home, tr(context, '首页', 'Home')),
-  (VpsIcon.servers, tr(context, '服务器', 'Servers')),
+  (VpsIcon.home, tr(context, '概览', 'Overview')),
+  (VpsIcon.servers, tr(context, '节点', 'Nodes')),
   (VpsIcon.check, tr(context, '检测', 'Check')),
-  (VpsIcon.me, tr(context, '我的', 'Me')),
+  (VpsIcon.me, tr(context, '设置', 'Settings')),
 ];
 
 class _SideNav extends ConsumerWidget {
@@ -113,7 +118,7 @@ class _SideNav extends ConsumerWidget {
     return Container(
       width: 224,
       decoration: BoxDecoration(
-        color: p.dark ? const Color(0x99121320) : p.side,
+        color: p.side,
         border: Border(right: BorderSide(color: p.line)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 18),
@@ -124,7 +129,7 @@ class _SideNav extends ConsumerWidget {
             padding: const EdgeInsets.only(left: 6),
             child: Row(
               children: [
-                const VpsLogo(size: 34),
+                const VpsLogo(size: 30),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,13 +138,13 @@ class _SideNav extends ConsumerWidget {
                       'vps2vpn',
                       style: vpsText(
                         p,
-                        size: 18,
-                        weight: FontWeight.w800,
-                        spacing: 0.3,
+                        size: 16,
+                        weight: FontWeight.w700,
+                        spacing: 0.2,
                       ),
                     ),
                     Text(
-                      tr(context, '你自己的 VPN', 'Your own VPN'),
+                      tr(context, '私有网络', 'Private network'),
                       style: vpsText(p, size: 11.5, color: p.soft),
                     ),
                   ],
@@ -221,21 +226,23 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? p.accentWash : const Color(0x00000000),
-          borderRadius: BorderRadius.circular(14),
+          color: selected
+              ? (p.dark ? const Color(0x0DFFFFFF) : const Color(0xFFEEF0F3))
+              : const Color(0x00000000),
+          borderRadius: BorderRadius.circular(9),
         ),
         child: Row(
           children: [
-            VpsIconView(icon, size: 21, color: selected ? p.accent : p.soft),
-            const SizedBox(width: 14),
+            VpsIconView(icon, size: 18, color: selected ? p.accent : p.soft),
+            const SizedBox(width: 12),
             Text(
               label,
               style: vpsText(
                 p,
-                size: 15,
-                weight: selected ? FontWeight.w700 : FontWeight.w500,
+                size: 14,
+                weight: selected ? FontWeight.w600 : FontWeight.w500,
                 color: selected ? p.text : p.soft,
               ),
             ),
@@ -278,7 +285,11 @@ class _BottomNav extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   decoration: BoxDecoration(
-                    color: i == tab ? p.accentWash : const Color(0x00000000),
+                    color: i == tab
+                        ? (p.dark
+                              ? const Color(0x14FFFFFF)
+                              : const Color(0xFFEEF0F3))
+                        : const Color(0x00000000),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: Column(
@@ -357,9 +368,9 @@ class VpsPage extends StatelessWidget {
                               title,
                               style: vpsText(
                                 p,
-                                size: wide ? 30 : 26,
-                                weight: FontWeight.w800,
-                                spacing: -0.3,
+                                size: wide ? 26 : 22,
+                                weight: FontWeight.w600,
+                                spacing: -0.5,
                               ),
                             ),
                             if (subtitle != null)

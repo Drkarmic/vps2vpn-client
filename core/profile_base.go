@@ -110,6 +110,12 @@ func loadConfigWithBase(base *SetupBase, configPath string) (*config.Config, err
 	if err := writeConfigDocument(configPath, document); err != nil {
 		return nil, err
 	}
+	// The overlay's rules (the user's own, first) stay ahead of the AI rules.
+	var overlay struct {
+		Rules []string `yaml:"rules"`
+	}
+	_ = yaml.Unmarshal([]byte(base.Overlay), &overlay)
+	vps2vpnEnhance(raw, len(overlay.Rules))
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
 		return nil, err

@@ -31,6 +31,8 @@ class VpsPalette {
     required this.bad,
     required this.glowA,
     required this.glowB,
+    required this.track,
+    required this.thumb,
   });
 
   final bool dark;
@@ -51,61 +53,83 @@ class VpsPalette {
   final Color glowA;
   final Color glowB;
 
+  /// Inset surface: segmented tracks, off switches, icon tiles.
+  final Color track;
+
+  /// Raised surface on a track: the chosen segment.
+  final Color thumb;
+
+  // Graphite, not navy: quieter, reads as a tool rather than a toy.
   static const _dark = VpsPalette._(
     dark: true,
-    bg: Color(0xFF0E0F1A),
-    side: Color(0xFF12131F),
-    card: Color(0x0FFFFFFF),
-    cardHi: Color(0x1AFFFFFF),
-    line: Color(0x17FFFFFF),
-    text: Color(0xFFF4F4FA),
-    soft: Color(0xFFA9ACCB),
-    muted: Color(0xFF6B6E8F),
-    accent: vpsCoralSoft,
+    bg: Color(0xFF0B0C0F),
+    side: Color(0xFF0E0F13),
+    card: Color(0xFF14161B),
+    cardHi: Color(0xFF181B21),
+    line: Color(0x14FFFFFF),
+    text: Color(0xFFECEDEF),
+    soft: Color(0xFF8B9099),
+    muted: Color(0xFF575C66),
+    accent: Color(0xFFFF7A5C),
     accentInk: Color(0xFFFFFFFF),
-    accentWash: Color(0x40FF8A70),
-    good: Color(0xFF6EE7B7),
-    warn: Color(0xFFFCD34D),
-    bad: Color(0xFFFF8A8A),
-    glowA: Color(0x55FF6F61),
-    glowB: Color(0x408B5CF6),
+    accentWash: Color(0x1FFF7A5C),
+    good: Color(0xFF5BD69A),
+    warn: Color(0xFFF0B44C),
+    bad: Color(0xFFF0716B),
+    glowA: Color(0x1FFF6F61),
+    glowB: Color(0x148B5CF6),
+    track: Color(0xFF0F1115),
+    thumb: Color(0xFF262931),
   );
 
+  // Neutral paper, no tint: the accent alone carries the brand.
   static const _light = VpsPalette._(
     dark: false,
-    bg: Color(0xFFFBF8F6),
-    side: Color(0xFFF5EFEC),
+    bg: Color(0xFFF5F6F8),
+    side: Color(0xFFFBFBFC),
     card: Color(0xFFFFFFFF),
-    cardHi: Color(0xFFFFF6F3),
-    line: Color(0xFFEFE4E0),
-    text: Color(0xFF2B1B18),
-    soft: Color(0xFF8A7671),
-    muted: Color(0xFFB7A6A1),
-    accent: vpsCoral,
+    cardHi: Color(0xFFFFFFFF),
+    line: Color(0xFFE6E8EC),
+    text: Color(0xFF111318),
+    soft: Color(0xFF6B7280),
+    muted: Color(0xFFA3A8B1),
+    accent: Color(0xFFEF5B3C),
     accentInk: Color(0xFFFFFFFF),
-    accentWash: Color(0xFFFFE8E3),
-    good: Color(0xFF1D9E75),
-    warn: Color(0xFFBA7517),
-    bad: Color(0xFFD64545),
+    accentWash: Color(0xFFFDEEE9),
+    good: Color(0xFF15965E),
+    warn: Color(0xFFB7791F),
+    bad: Color(0xFFDC4A3F),
     glowA: Color(0x00000000),
     glowB: Color(0x00000000),
+    track: Color(0xFFEFF1F4),
+    thumb: Color(0xFFFFFFFF),
   );
 
   static VpsPalette of(BuildContext context) =>
       context.colorScheme.brightness == Brightness.dark ? _dark : _light;
 
-  LinearGradient get accentGradient => dark
-      ? const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [vpsCoralSoft, vpsCoralDeep, vpsViolet],
-          stops: [0, 0.6, 1],
-        )
-      : const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [vpsCoralSoft, vpsCoral, vpsCoralDeep],
-        );
+  /// Brand gradient: logo and the connect button only.
+  LinearGradient get accentGradient => const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [vpsCoralSoft, vpsCoralDeep, vpsViolet],
+    stops: [0, 0.65, 1],
+  );
+
+  List<BoxShadow> get raise => dark
+      ? const []
+      : const [
+          BoxShadow(
+            color: Color(0x0A101828),
+            blurRadius: 2,
+            offset: Offset(0, 1),
+          ),
+          BoxShadow(
+            color: Color(0x0D101828),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ];
 }
 
 bool vpsZh(BuildContext context) =>
@@ -122,12 +146,14 @@ TextStyle vpsText(
   Color? color,
   double? height,
   double? spacing,
+  bool tabular = false,
 }) => TextStyle(
   fontSize: size,
   fontWeight: weight,
   color: color ?? p.text,
   height: height,
   letterSpacing: spacing,
+  fontFeatures: tabular ? const [FontFeature.tabularFigures()] : null,
 );
 
 /// The rounded surface every block sits on: glass in dark, paper in light.
@@ -136,7 +162,7 @@ class VpsCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(20),
-    this.radius = 24,
+    this.radius = 16,
     this.onTap,
     this.highlight = false,
   });
@@ -156,18 +182,9 @@ class VpsCard extends StatelessWidget {
         color: highlight ? p.cardHi : p.card,
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
-          color: highlight ? p.accent.withValues(alpha: 0.55) : p.line,
-          width: highlight ? 1.4 : 1,
+          color: highlight ? p.accent.withValues(alpha: 0.5) : p.line,
         ),
-        boxShadow: p.dark
-            ? const []
-            : [
-                BoxShadow(
-                  color: const Color(0xFF7A3B2E).withValues(alpha: 0.06),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+        boxShadow: p.raise,
       ),
       child: child,
     );
@@ -207,7 +224,7 @@ class _VpsPressableState extends State<VpsPressable> {
         onTapUp: (_) => setState(() => _down = false),
         onTap: widget.onTap,
         child: AnimatedScale(
-          scale: _down ? 0.97 : (_hover ? 1.01 : 1),
+          scale: _down ? 0.985 : (_hover ? 1.004 : 1),
           duration: const Duration(milliseconds: 140),
           curve: Curves.easeOut,
           child: widget.child,
@@ -239,21 +256,24 @@ class VpsButton extends StatelessWidget {
     return VpsPressable(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          gradient: filled ? p.accentGradient : null,
-          color: filled ? null : p.card,
-          borderRadius: BorderRadius.circular(99),
+          color: filled ? p.accent : p.card,
+          borderRadius: BorderRadius.circular(10),
           border: filled ? null : Border.all(color: p.line),
+          boxShadow: filled ? const [] : p.raise,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              VpsIconView(icon!, size: 17, color: fg),
-              const SizedBox(width: 8),
+              VpsIconView(icon!, size: 16, color: fg),
+              const SizedBox(width: 7),
             ],
-            Text(label, style: vpsText(p, size: 14, weight: FontWeight.w600, color: fg)),
+            Text(
+              label,
+              style: vpsText(p, size: 13.5, weight: FontWeight.w600, color: fg),
+            ),
           ],
         ),
       ),
@@ -276,12 +296,13 @@ class VpsSwitch extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
-        width: 50,
-        height: 30,
-        padding: const EdgeInsets.all(3),
+        width: 40,
+        height: 24,
+        padding: const EdgeInsets.all(2.5),
         decoration: BoxDecoration(
-          gradient: value ? p.accentGradient : null,
-          color: value ? null : (p.dark ? const Color(0x26FFFFFF) : const Color(0xFFE8DDD9)),
+          color: value
+              ? p.accent
+              : (p.dark ? const Color(0xFF2A2D35) : const Color(0xFFDCDFE4)),
           borderRadius: BorderRadius.circular(99),
         ),
         child: AnimatedAlign(
@@ -289,12 +310,18 @@ class VpsSwitch extends StatelessWidget {
           curve: Curves.easeOutCubic,
           alignment: value ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
-            width: 24,
-            height: 24,
+            width: 19,
+            height: 19,
             decoration: const BoxDecoration(
               color: Color(0xFFFFFFFF),
               shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 1))],
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
+                ),
+              ],
             ),
           ),
         ),
@@ -326,11 +353,12 @@ class VpsSegmented<T> extends StatelessWidget {
       builder: (context, c) {
         final w = (c.maxWidth - 8) / items.length;
         return Container(
-          height: 46,
+          height: 40,
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: p.dark ? const Color(0x12FFFFFF) : const Color(0xFFF1EAE6),
-            borderRadius: BorderRadius.circular(99),
+            color: p.track,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: p.line),
           ),
           child: Stack(
             children: [
@@ -343,8 +371,31 @@ class VpsSegmented<T> extends StatelessWidget {
                 width: w,
                 child: Container(
                   decoration: BoxDecoration(
-                    gradient: p.accentGradient,
-                    borderRadius: BorderRadius.circular(99),
+                    color: p.thumb,
+                    borderRadius: BorderRadius.circular(7),
+                    border: p.dark
+                        ? Border.all(color: const Color(0x0FFFFFFF))
+                        : null,
+                    boxShadow: p.dark
+                        ? const [
+                            BoxShadow(
+                              color: Color(0x66000000),
+                              blurRadius: 6,
+                              offset: Offset(0, 2),
+                            ),
+                          ]
+                        : const [
+                            BoxShadow(
+                              color: Color(0x14101828),
+                              blurRadius: 3,
+                              offset: Offset(0, 1),
+                            ),
+                            BoxShadow(
+                              color: Color(0x0A101828),
+                              blurRadius: 8,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
                   ),
                 ),
               ),
@@ -359,9 +410,11 @@ class VpsSegmented<T> extends StatelessWidget {
                             labelOf(item),
                             style: vpsText(
                               p,
-                              size: 14,
-                              weight: FontWeight.w600,
-                              color: item == value ? p.accentInk : p.soft,
+                              size: 13.5,
+                              weight: item == value
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              color: item == value ? p.text : p.soft,
                             ),
                           ),
                         ),
@@ -388,12 +441,27 @@ class VpsChip extends StatelessWidget {
     final p = VpsPalette.of(context);
     final c = color ?? p.accent;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(9, 4, 11, 4),
       decoration: BoxDecoration(
-        color: c.withValues(alpha: p.dark ? 0.16 : 0.12),
+        color: p.track,
         borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: p.line),
       ),
-      child: Text(label, style: vpsText(p, size: 12, weight: FontWeight.w600, color: c)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: vpsText(p, size: 12, weight: FontWeight.w500, color: p.text),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -413,12 +481,12 @@ class VpsLogo extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         gradient: p.accentGradient,
-        borderRadius: BorderRadius.circular(size * 0.3),
+        borderRadius: BorderRadius.circular(size * 0.28),
         boxShadow: [
           BoxShadow(
-            color: vpsCoral.withValues(alpha: 0.35),
-            blurRadius: size * 0.4,
-            offset: Offset(0, size * 0.12),
+            color: vpsCoral.withValues(alpha: 0.22),
+            blurRadius: size * 0.35,
+            offset: Offset(0, size * 0.1),
           ),
         ],
       ),
@@ -454,7 +522,26 @@ class _LogoMark extends CustomPainter {
 }
 
 /// Our own line icons, drawn so nothing looks borrowed.
-enum VpsIcon { home, servers, check, me, bolt, globe, shield, refresh, paste, file, gear, info, sun, arrowUp, arrowDown, sparkle, plus, chevron }
+enum VpsIcon {
+  home,
+  servers,
+  check,
+  me,
+  bolt,
+  globe,
+  shield,
+  refresh,
+  paste,
+  file,
+  gear,
+  info,
+  sun,
+  arrowUp,
+  arrowDown,
+  sparkle,
+  plus,
+  chevron,
+}
 
 class VpsIconView extends StatelessWidget {
   const VpsIconView(this.icon, {super.key, this.size = 22, this.color});
@@ -503,8 +590,23 @@ class _IconPainter extends CustomPainter {
 
     switch (icon) {
       case VpsIcon.home:
-        canvas.drawPath(poly([[3.5, 11], [12, 4], [20.5, 11]]), p);
-        canvas.drawPath(poly([[6, 9.5], [6, 20], [18, 20], [18, 9.5]]), p);
+        canvas.drawPath(
+          poly([
+            [3.5, 11],
+            [12, 4],
+            [20.5, 11],
+          ]),
+          p,
+        );
+        canvas.drawPath(
+          poly([
+            [6, 9.5],
+            [6, 20],
+            [18, 20],
+            [18, 9.5],
+          ]),
+          p,
+        );
         canvas.drawLine(o(10, 20), o(10, 15), p);
         canvas.drawLine(o(14, 20), o(14, 15), p);
         canvas.drawLine(o(10, 15), o(14, 15), p);
@@ -518,32 +620,101 @@ class _IconPainter extends CustomPainter {
         canvas.drawLine(o(12, 16.75), o(16.5, 16.75), p);
       case VpsIcon.check:
         canvas.drawPath(
-          poly([[12, 3], [19.5, 6], [19.5, 12], [12, 21], [4.5, 12], [4.5, 6]], close: true),
+          poly([
+            [12, 3],
+            [19.5, 6],
+            [19.5, 12],
+            [12, 21],
+            [4.5, 12],
+            [4.5, 6],
+          ], close: true),
           p,
         );
-        canvas.drawPath(poly([[8.5, 12], [11, 14.5], [15.5, 9.5]]), p);
+        canvas.drawPath(
+          poly([
+            [8.5, 12],
+            [11, 14.5],
+            [15.5, 9.5],
+          ]),
+          p,
+        );
       case VpsIcon.me:
         canvas.drawCircle(o(12, 8.5), 3.8 * u, p);
-        canvas.drawArc(Rect.fromLTRB(4.5 * u, 14 * u, 19.5 * u, 28 * u), math.pi * 1.08, math.pi * 0.84, false, p);
+        canvas.drawArc(
+          Rect.fromLTRB(4.5 * u, 14 * u, 19.5 * u, 28 * u),
+          math.pi * 1.08,
+          math.pi * 0.84,
+          false,
+          p,
+        );
       case VpsIcon.bolt:
-        canvas.drawPath(poly([[13, 3], [5.5, 13.5], [11.5, 13.5], [10.5, 21], [18.5, 10.5], [12.5, 10.5]], close: true), p);
+        canvas.drawPath(
+          poly([
+            [13, 3],
+            [5.5, 13.5],
+            [11.5, 13.5],
+            [10.5, 21],
+            [18.5, 10.5],
+            [12.5, 10.5],
+          ], close: true),
+          p,
+        );
       case VpsIcon.globe:
         canvas.drawCircle(o(12, 12), 8.5 * u, p);
         canvas.drawOval(Rect.fromLTRB(8 * u, 3.5 * u, 16 * u, 20.5 * u), p);
         canvas.drawLine(o(3.5, 12), o(20.5, 12), p);
       case VpsIcon.shield:
-        canvas.drawPath(poly([[12, 3], [19.5, 6], [19.5, 12], [12, 21], [4.5, 12], [4.5, 6]], close: true), p);
+        canvas.drawPath(
+          poly([
+            [12, 3],
+            [19.5, 6],
+            [19.5, 12],
+            [12, 21],
+            [4.5, 12],
+            [4.5, 6],
+          ], close: true),
+          p,
+        );
       case VpsIcon.refresh:
-        canvas.drawArc(Rect.fromCircle(center: o(12, 12), radius: 7.5 * u), -math.pi * 0.35, math.pi * 1.6, false, p);
-        canvas.drawPath(poly([[17.5, 3.5], [18.2, 7.6], [14, 8]]), p);
+        canvas.drawArc(
+          Rect.fromCircle(center: o(12, 12), radius: 7.5 * u),
+          -math.pi * 0.35,
+          math.pi * 1.6,
+          false,
+          p,
+        );
+        canvas.drawPath(
+          poly([
+            [17.5, 3.5],
+            [18.2, 7.6],
+            [14, 8],
+          ]),
+          p,
+        );
       case VpsIcon.paste:
         canvas.drawRRect(rr(5, 5, 19, 21, 2.5), p);
         canvas.drawRRect(rr(9, 3, 15, 7, 1.5), p);
         canvas.drawLine(o(9, 12), o(15, 12), p);
         canvas.drawLine(o(9, 16), o(13, 16), p);
       case VpsIcon.file:
-        canvas.drawPath(poly([[6, 3], [14, 3], [19, 8], [19, 21], [6, 21]], close: true), p);
-        canvas.drawPath(poly([[14, 3], [14, 8], [19, 8]]), p);
+        canvas.drawPath(
+          poly([
+            [6, 3],
+            [14, 3],
+            [19, 8],
+            [19, 21],
+            [6, 21],
+          ], close: true),
+          p,
+        );
+        canvas.drawPath(
+          poly([
+            [14, 3],
+            [14, 8],
+            [19, 8],
+          ]),
+          p,
+        );
       case VpsIcon.gear:
         canvas.drawCircle(o(12, 12), 3 * u, p);
         for (var i = 0; i < 8; i++) {
@@ -571,22 +742,56 @@ class _IconPainter extends CustomPainter {
         }
       case VpsIcon.arrowUp:
         canvas.drawLine(o(12, 19), o(12, 5), p);
-        canvas.drawPath(poly([[6.5, 10.5], [12, 5], [17.5, 10.5]]), p);
+        canvas.drawPath(
+          poly([
+            [6.5, 10.5],
+            [12, 5],
+            [17.5, 10.5],
+          ]),
+          p,
+        );
       case VpsIcon.arrowDown:
         canvas.drawLine(o(12, 5), o(12, 19), p);
-        canvas.drawPath(poly([[6.5, 13.5], [12, 19], [17.5, 13.5]]), p);
+        canvas.drawPath(
+          poly([
+            [6.5, 13.5],
+            [12, 19],
+            [17.5, 13.5],
+          ]),
+          p,
+        );
       case VpsIcon.sparkle:
-        canvas.drawPath(poly([[12, 3], [13.8, 10.2], [21, 12], [13.8, 13.8], [12, 21], [10.2, 13.8], [3, 12], [10.2, 10.2]], close: true), p);
+        canvas.drawPath(
+          poly([
+            [12, 3],
+            [13.8, 10.2],
+            [21, 12],
+            [13.8, 13.8],
+            [12, 21],
+            [10.2, 13.8],
+            [3, 12],
+            [10.2, 10.2],
+          ], close: true),
+          p,
+        );
       case VpsIcon.plus:
         canvas.drawLine(o(12, 5), o(12, 19), p);
         canvas.drawLine(o(5, 12), o(19, 12), p);
       case VpsIcon.chevron:
-        canvas.drawPath(poly([[9, 5], [16, 12], [9, 19]]), p);
+        canvas.drawPath(
+          poly([
+            [9, 5],
+            [16, 12],
+            [9, 19],
+          ]),
+          p,
+        );
     }
   }
 
   @override
-  bool shouldRepaint(_IconPainter old) => old.icon != icon || old.color != color;
+  bool shouldRepaint(_IconPainter old) =>
+      old.icon != icon || old.color != color;
 }
 
 /// The background: deep night with two soft glows (dark) or warm paper (light).
@@ -604,14 +809,14 @@ class VpsBackdrop extends StatelessWidget {
         children: [
           if (p.dark) ...[
             Positioned(
-              top: -220,
-              right: -160,
-              child: _Glow(color: p.glowA, size: 640),
+              top: -320,
+              right: -220,
+              child: _Glow(color: p.glowA, size: 760),
             ),
             Positioned(
-              bottom: -260,
-              left: 80,
-              child: _Glow(color: p.glowB, size: 620),
+              bottom: -360,
+              left: 120,
+              child: _Glow(color: p.glowB, size: 700),
             ),
           ],
           Positioned.fill(child: child),
@@ -652,11 +857,20 @@ class VpsSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 10, top: 6),
+      padding: const EdgeInsets.only(left: 2, bottom: 10, top: 4),
       child: Row(
         children: [
           Expanded(
-            child: Text(text, style: vpsText(p, size: 13, weight: FontWeight.w600, color: p.soft, spacing: 0.6)),
+            child: Text(
+              text,
+              style: vpsText(
+                p,
+                size: 12.5,
+                weight: FontWeight.w500,
+                color: p.soft,
+                spacing: 0.4,
+              ),
+            ),
           ),
           ?trailing,
         ],
@@ -690,34 +904,133 @@ class VpsRow extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 34,
+            height: 34,
             decoration: BoxDecoration(
-              color: p.accentWash,
-              borderRadius: BorderRadius.circular(12),
+              color: p.track,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: p.line),
             ),
             alignment: Alignment.center,
-            child: VpsIconView(icon, size: 19, color: p.accent),
+            child: VpsIconView(icon, size: 17, color: p.soft),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: vpsText(p, size: 15, weight: FontWeight.w600)),
+                Text(
+                  title,
+                  style: vpsText(p, size: 14.5, weight: FontWeight.w500),
+                ),
                 if (subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(subtitle!, style: vpsText(p, size: 12.5, color: p.soft)),
+                    child: Text(
+                      subtitle!,
+                      style: vpsText(p, size: 12.5, color: p.soft),
+                    ),
                   ),
               ],
             ),
           ),
-          trailing ?? (onTap != null ? VpsIconView(VpsIcon.chevron, size: 18, color: p.muted) : const SizedBox()),
+          trailing ??
+              (onTap != null
+                  ? VpsIconView(VpsIcon.chevron, size: 18, color: p.muted)
+                  : const SizedBox()),
         ],
       ),
     );
     if (onTap == null) return row;
     return VpsPressable(onTap: onTap!, child: row);
+  }
+}
+
+/// A small circled "?" that explains a term on hover (tap on touch screens).
+class VpsInfoTip extends StatelessWidget {
+  const VpsInfoTip(this.message, {super.key, this.title});
+
+  final String? title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    return RawTooltip(
+      semanticsTooltip: message,
+      triggerMode: TooltipTriggerMode.tap,
+      hoverDelay: const Duration(milliseconds: 120),
+      tooltipBuilder: (context, animation) => FadeTransition(
+        opacity: animation,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
+            decoration: BoxDecoration(
+              color: p.dark ? const Color(0xF2232536) : const Color(0xF7FFFFFF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: p.line),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(
+                    0xFF000000,
+                  ).withValues(alpha: p.dark ? 0.4 : 0.12),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      title!,
+                      style: vpsText(p, size: 13, weight: FontWeight.w700),
+                    ),
+                  ),
+                Text(
+                  message,
+                  style: vpsText(p, size: 12.5, color: p.soft, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      positionDelegate: (position) => positionDependentBox(
+        size: position.overlaySize,
+        childSize: position.tooltipSize,
+        target: position.target,
+        verticalOffset: 16,
+        preferBelow: true,
+      ),
+      ignorePointer: true,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.help,
+        child: Container(
+          width: 17,
+          height: 17,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: p.muted, width: 1.2),
+          ),
+          child: Text(
+            '?',
+            style: vpsText(
+              p,
+              size: 10.5,
+              weight: FontWeight.w700,
+              color: p.soft,
+              height: 1,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

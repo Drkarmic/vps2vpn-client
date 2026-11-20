@@ -89,7 +89,7 @@ final class CoreOptionsProvider
   }
 }
 
-String _$coreOptionsHash() => r'eda5c10501a808d6b6cc575e0841155d88dfc2ba';
+String _$coreOptionsHash() => r'aec2c35909979d2c18e635e85b1310c8c6178e47';
 
 @ProviderFor(setupPatch)
 final setupPatchProvider = SetupPatchProvider._();

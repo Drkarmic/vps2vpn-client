@@ -13,9 +13,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 String protocolLabel(BuildContext context, String type) {
   final t = type.toLowerCase();
   return switch (t) {
-    'hysteria2' || 'hysteria' => tr(context, 'Hysteria2 · 快', 'Hysteria2 · fast'),
-    'vless' => tr(context, 'REALITY · 稳', 'REALITY · steady'),
-    'tuic' => tr(context, 'TUIC · 快', 'TUIC · fast'),
+    'hysteria2' => 'Hysteria2',
+    'hysteria' => 'Hysteria',
+    'vless' => 'VLESS',
+    'tuic' => 'TUIC',
     'trojan' => 'Trojan',
     'vmess' => 'VMess',
     'ss' || 'shadowsocks' => 'Shadowsocks',
@@ -24,8 +25,8 @@ String protocolLabel(BuildContext context, String type) {
     'direct' => tr(context, '直连', 'Direct'),
     'reject' => tr(context, '拦截', 'Block'),
     'selector' => tr(context, '手动选择', 'Manual'),
-    'urltest' => tr(context, '自动选最快', 'Fastest'),
-    'fallback' => tr(context, '自动备用', 'Auto fallback'),
+    'urltest' => tr(context, '自动测速', 'URL test'),
+    'fallback' => tr(context, '故障转移', 'Fallback'),
     'loadbalance' => tr(context, '负载均衡', 'Balanced'),
     _ => type,
   };
@@ -46,7 +47,9 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
     if (_testing) return;
     setState(() => _testing = true);
     try {
-      await ref.read(proxiesActionProvider.notifier).delayTest(group.all, group.testUrl);
+      await ref
+          .read(proxiesActionProvider.notifier)
+          .delayTest(group.all, group.testUrl);
     } finally {
       if (mounted) setState(() => _testing = false);
     }
@@ -55,15 +58,22 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    final groups = ref.watch(currentGroupsStateProvider).value.where((g) => g.hidden != true).toList();
+    final groups = ref
+        .watch(currentGroupsStateProvider)
+        .value
+        .where((g) => g.hidden != true)
+        .toList();
     final hasProfile = ref.watch(profilesProvider.select((s) => s.isNotEmpty));
     final fallback = mainGroup(groups);
-    final group = groups.firstWhere((g) => g.name == _groupName, orElse: () => fallback ?? const Group(type: GroupType.Selector, name: ''));
+    final group = groups.firstWhere(
+      (g) => g.name == _groupName,
+      orElse: () => fallback ?? const Group(type: GroupType.Selector, name: ''),
+    );
 
     if (groups.isEmpty) {
       return VpsPage(
-        title: tr(context, '服务器', 'Servers'),
-        subtitle: tr(context, '你的线路都在这里', 'All your lines'),
+        title: tr(context, '节点', 'Nodes'),
+        subtitle: tr(context, '订阅中的全部节点', 'Every node in your subscription'),
         children: [
           VpsCard(
             padding: const EdgeInsets.all(36),
@@ -73,20 +83,24 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                 const SizedBox(height: 14),
                 Text(
                   hasProfile
-                      ? tr(context, '当前是直连模式，或线路还没加载出来', 'Nothing to pick in this mode yet')
-                      : tr(context, '还没有服务器', 'No servers yet'),
+                      ? tr(context, '暂无可选节点', 'No nodes to choose')
+                      : tr(context, '尚未导入订阅', 'No subscription yet'),
                   style: vpsText(p, size: 17, weight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  tr(context, '在「我的」里添加订阅链接后，这里会出现你的线路', 'Add your subscription in Me and your lines show up here'),
+                  tr(
+                    context,
+                    '在「设置」中导入订阅后，节点将显示在这里',
+                    'Import a subscription in Settings and its nodes appear here',
+                  ),
                   textAlign: TextAlign.center,
                   style: vpsText(p, size: 13.5, color: p.soft),
                 ),
                 if (!hasProfile) ...[
                   const SizedBox(height: 18),
                   VpsButton(
-                    label: tr(context, '去添加', 'Add one'),
+                    label: tr(context, '导入订阅', 'Import'),
                     icon: VpsIcon.plus,
                     filled: true,
                     onTap: () => vpsTab.value = vpsTabMe,
@@ -102,12 +116,14 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
     final selected = ref.watch(selectedProxyNameProvider(group.name));
     final selectable = group.type == GroupType.Selector;
     return VpsPage(
-      title: tr(context, '服务器', 'Servers'),
+      title: tr(context, '节点', 'Nodes'),
       subtitle: selectable
-          ? tr(context, '点一下就换线路', 'Tap a line to switch')
-          : tr(context, '这一组会自动选择', 'This group picks automatically'),
+          ? tr(context, '点击切换节点，延迟实时更新', 'Tap to switch; latency updates live')
+          : tr(context, '该策略组自动选择节点', 'This group picks automatically'),
       action: VpsButton(
-        label: _testing ? tr(context, '测速中…', 'Testing…') : tr(context, '测速', 'Test speed'),
+        label: _testing
+            ? tr(context, '测速中…', 'Testing…')
+            : tr(context, '测速', 'Test speed'),
         icon: VpsIcon.bolt,
         onTap: () => _test(group),
       ),
@@ -119,7 +135,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
             children: [
               for (final g in groups)
                 _GroupTab(
-                  label: g.name,
+                  label: friendlyLineName(context, g.name),
                   selected: g.name == group.name,
                   onTap: () => setState(() => _groupName = g.name),
                 ),
@@ -143,7 +159,12 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
                       testUrl: group.testUrl,
                       selected: proxy.name == selected,
                       onTap: selectable
-                          ? () => ref.read(proxiesActionProvider.notifier).changeProxy(groupName: group.name, proxyName: proxy.name)
+                          ? () => ref
+                                .read(proxiesActionProvider.notifier)
+                                .changeProxy(
+                                  groupName: group.name,
+                                  proxyName: proxy.name,
+                                )
                           : null,
                     ),
                   ),
@@ -157,7 +178,11 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
 }
 
 class _GroupTab extends StatelessWidget {
-  const _GroupTab({required this.label, required this.selected, required this.onTap});
+  const _GroupTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -170,16 +195,23 @@ class _GroupTab extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          gradient: selected ? p.accentGradient : null,
-          color: selected ? null : p.card,
-          borderRadius: BorderRadius.circular(99),
-          border: selected ? null : Border.all(color: p.line),
+          color: selected ? p.thumb : const Color(0x00000000),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? p.line : const Color(0x00000000),
+          ),
+          boxShadow: selected ? p.raise : null,
         ),
         child: Text(
           label,
-          style: vpsText(p, size: 13.5, weight: FontWeight.w600, color: selected ? p.accentInk : p.text),
+          style: vpsText(
+            p,
+            size: 13.5,
+            weight: selected ? FontWeight.w600 : FontWeight.w500,
+            color: selected ? p.text : p.soft,
+          ),
         ),
       ),
     );
@@ -187,7 +219,12 @@ class _GroupTab extends StatelessWidget {
 }
 
 class _ProxyCard extends ConsumerWidget {
-  const _ProxyCard({required this.proxy, required this.testUrl, required this.selected, this.onTap});
+  const _ProxyCard({
+    required this.proxy,
+    required this.testUrl,
+    required this.selected,
+    this.onTap,
+  });
 
   final Proxy proxy;
   final String? testUrl;
@@ -197,7 +234,9 @@ class _ProxyCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = VpsPalette.of(context);
-    final delay = ref.watch(delayProvider(proxyName: proxy.name, testUrl: testUrl));
+    final delay = ref.watch(
+      delayProvider(proxyName: proxy.name, testUrl: testUrl),
+    );
     final (delayText, delayColor) = switch (delay) {
       null => ('—', p.muted),
       0 => ('…', p.soft),
@@ -209,7 +248,7 @@ class _ProxyCard extends ConsumerWidget {
     return VpsCard(
       onTap: onTap,
       highlight: selected,
-      radius: 20,
+      radius: 14,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Row(
         children: [
@@ -220,7 +259,10 @@ class _ProxyCard extends ConsumerWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: selected ? p.accent : const Color(0x00000000),
-              border: Border.all(color: selected ? p.accent : p.muted, width: 1.5),
+              border: Border.all(
+                color: selected ? p.accent : p.muted,
+                width: 1.5,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -228,14 +270,49 @@ class _ProxyCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(proxy.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: vpsText(p, size: 14.5, weight: FontWeight.w700)),
+                Text(
+                  friendlyLineName(context, proxy.name),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: vpsText(p, size: 14, weight: FontWeight.w600),
+                ),
                 const SizedBox(height: 2),
-                Text(protocolLabel(context, proxy.type), style: vpsText(p, size: 12, color: p.soft)),
+                Text(
+                  proxy.name == vpsSmartGroupName
+                      ? tr(
+                          context,
+                          '推荐 · 优选最快协议，故障自动切换',
+                          'Recommended · fastest protocol, auto failover',
+                        )
+                      : proxy.name == vpsAIGroupName
+                      ? tr(context, 'AI 服务固定出口', 'Steady exit for AI')
+                      : protocolLabel(context, proxy.type) +
+                            (proxy.name.toUpperCase().contains('REALITY') &&
+                                    proxy.type.toLowerCase() == 'vless'
+                                ? ' · REALITY'
+                                : ''),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: vpsText(
+                    p,
+                    size: 12,
+                    color: proxy.name == vpsSmartGroupName ? p.accent : p.soft,
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          Text(delayText, style: vpsText(p, size: 13, weight: FontWeight.w700, color: delayColor)),
+          Text(
+            delayText,
+            style: vpsText(
+              p,
+              size: 12.5,
+              weight: FontWeight.w600,
+              color: delayColor,
+              tabular: true,
+            ),
+          ),
         ],
       ),
     );

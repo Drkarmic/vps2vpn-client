@@ -18,7 +18,6 @@ import (
 	"github.com/metacubex/mihomo/config"
 	"github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/hub"
-	"github.com/metacubex/mihomo/hub/executor"
 	"github.com/metacubex/mihomo/hub/route"
 	authStore "github.com/metacubex/mihomo/listener/auth"
 	LC "github.com/metacubex/mihomo/listener/config"
@@ -109,7 +108,13 @@ func loadConfig(path string) (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := executor.ParseWithBytes(buf)
+	raw, err := config.UnmarshalRawConfig(buf)
+	if err != nil {
+		return nil, err
+	}
+	// Custom and scripted profiles: the user wrote the rules, so no AI rules.
+	vps2vpnEnhance(raw, -1)
+	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -249,6 +254,7 @@ func applyOptions(options CoreOptions) {
 	setTestURL(options.TestURL)
 	provider.SetDefaultTestTimeout(timeoutFromMillis(options.DelayTestTimeout, 0))
 	skipCertVerify.Store(options.SkipCertVerify)
+	vpsSmartEnabled.Store(options.SmartLines)
 }
 
 func patchTun(target *LC.Tun, params *tunSchema) {

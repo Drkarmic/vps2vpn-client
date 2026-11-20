@@ -27,6 +27,7 @@ _CoreOptions _$CoreOptionsFromJson(Map<String, dynamic> json) => _CoreOptions(
   delayTestTimeout:
       (json['delay-test-timeout'] as num?)?.toInt() ?? defaultDelayTestTimeout,
   mitmCapture: json['mitm-capture'] as bool? ?? false,
+  smartLines: json['vps2vpn-smart'] as bool? ?? true,
 );
 
 Map<String, dynamic> _$CoreOptionsToJson(_CoreOptions instance) =>
@@ -35,6 +36,7 @@ Map<String, dynamic> _$CoreOptionsToJson(_CoreOptions instance) =>
       'skip-cert-verify': instance.skipCertVerify,
       'delay-test-timeout': instance.delayTestTimeout,
       'mitm-capture': instance.mitmCapture,
+      'vps2vpn-smart': instance.smartLines,
     };
 
 _SetupBase _$SetupBaseFromJson(Map<String, dynamic> json) => _SetupBase(

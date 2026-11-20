@@ -27,14 +27,36 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
   Future<void> _paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text?.trim() ?? '';
-    final ok = text.startsWith('http://') || text.startsWith('https://') || text.contains('://');
+    final ok =
+        text.startsWith('http://') ||
+        text.startsWith('https://') ||
+        text.contains('://');
     if (!ok) {
-      setState(() => _note = tr(context, '剪贴板里没有订阅链接。先在部署工具里点「复制订阅链接」。',
-          'No subscription link on the clipboard. Copy it from the deploy tool first.'));
+      setState(
+        () => _note = tr(
+          context,
+          '剪贴板中没有检测到订阅链接，请先在部署工具中复制。',
+          'No subscription link on the clipboard. Copy it from the deploy tool first.',
+        ),
+      );
       return;
     }
     setState(() => _note = null);
+    final before = ref.read(profilesProvider).length;
     await ref.read(profilesActionProvider.notifier).addProfileFromLink(text);
+    if (!mounted) return;
+    if (ref.read(profilesProvider).length > before) {
+      // Added: the next step is connecting, which lives on Home.
+      vpsTab.value = vpsTabHome;
+    } else {
+      setState(
+        () => _note = tr(
+          context,
+          '导入失败：请确认链接完整且服务器在线后重试。',
+          'Not added. Check the link is complete and the server is running.',
+        ),
+      );
+    }
   }
 
   @override
@@ -42,27 +64,48 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
     final p = VpsPalette.of(context);
     final profiles = ref.watch(profilesProvider);
     final currentId = ref.watch(currentProfileIdProvider);
-    final themeMode = ref.watch(themeSettingProvider.select((s) => s.themeMode));
+    final themeMode = ref.watch(
+      themeSettingProvider.select((s) => s.themeMode),
+    );
     final locale = ref.watch(appSettingProvider.select((s) => s.locale));
-    final autoLaunch = ref.watch(appSettingProvider.select((s) => s.autoLaunch));
-    final advanced = ref.watch(appSettingProvider.select((s) => s.advancedMode));
+    final autoLaunch = ref.watch(
+      appSettingProvider.select((s) => s.autoLaunch),
+    );
+    final advanced = ref.watch(
+      appSettingProvider.select((s) => s.advancedMode),
+    );
+    final smart = ref.watch(appSettingProvider.select((s) => s.smartLines));
 
     return VpsPage(
-      title: tr(context, '我的', 'Me'),
-      subtitle: tr(context, '订阅、外观和设置', 'Subscriptions, look and settings'),
+      title: tr(context, '设置', 'Settings'),
+      subtitle: tr(
+        context,
+        '订阅、外观与偏好',
+        'Subscriptions, appearance and preferences',
+      ),
       children: [
         VpsSectionTitle(
-          tr(context, '我的订阅', 'Subscriptions'),
+          tr(context, '订阅', 'Subscriptions'),
           trailing: profiles.isEmpty
               ? null
               : VpsPressable(
-                  onTap: () => ref.read(profilesActionProvider.notifier).updateProfiles(),
+                  onTap: () => ref
+                      .read(profilesActionProvider.notifier)
+                      .updateProfiles(),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       VpsIconView(VpsIcon.refresh, size: 15, color: p.accent),
                       const SizedBox(width: 5),
-                      Text(tr(context, '全部更新', 'Update all'), style: vpsText(p, size: 13, weight: FontWeight.w700, color: p.accent)),
+                      Text(
+                        tr(context, '全部更新', 'Update all'),
+                        style: vpsText(
+                          p,
+                          size: 13,
+                          weight: FontWeight.w700,
+                          color: p.accent,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -73,8 +116,11 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
             child: _ProfileCard(
               profile: profile,
               selected: profile.id == currentId,
-              onTap: () => ref.read(currentProfileIdProvider.notifier).value = profile.id,
-              onUpdate: () => ref.read(profilesActionProvider.notifier).updateProfile(profile, showLoading: true),
+              onTap: () => ref.read(currentProfileIdProvider.notifier).value =
+                  profile.id,
+              onUpdate: () => ref
+                  .read(profilesActionProvider.notifier)
+                  .updateProfile(profile, showLoading: true),
             ),
           ),
         VpsCard(
@@ -83,12 +129,18 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                profiles.isEmpty ? tr(context, '添加你的服务器', 'Add your server') : tr(context, '再添加一个', 'Add another'),
-                style: vpsText(p, size: 16, weight: FontWeight.w700),
+                profiles.isEmpty
+                    ? tr(context, '导入订阅', 'Import a subscription')
+                    : tr(context, '导入更多订阅', 'Import another'),
+                style: vpsText(p, size: 14.5, weight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               Text(
-                tr(context, '在部署工具里复制订阅链接，然后点下面的按钮', 'Copy the subscription link from the deploy tool, then tap below'),
+                tr(
+                  context,
+                  '从剪贴板读取订阅链接，或导入本地配置文件',
+                  'Read a link from the clipboard, or import a local config file',
+                ),
                 style: vpsText(p, size: 13, color: p.soft),
               ),
               const SizedBox(height: 14),
@@ -96,11 +148,18 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  VpsButton(label: tr(context, '粘贴订阅链接', 'Paste link'), icon: VpsIcon.paste, filled: true, onTap: _paste),
                   VpsButton(
-                    label: tr(context, '从文件导入', 'From file'),
+                    label: tr(context, '从剪贴板导入', 'From clipboard'),
+                    icon: VpsIcon.paste,
+                    filled: true,
+                    onTap: _paste,
+                  ),
+                  VpsButton(
+                    label: tr(context, '本地文件', 'Local file'),
                     icon: VpsIcon.file,
-                    onTap: () => ref.read(profilesActionProvider.notifier).addProfileFormFile(),
+                    onTap: () => ref
+                        .read(profilesActionProvider.notifier)
+                        .addProfileFormFile(),
                   ),
                 ],
               ),
@@ -114,55 +173,105 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
         const SizedBox(height: 24),
         VpsSectionTitle(tr(context, '外观', 'Appearance')),
         VpsCard(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              VpsSegmented<ThemeMode>(
-                items: const [ThemeMode.system, ThemeMode.light, ThemeMode.dark],
-                value: themeMode,
-                labelOf: (m) => switch (m) {
-                  ThemeMode.system => tr(context, '跟随系统', 'System'),
-                  ThemeMode.light => tr(context, '明亮', 'Light'),
-                  ThemeMode.dark => tr(context, '深色极光', 'Aurora dark'),
-                },
-                onChanged: (m) => ref.read(themeSettingProvider.notifier).update((s) => s.copyWith(themeMode: m)),
+              _ChoiceRow(
+                icon: VpsIcon.sun,
+                label: tr(context, '主题', 'Theme'),
+                child: VpsSegmented<ThemeMode>(
+                  items: const [
+                    ThemeMode.system,
+                    ThemeMode.light,
+                    ThemeMode.dark,
+                  ],
+                  value: themeMode,
+                  labelOf: (m) => switch (m) {
+                    ThemeMode.system => tr(context, '跟随系统', 'System'),
+                    ThemeMode.light => tr(context, '浅色', 'Light'),
+                    ThemeMode.dark => tr(context, '深色', 'Dark'),
+                  },
+                  onChanged: (m) => ref
+                      .read(themeSettingProvider.notifier)
+                      .update((s) => s.copyWith(themeMode: m)),
+                ),
               ),
-              const SizedBox(height: 14),
-              VpsSegmented<String?>(
-                items: const [null, 'zh', 'en'],
-                value: locale == null ? null : (locale.startsWith('zh') ? 'zh' : (locale.startsWith('en') ? 'en' : null)),
-                labelOf: (l) => switch (l) {
-                  'zh' => '中文',
-                  'en' => 'English',
-                  _ => tr(context, '系统语言', 'System language'),
-                },
-                onChanged: (l) => ref.read(appSettingProvider.notifier).update((s) => s.copyWith(locale: l)),
+              Container(height: 1, color: p.line),
+              _ChoiceRow(
+                icon: VpsIcon.globe,
+                label: tr(context, '语言', 'Language'),
+                child: VpsSegmented<String?>(
+                  items: const [null, 'zh', 'en'],
+                  value: locale == null
+                      ? null
+                      : (locale.startsWith('zh')
+                            ? 'zh'
+                            : (locale.startsWith('en') ? 'en' : null)),
+                  labelOf: (l) => switch (l) {
+                    'zh' => '中文',
+                    'en' => 'English',
+                    _ => tr(context, '跟随系统', 'System'),
+                  },
+                  onChanged: (l) => ref
+                      .read(appSettingProvider.notifier)
+                      .update((s) => s.copyWith(locale: l)),
+                ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 24),
-        VpsSectionTitle(tr(context, '设置', 'Settings')),
+        VpsSectionTitle(tr(context, '通用', 'General')),
         VpsCard(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           child: Column(
             children: [
               VpsRow(
+                icon: VpsIcon.bolt,
+                title: tr(context, '智能线路', 'Smart lines'),
+                subtitle: tr(
+                  context,
+                  '协议优选与故障自动切换，AI 服务固定出口',
+                  'Protocol preference, auto failover, steady AI exit',
+                ),
+                trailing: VpsSwitch(
+                  value: smart,
+                  onChanged: (v) {
+                    ref
+                        .read(appSettingProvider.notifier)
+                        .update((s) => s.copyWith(smartLines: v));
+                    // The groups are built when the profile is applied.
+                    ref
+                        .read(setupActionProvider.notifier)
+                        .applyProfileDebounce(force: true);
+                  },
+                ),
+              ),
+              Container(height: 1, color: p.line),
+              VpsRow(
                 icon: VpsIcon.sun,
-                title: tr(context, '开机自动启动', 'Start with Windows'),
+                title: tr(context, '开机自启', 'Launch at startup'),
                 trailing: VpsSwitch(
                   value: autoLaunch,
-                  onChanged: (v) => ref.read(appSettingProvider.notifier).update((s) => s.copyWith(autoLaunch: v)),
+                  onChanged: (v) => ref
+                      .read(appSettingProvider.notifier)
+                      .update((s) => s.copyWith(autoLaunch: v)),
                 ),
               ),
               Container(height: 1, color: p.line),
               VpsRow(
                 icon: VpsIcon.gear,
                 title: tr(context, '高级模式', 'Advanced mode'),
-                subtitle: tr(context, '显示全部页面和专业设置（给懂行的人）', 'Every page and expert setting'),
+                subtitle: tr(
+                  context,
+                  '显示全部页面与专业设置',
+                  'Show every page and expert setting',
+                ),
                 trailing: VpsSwitch(
                   value: advanced,
-                  onChanged: (v) => ref.read(appSettingProvider.notifier).update((s) => s.copyWith(advancedMode: v)),
+                  onChanged: (v) => ref
+                      .read(appSettingProvider.notifier)
+                      .update((s) => s.copyWith(advancedMode: v)),
                 ),
               ),
             ],
@@ -178,10 +287,17 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('vps2vpn  v${globalState.packageInfo.version}', style: vpsText(p, size: 15, weight: FontWeight.w700)),
+                    Text(
+                      'vps2vpn  v${globalState.packageInfo.version}',
+                      style: vpsText(p, size: 15, weight: FontWeight.w700),
+                    ),
                     const SizedBox(height: 2),
                     Text(
-                      tr(context, '基于开源项目 FlClash（GPL-3.0）和 mihomo 内核', 'Built on FlClash (GPL-3.0) and the mihomo core'),
+                      tr(
+                        context,
+                        '基于开源项目 FlClash（GPL-3.0）和 mihomo 内核',
+                        'Built on FlClash (GPL-3.0) and the mihomo core',
+                      ),
                       style: vpsText(p, size: 12.5, color: p.soft),
                     ),
                   ],
@@ -195,8 +311,57 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
   }
 }
 
+/// A labelled choice: label on the left, segmented control on the right.
+class _ChoiceRow extends StatelessWidget {
+  const _ChoiceRow({
+    required this.icon,
+    required this.label,
+    required this.child,
+  });
+
+  final VpsIcon icon;
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: p.track,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: p.line),
+            ),
+            child: VpsIconView(icon, size: 17, color: p.soft),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              label,
+              style: vpsText(p, size: 14.5, weight: FontWeight.w500),
+            ),
+          ),
+          SizedBox(width: 300, child: child),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileCard extends ConsumerWidget {
-  const _ProfileCard({required this.profile, required this.selected, required this.onTap, required this.onUpdate});
+  const _ProfileCard({
+    required this.profile,
+    required this.selected,
+    required this.onTap,
+    required this.onUpdate,
+  });
 
   final Profile profile;
   final bool selected;
@@ -213,7 +378,11 @@ class _ProfileCard extends ConsumerWidget {
     String? expire;
     if (sub != null && sub.expire > 0) {
       final d = DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000);
-      expire = tr(context, '${d.year}-${_two(d.month)}-${_two(d.day)} 到期', 'Expires ${d.year}-${_two(d.month)}-${_two(d.day)}');
+      expire = tr(
+        context,
+        '${d.year}-${_two(d.month)}-${_two(d.day)} 到期',
+        'Expires ${d.year}-${_two(d.month)}-${_two(d.day)}',
+      );
     }
     final updated = profile.lastUpdateDate;
     return VpsCard(
@@ -225,28 +394,46 @@ class _ProfileCard extends ConsumerWidget {
           Row(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 34,
+                height: 34,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  gradient: selected ? p.accentGradient : null,
-                  color: selected ? null : p.accentWash,
-                  borderRadius: BorderRadius.circular(12),
+                  color: p.track,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(color: p.line),
                 ),
-                child: VpsIconView(VpsIcon.servers, size: 19, color: selected ? p.accentInk : p.accent),
+                child: VpsIconView(
+                  VpsIcon.servers,
+                  size: 17,
+                  color: selected ? p.accent : p.soft,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(profile.realLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: vpsText(p, size: 15.5, weight: FontWeight.w700)),
+                    Text(
+                      profile.realLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                    ),
                     Text(
                       [
-                        if (selected) tr(context, '正在使用', 'In use'),
-                        if (updated != null) tr(context, '${_ago(context, updated)}更新', 'updated ${_ago(context, updated)}'),
+                        if (selected) tr(context, '使用中', 'In use'),
+                        if (updated != null)
+                          tr(
+                            context,
+                            '${_ago(context, updated)}更新',
+                            'updated ${_ago(context, updated)}',
+                          ),
                       ].join(' · '),
-                      style: vpsText(p, size: 12.5, color: selected ? p.accent : p.soft),
+                      style: vpsText(
+                        p,
+                        size: 12.5,
+                        color: selected ? p.accent : p.soft,
+                      ),
                     ),
                   ],
                 ),
@@ -256,7 +443,11 @@ class _ProfileCard extends ConsumerWidget {
                   onTap: onUpdate,
                   child: Padding(
                     padding: const EdgeInsets.all(8),
-                    child: VpsIconView(VpsIcon.refresh, size: 18, color: p.soft),
+                    child: VpsIconView(
+                      VpsIcon.refresh,
+                      size: 18,
+                      color: p.soft,
+                    ),
                   ),
                 ),
             ],
@@ -273,7 +464,7 @@ class _ProfileCard extends ConsumerWidget {
                       Container(color: p.line),
                       FractionallySizedBox(
                         widthFactor: ratio,
-                        child: Container(decoration: BoxDecoration(gradient: p.accentGradient)),
+                        child: Container(color: p.accent),
                       ),
                     ],
                   ),
@@ -284,11 +475,16 @@ class _ProfileCard extends ConsumerWidget {
               children: [
                 if (total > 0)
                   Text(
-                    tr(context, '已用 ${used.traffic.show} / ${total.traffic.show}', '${used.traffic.show} of ${total.traffic.show} used'),
+                    tr(
+                      context,
+                      '已用 ${used.traffic.show} / ${total.traffic.show}',
+                      '${used.traffic.show} of ${total.traffic.show} used',
+                    ),
                     style: vpsText(p, size: 12.5, color: p.soft),
                   ),
                 const Spacer(),
-                if (expire != null) Text(expire, style: vpsText(p, size: 12.5, color: p.soft)),
+                if (expire != null)
+                  Text(expire, style: vpsText(p, size: 12.5, color: p.soft)),
               ],
             ),
           ],
@@ -303,7 +499,9 @@ String _two(int n) => n.toString().padLeft(2, '0');
 String _ago(BuildContext context, DateTime t) {
   final d = DateTime.now().difference(t);
   if (d.inMinutes < 1) return tr(context, '刚刚', 'just now');
-  if (d.inHours < 1) return tr(context, '${d.inMinutes} 分钟前', '${d.inMinutes} min ago');
-  if (d.inDays < 1) return tr(context, '${d.inHours} 小时前', '${d.inHours} h ago');
+  if (d.inHours < 1)
+    return tr(context, '${d.inMinutes} 分钟前', '${d.inMinutes} min ago');
+  if (d.inDays < 1)
+    return tr(context, '${d.inHours} 小时前', '${d.inHours} h ago');
   return tr(context, '${d.inDays} 天前', '${d.inDays} d ago');
 }

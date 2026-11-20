@@ -129,6 +129,8 @@ type CoreOptions struct {
 	// keeps the timeout in force.
 	DelayTestTimeout int64 `json:"delay-test-timeout"`
 	MITMCapture      bool  `json:"mitm-capture"`
+	// vps2vpn smart lines (see vps2vpn_smart.go).
+	SmartLines bool `json:"vps2vpn-smart"`
 }
 
 type SetupBase struct {

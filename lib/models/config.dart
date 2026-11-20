@@ -282,6 +282,7 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default(false) bool developerMode,
     // vps2vpn: false = simple mode (few pages, plain words); true = every FlClash page.
     @Default(false) bool advancedMode,
+    @Default(true) bool smartLines,
     @Default(RestoreStrategy.compatible) RestoreStrategy restoreStrategy,
     @Default(true) bool showTrayTitle,
     @Default(true) bool monochromeTrayIcon,

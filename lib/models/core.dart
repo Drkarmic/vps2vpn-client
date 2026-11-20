@@ -27,6 +27,7 @@ abstract class CoreOptions with _$CoreOptions {
     @JsonKey(name: 'delay-test-timeout')
     int delayTestTimeout,
     @Default(false) @JsonKey(name: 'mitm-capture') bool mitmCapture,
+    @Default(true) @JsonKey(name: 'vps2vpn-smart') bool smartLines,
   }) = _CoreOptions;
 
   factory CoreOptions.fromJson(Map<String, Object?> json) =>
