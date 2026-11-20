@@ -64,16 +64,39 @@ void main() {
       expect(file.readAsStringSync(), 'mode: rule');
     });
 
-    test('keeps the old file when the new one cannot be written', () async {
-      final file = File(join(root.path, 'config.yaml'))
-        ..writeAsStringSync('mode: rule');
-      Directory('${file.path}.$pid.tmp').createSync();
+    test('failed replacement cleans staged files without deleting the target', () async {
+      final path = join(root.path, 'config.yaml');
+      final target = Directory(path)..createSync();
 
       await expectLater(
-        file.writeAsStringAtomically('mode: global'),
+        File(path).writeAsStringAtomically('mode: global'),
         throwsA(isA<FileSystemException>()),
       );
+      expect(target.existsSync(), isTrue);
+      expect(root.listSync().map((entity) => basename(entity.path)), [
+        'config.yaml',
+      ]);
+    });
+
+    test('overlapping writes never share a temporary sibling', () async {
+      final file = File(join(root.path, 'config.yaml'));
+      final values = List.generate(16, (i) => 'entry-$i:' + ('x' * 32768));
+
+      await Future.wait(values.map(file.writeAsStringAtomically));
+
+      expect(values, contains(file.readAsStringSync()));
+      expect(root.listSync().map((entity) => basename(entity.path)), [
+        'config.yaml',
+      ]);
+    });
+
+    test('a stale legacy staging directory cannot block later writes', () async {
+      final file = File(join(root.path, 'config.yaml'));
+      final legacyStaging = Directory('${file.path}.$pid.tmp')..createSync();
+      await file.writeAsStringAtomically('mode: rule');
+
       expect(file.readAsStringSync(), 'mode: rule');
+      expect(legacyStaging.existsSync(), isTrue);
     });
   });
 }
