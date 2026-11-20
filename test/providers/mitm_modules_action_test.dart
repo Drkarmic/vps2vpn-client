@@ -185,6 +185,25 @@ script-providers:
     );
   });
 
+  test('cleaning keeps the staging copy of a file a module names', () async {
+    bodies = {'/ads.sgmodule': module('Ads'), '/blank.json': '{}'};
+    final added = await action().addFromUrl(urlOf('/ads.sgmodule'));
+    final modules = await appPath.mitmModulesDirPath;
+    // What File.writeAsStringAtomically writes before its rename.
+    final staging = '${added.fileName}.$pid.k3j9x2m1q.tmp';
+    final legacy = '${added.fileName}.$pid.tmp';
+    await File(join(modules, staging)).writeAsString('new');
+    await File(join(modules, legacy)).writeAsString('new');
+    await File(join(modules, 'gone.txt.$pid.k3j9x2m1q.tmp')).writeAsString('');
+
+    await action().clean();
+
+    expect(
+      await files(appPath.mitmModulesDirPath),
+      unorderedEquals([added.fileName, staging, legacy]),
+    );
+  });
+
   test('cleanings that overlap remove each stale file once', () async {
     final resources = await appPath.mitmResourcesDirPath;
     await Directory(resources).create(recursive: true);

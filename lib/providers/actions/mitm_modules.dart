@@ -3,6 +3,8 @@ part of '../action.dart';
 MitmModuleContent _parseMitmModule((String, Map<String, String>) source) =>
     parseMitmModule(source.$1, values: source.$2);
 
+final _stagingSuffix = RegExp(r'\.\d+(?:\.[0-9a-z]+)?\.tmp$');
+
 @Riverpod(keepAlive: true)
 class MitmModulesAction extends _$MitmModulesAction {
   var _autoUpdating = false;
@@ -390,10 +392,9 @@ class MitmModulesAction extends _$MitmModulesAction {
         if (entity is! File || !ref.mounted) {
           continue;
         }
-        // writeAsStringAtomically writes a held file through `<name>.<pid>.tmp`.
-        final name = basename(
-          entity.path,
-        ).replaceFirst(RegExp(r'\.\d+\.tmp$'), '');
+        // writeAsStringAtomically writes a held file through
+        // `<name>.<pid>.<random>.tmp` (older builds: `<name>.<pid>.tmp`).
+        final name = basename(entity.path).replaceFirst(_stagingSuffix, '');
         final modules = [...stored, ...?ref.read(mitmModulesProvider).value];
         if (!_held.contains(name) &&
             !modules.any((module) => namesOf(module).contains(name))) {
