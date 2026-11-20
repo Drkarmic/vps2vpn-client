@@ -223,14 +223,24 @@ func selectedCheckers(names []string) []serviceChecker {
 	if len(names) == 0 {
 		return serviceCheckers
 	}
-	wanted := make([]serviceChecker, 0, len(names))
+	// User-controlled IPC names may contain duplicates or thousands of
+	// unknown entries. A service is checked at most once per sweep.
+	registry := make(map[string]serviceChecker, len(serviceCheckers))
+	for _, checker := range serviceCheckers {
+		registry[checker.name] = checker
+	}
+	wanted := make([]serviceChecker, 0, len(serviceCheckers))
+	seen := make(map[string]struct{}, len(serviceCheckers))
 	for _, name := range names {
-		for _, checker := range serviceCheckers {
-			if checker.name == name {
-				wanted = append(wanted, checker)
-				break
-			}
+		if _, duplicated := seen[name]; duplicated {
+			continue
 		}
+		checker, known := registry[name]
+		if !known {
+			continue
+		}
+		seen[name] = struct{}{}
+		wanted = append(wanted, checker)
 	}
 	return wanted
 }
