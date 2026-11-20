@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <thread>
 
 #include "flutter_window.h"
 #include "rust_api.h"
@@ -60,6 +61,19 @@ void ForwardLinks(HWND window) {
   }
 }
 
+// A run that crashed or was killed never reached the exit path that turns its
+// system proxy off, so every app would keep going to a dead port until the next
+// connect. Only a 127.0.0.1 proxy or PAC URL with nothing listening behind it
+// is cleared: another proxy app that is running keeps its setting. A port in
+// use is looked at again for up to two seconds, hence the thread; in Rust the
+// clear and the app's own proxy changes take the same lock.
+void ClearStaleProxyInBackground() {
+  const auto clear_stale_proxy =
+      RustApiFunction<bool (*)()>("flclash_clear_stale_proxy");
+  if (clear_stale_proxy == nullptr) return;
+  std::thread([clear_stale_proxy] { clear_stale_proxy(); }).detach();
+}
+
 void ActivateWindow(HWND window) {
   if (const auto activate_window =
           RustApiFunction<void (*)(HWND)>("flclash_activate_window")) {
@@ -81,6 +95,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ActivateWindow(running);
     return EXIT_SUCCESS;
   }
+
+  // After the single-instance check: a second launch leaves the running
+  // instance's proxy alone.
+  ClearStaleProxyInBackground();
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.

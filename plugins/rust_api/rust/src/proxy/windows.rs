@@ -283,20 +283,11 @@ fn clear_stale_for_connection(
     let flags = unsafe { options[0].Value.dwValue };
     let server = unsafe { take_global_string(options[1].Value.pszValue) };
     let pac_url = unsafe { take_global_string(options[2].Value.pszValue) };
-    let mut is_released = |port: u16| {
+    let cleared = stale_cleared_flags(flags, &server, &pac_url, |port: u16| {
         *released
             .entry(port)
             .or_insert_with(|| is_port_released(port))
-    };
-    let mut cleared = flags;
-    if flags & PROXY_TYPE_PROXY != 0 && local_proxy_port(&server).is_some_and(&mut is_released) {
-        cleared &= !PROXY_TYPE_PROXY;
-    }
-    if flags & PROXY_TYPE_AUTO_PROXY_URL != 0
-        && local_pac_port(&pac_url).is_some_and(&mut is_released)
-    {
-        cleared &= !PROXY_TYPE_AUTO_PROXY_URL;
-    }
+    });
     if cleared == flags {
         return true;
     }
@@ -305,6 +296,27 @@ fn clear_stale_for_connection(
         *count += 1;
     }
     changed
+}
+
+/// The flags a connection keeps once a `127.0.0.1:<port>` proxy or PAC URL
+/// that nothing listens behind is dropped. Any other proxy, and a local one
+/// whose port is in use, stays as it is.
+fn stale_cleared_flags(
+    flags: u32,
+    server: &str,
+    pac_url: &str,
+    mut is_released: impl FnMut(u16) -> bool,
+) -> u32 {
+    let mut cleared = flags;
+    if flags & PROXY_TYPE_PROXY != 0 && local_proxy_port(server).is_some_and(&mut is_released) {
+        cleared &= !PROXY_TYPE_PROXY;
+    }
+    if flags & PROXY_TYPE_AUTO_PROXY_URL != 0
+        && local_pac_port(pac_url).is_some_and(&mut is_released)
+    {
+        cleared &= !PROXY_TYPE_AUTO_PROXY_URL;
+    }
+    cleared
 }
 
 unsafe fn take_global_string(value: PWSTR) -> String {
@@ -486,4 +498,50 @@ unsafe extern "system" fn session_window_proc(
         return 0;
     }
     DefWindowProcW(window, message, wparam, lparam)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MANUAL: u32 = PROXY_TYPE_DIRECT | PROXY_TYPE_PROXY;
+    const PAC: u32 = PROXY_TYPE_DIRECT | PROXY_TYPE_AUTO_PROXY_URL;
+
+    #[test]
+    fn drops_a_local_proxy_nothing_listens_behind() {
+        let cleared = stale_cleared_flags(MANUAL, "127.0.0.1:7890", "", |port| port == 7890);
+        assert_eq!(cleared, PROXY_TYPE_DIRECT);
+    }
+
+    #[test]
+    fn keeps_a_local_proxy_another_app_listens_behind() {
+        let cleared = stale_cleared_flags(MANUAL, "127.0.0.1:7897", "", |_| false);
+        assert_eq!(cleared, MANUAL);
+    }
+
+    #[test]
+    fn never_looks_at_a_proxy_this_app_does_not_write() {
+        for server in ["10.0.0.1:7890", "http=127.0.0.1:7890", "localhost:7890", ""] {
+            let cleared = stale_cleared_flags(MANUAL, server, "", |_| {
+                panic!("checked the port of {server:?}")
+            });
+            assert_eq!(cleared, MANUAL, "{server}");
+        }
+    }
+
+    #[test]
+    fn leaves_a_server_alone_while_the_proxy_is_switched_off() {
+        let cleared = stale_cleared_flags(PROXY_TYPE_DIRECT, "127.0.0.1:7890", "", |_| true);
+        assert_eq!(cleared, PROXY_TYPE_DIRECT);
+    }
+
+    #[test]
+    fn drops_only_the_part_that_went_stale() {
+        let pac_url = "http://127.0.0.1:51234/flclash.pac?v=3";
+        let both = MANUAL | PAC;
+        let cleared = stale_cleared_flags(both, "127.0.0.1:7890", pac_url, |port| port == 51234);
+        assert_eq!(cleared, MANUAL);
+        let other_pac = "http://127.0.0.1:51234/proxy.pac";
+        assert_eq!(stale_cleared_flags(PAC, "", other_pac, |_| true), PAC);
+    }
 }
