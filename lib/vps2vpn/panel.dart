@@ -45,6 +45,21 @@ Uri? vpsApiBase(String subUrl) {
   );
 }
 
+// Dart DateTime supports at most +/- 8,640,000,000,000,000 ms from epoch.
+// Convert only finite in-range *seconds* from remote panel JSON. One corrupt
+// optional timestamp must not make the entire member response unusable.
+const _maxPanelEpochSeconds = 8640000000000;
+
+DateTime? _panelTimestamp(Object? value) {
+  if (value is! num ||
+      !value.isFinite ||
+      value <= 0 ||
+      value > _maxPanelEpochSeconds) {
+    return null;
+  }
+  return DateTime.fromMillisecondsSinceEpoch(value.toInt() * 1000);
+}
+
 /// What the server itself sees when it opens the AI sites.
 class VpsAiStatus {
   const VpsAiStatus({
@@ -63,14 +78,11 @@ class VpsAiStatus {
 
   static VpsAiStatus? fromJson(Object? json) {
     if (json is! Map) return null;
-    final at = json['at'];
     final sites = json['sites'];
     return VpsAiStatus(
       summary: '${json['summary'] ?? ''}',
       place: json['place'] is String ? json['place'] as String : null,
-      at: at is num && at > 0
-          ? DateTime.fromMillisecondsSinceEpoch(at.toInt() * 1000)
-          : null,
+      at: _panelTimestamp(json['at']),
       sites: sites is Map
           ? {for (final e in sites.entries) '${e.key}': '${e.value}'}
           : const {},
@@ -181,12 +193,17 @@ class VpsMember {
 
   int get used => usedUp + usedDown;
 
-  static int _int(Object? v) => v is num ? v.toInt() : 0;
+  // Network JSON is untrusted: malformed/non-finite counters are ignored.
+  // Keep converted integers in the portable exact-integer range.
+  static int _int(Object? v) =>
+      v is num && v.isFinite && v >= 0 && v <= 9007199254740991
+      ? v.toInt()
+      : 0;
 
   factory VpsMember.fromJson(Map<String, Object?> json) {
-    final expire = _int(json['expire_at']);
+    final expire = _panelTimestamp(json['expire_at']);
     final rawQuotaGb = json['quota_gb'];
-    final unlimited = rawQuotaGb is! num || rawQuotaGb <= 0;
+    final unlimited = rawQuotaGb is! num || !rawQuotaGb.isFinite || rawQuotaGb <= 0;
     final quota = json['quota_eff'] ?? rawQuotaGb;
     return VpsMember(
       name: '${json['name'] ?? ''}',
@@ -197,11 +214,9 @@ class VpsMember {
       },
       usedUp: _int(json['used_up']),
       usedDown: _int(json['used_down']),
-      quotaGb: quota is num ? quota.toDouble() : 0,
+      quotaGb: quota is num && quota.isFinite ? quota.toDouble() : 0,
       unlimited: unlimited,
-      expireAt: expire > 0
-          ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
-          : null,
+      expireAt: expire,
       ai: VpsAiStatus.fromJson(json['ai']),
       client: VpsClientRelease.fromJson(json['client']),
     );
