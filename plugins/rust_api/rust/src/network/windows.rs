@@ -21,25 +21,45 @@ use crate::api::network::NetworkState;
 const IF_TYPE_PPP: u32 = 23;
 const IF_TYPE_IEEE80211: u32 = 71;
 const IF_TYPE_TUNNEL: u32 = 131;
+const IF_TYPE_PROP_VIRTUAL: u32 = 53;
 
 /// An adapter counts once it is up and holds a default route, which is what
 /// puts it in a connected network for NLM. Wi-Fi and the tunnel and PPP
 /// types are the ones connectivity_plus reported as wifi and vpn; wintun,
-/// the Core's TUN, is a virtual adapter and neither.
+/// the Core's TUN, is a virtual adapter and neither, and stays out of the
+/// default interface so turning the TUN on does not read as a new network.
 pub fn state() -> Option<NetworkState> {
     let routed = default_route_interfaces()?;
     let mut state = NetworkState {
         wifi: false,
         vpn: false,
+        default_interface: String::new(),
+        resumed: false,
     };
+    let mut defaults = Vec::new();
     for (if_type, luid) in up_adapters()? {
         if !routed.contains(&luid) {
             continue;
         }
         state.wifi |= if_type == IF_TYPE_IEEE80211;
         state.vpn |= matches!(if_type, IF_TYPE_PPP | IF_TYPE_TUNNEL);
+        if if_type != IF_TYPE_PROP_VIRTUAL {
+            defaults.push(luid);
+        }
     }
+    state.default_interface = interface_key(defaults);
     Some(state)
+}
+
+/// The same adapters give the same key whatever order they are listed in.
+fn interface_key(mut luids: Vec<u64>) -> String {
+    luids.sort_unstable();
+    luids.dedup();
+    luids
+        .iter()
+        .map(|luid| format!("{luid:x}"))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 fn default_route_interfaces() -> Option<HashSet<u64>> {
@@ -212,5 +232,17 @@ pub fn watch(notifier: Notifier) {
             false,
             &mut handle,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::interface_key;
+
+    #[test]
+    fn the_key_ignores_order_and_repeats() {
+        assert_eq!(interface_key(vec![0x20, 0x10, 0x20]), "10,20");
+        assert_eq!(interface_key(vec![0x10, 0x20]), interface_key(vec![0x20, 0x10]));
+        assert_eq!(interface_key(Vec::new()), "");
     }
 }

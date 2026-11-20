@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/metacubex/mihomo/component/resolver"
 	"github.com/metacubex/mihomo/constant"
+	cp "github.com/metacubex/mihomo/constant/provider"
 	"github.com/metacubex/mihomo/dns"
 	"github.com/metacubex/mihomo/tunnel"
 	"github.com/metacubex/mihomo/tunnel/statistic"
@@ -70,6 +71,36 @@ func handleResetNetwork() {
 	handleCloseConnections()
 	resetOutbounds()
 	handleNetworkChanged()
+}
+
+// handleNetworkReset is the desktop's handleResetNetwork, which the host sends
+// after a wake or a move of the default network. The smart groups check their
+// lines at once rather than at their next interval, so a line the new network
+// cannot reach is left before the traffic piles onto it.
+func handleNetworkReset() {
+	handleResetNetwork()
+	checkSmartGroups()
+}
+
+type providerGroup interface {
+	Providers() []cp.ProxyProvider
+}
+
+func checkSmartGroups() {
+	proxies := tunnel.Proxies()
+	for _, name := range []string{vpsSmartGroup, vpsAIGroup} {
+		proxy, ok := proxies[name]
+		if !ok {
+			continue
+		}
+		group, ok := proxy.Adapter().(providerGroup)
+		if !ok {
+			continue
+		}
+		for _, pd := range group.Providers() {
+			safeGo("health check "+name, pd.HealthCheck)
+		}
+	}
 }
 
 type networkResetter interface{ ResetNetwork() }

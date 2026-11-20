@@ -15,10 +15,26 @@ class NetworkState {
   final bool wifi;
   final bool vpn;
 
-  const NetworkState({required this.wifi, required this.vpn});
+  /// What the default route runs through, in a form only compared with
+  /// itself; empty with no default route, or where it is not read (macOS).
+  final String defaultInterface;
+
+  /// The report follows a wake from sleep.
+  final bool resumed;
+
+  const NetworkState({
+    required this.wifi,
+    required this.vpn,
+    required this.defaultInterface,
+    required this.resumed,
+  });
 
   @override
-  int get hashCode => wifi.hashCode ^ vpn.hashCode;
+  int get hashCode =>
+      wifi.hashCode ^
+      vpn.hashCode ^
+      defaultInterface.hashCode ^
+      resumed.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -26,5 +42,7 @@ class NetworkState {
       other is NetworkState &&
           runtimeType == other.runtimeType &&
           wifi == other.wifi &&
-          vpn == other.vpn;
+          vpn == other.vpn &&
+          defaultInterface == other.defaultInterface &&
+          resumed == other.resumed;
 }

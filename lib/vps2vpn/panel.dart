@@ -788,6 +788,8 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
     watch.dispose();
     scope.close();
   });
+  // A wake or a new network can leave a line dead; look before the timer does.
+  ref.listen(networkResetsProvider, (_, _) => unawaited(watch.checkNow()));
   watch.start();
 });
 

@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/metacubex/mihomo/adapter"
 	"github.com/metacubex/mihomo/adapter/outbound"
@@ -101,5 +102,74 @@ func TestResetNetworkResetsEveryProvidersNodeOfOneName(t *testing.T) {
 
 	if first.resets != 1 || second.resets != 1 {
 		t.Fatalf("ResetNetwork ran %d and %d times, want 1 each", first.resets, second.resets)
+	}
+}
+
+type checkedProvider struct {
+	fakeProxyProvider
+	checked chan string
+}
+
+func (p *checkedProvider) HealthCheck() { p.checked <- p.name }
+
+type providerGroupAdapter struct {
+	constant.ProxyAdapter
+	providers []cp.ProxyProvider
+}
+
+func (g *providerGroupAdapter) Providers() []cp.ProxyProvider { return g.providers }
+
+func TestNetworkResetResetsOutboundsAndChecksOnlyTheSmartGroups(t *testing.T) {
+	checked := make(chan string, 4)
+	group := func(name string) constant.Proxy {
+		return adapter.NewProxy(&providerGroupAdapter{
+			ProxyAdapter: outbound.NewRejectWithOption(outbound.RejectOption{Name: name}),
+			providers:    []cp.ProxyProvider{&checkedProvider{fakeProxyProvider{name: name}, checked}},
+		})
+	}
+	shared := &resettableOutbound{ProxyAdapter: outbound.NewRejectWithOption(outbound.RejectOption{Name: "HY2"})}
+	tunnel.UpdateProxies(map[string]constant.Proxy{
+		"HY2":         adapter.NewProxy(shared),
+		vpsSmartGroup: group(vpsSmartGroup),
+		vpsAIGroup:    group(vpsAIGroup),
+		"Proxy":       group("Proxy"),
+	}, nil)
+	t.Cleanup(func() { tunnel.UpdateProxies(nil, nil) })
+
+	if _, err := methodHandlers[networkResetMethod](&MethodCall{Method: networkResetMethod}); err != nil {
+		t.Fatal(err)
+	}
+
+	if shared.resets != 1 {
+		t.Fatalf("ResetNetwork ran %d times, want 1", shared.resets)
+	}
+	got := map[string]bool{}
+	for len(got) < 2 {
+		select {
+		case name := <-checked:
+			got[name] = true
+		case <-time.After(5 * time.Second):
+			t.Fatalf("health checks run: %v, want both smart groups", got)
+		}
+	}
+	if !got[vpsSmartGroup] || !got[vpsAIGroup] {
+		t.Fatalf("health checks run: %v, want both smart groups", got)
+	}
+	select {
+	case name := <-checked:
+		t.Fatalf("%s was checked; only the smart groups should be", name)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestNetworkResetWithoutSmartGroupsStillResets(t *testing.T) {
+	shared := &resettableOutbound{ProxyAdapter: outbound.NewRejectWithOption(outbound.RejectOption{Name: "HY2"})}
+	tunnel.UpdateProxies(map[string]constant.Proxy{"HY2": adapter.NewProxy(shared)}, nil)
+	t.Cleanup(func() { tunnel.UpdateProxies(nil, nil) })
+
+	handleNetworkReset()
+
+	if shared.resets != 1 {
+		t.Fatalf("ResetNetwork ran %d times, want 1", shared.resets)
 	}
 }

@@ -127,6 +127,27 @@ class CoreAction extends _$CoreAction {
     }
   }
 
+  /// The full reset that follows a wake or a move of the default network,
+  /// while the proxy runs; answers whether the Core did it.
+  Future<bool> resetNetwork() async {
+    if (!ref.read(isStartProvider) ||
+        ref.read(coreStatusProvider) != CoreStatus.connected) {
+      return false;
+    }
+    try {
+      await _core.resetNetwork();
+    } catch (error) {
+      commonPrint.log(
+        'resetNetwork error: $error',
+        logLevel: coreFailureLogLevel(error),
+      );
+      return false;
+    }
+    commonPrint.log('network reset', logLevel: LogLevel.info);
+    ref.read(networkResetsProvider.notifier).bump();
+    return true;
+  }
+
   Future<void> forceGc() async {
     await _core.forceGc();
   }

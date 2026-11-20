@@ -13,8 +13,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rust_api/rust_api.dart' show NetworkState;
 
-const _wifi = NetworkState(wifi: true, vpn: false);
-const _offWifi = NetworkState(wifi: false, vpn: false);
+const _wifi = NetworkState(
+  wifi: true,
+  vpn: false,
+  defaultInterface: 'wlan0',
+  resumed: false,
+);
+const _offWifi = NetworkState(
+  wifi: false,
+  vpn: false,
+  defaultInterface: 'eth0',
+  resumed: false,
+);
 
 void main() {
   setUpAll(() {

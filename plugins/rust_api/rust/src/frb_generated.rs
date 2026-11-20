@@ -3498,9 +3498,13 @@ impl SseDecode for crate::api::network::NetworkState {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_wifi = <bool>::sse_decode(deserializer);
         let mut var_vpn = <bool>::sse_decode(deserializer);
+        let mut var_defaultInterface = <String>::sse_decode(deserializer);
+        let mut var_resumed = <bool>::sse_decode(deserializer);
         return crate::api::network::NetworkState {
             wifi: var_wifi,
             vpn: var_vpn,
+            default_interface: var_defaultInterface,
+            resumed: var_resumed,
         };
     }
 }
@@ -4247,6 +4251,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::network::NetworkState {
         [
             self.wifi.into_into_dart().into_dart(),
             self.vpn.into_into_dart().into_dart(),
+            self.default_interface.into_into_dart().into_dart(),
+            self.resumed.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -4961,6 +4967,8 @@ impl SseEncode for crate::api::network::NetworkState {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.wifi, serializer);
         <bool>::sse_encode(self.vpn, serializer);
+        <String>::sse_encode(self.default_interface, serializer);
+        <bool>::sse_encode(self.resumed, serializer);
     }
 }
 

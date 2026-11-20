@@ -53,6 +53,9 @@ class App {
             NetworkState(
               wifi: state['wifi'] as bool,
               vpn: state['vpn'] as bool,
+              // Android's NetworkObserver resets the Core itself.
+              defaultInterface: '',
+              resumed: false,
             ),
           );
         default:

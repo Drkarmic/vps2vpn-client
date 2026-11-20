@@ -1,6 +1,7 @@
 //! The icon belongs to a hidden top-level window on a thread of its own: a
 //! message-only window would miss `TaskbarCreated` and power broadcasts, and
-//! `TrackPopupMenu` blocks the thread it runs on.
+//! `TrackPopupMenu` blocks the thread it runs on. A wake is passed on to the
+//! network watcher as well.
 
 use super::emit;
 use crate::api::tray::{TrayContent, TrayItem, TrayItemKind, TraySignalKind};
@@ -227,6 +228,7 @@ unsafe extern "system" fn window_proc(
                 || wparam == PBT_APMRESUMESUSPEND as usize =>
         {
             restore(window);
+            crate::network::resumed();
         }
         _ if Some(&message) == TASKBAR_CREATED.get() => restore(window),
         _ => {}
