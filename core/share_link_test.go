@@ -358,6 +358,64 @@ func TestVShareLinksRejectTLSModesThePinnedDecoderWouldDrop(t *testing.T) {
 	}
 }
 
+func TestVShareLinksDoNotLoseCertificatesOrPins(t *testing.T) {
+	templates := []struct {
+		name, typ string
+		alterID   int
+	}{
+		{"VLESS", "vless", 0},
+		{"VMess Xray AEAD", "vmess", 0},
+		{"VMess legacy v2rayN", "vmess", 64},
+	}
+	for _, item := range templates {
+		t.Run(item.name, func(t *testing.T) {
+			base := map[string]any{
+				"name": item.name, "type": item.typ, "server": "node.example",
+				"port": 443, "uuid": "u", "alterId": item.alterID, "tls": true,
+			}
+			if link := encodeShareLink(proxyFields(base)); link == "" {
+				t.Fatal("normal TLS proxy must remain exportable")
+			}
+			for _, unsupported := range []struct {
+				key, value string
+			}{
+				{"name-cert-verify", "cert.example"},
+				{"certificate", "-----BEGIN CERTIFICATE-----"},
+				{"private-key", "-----BEGIN PRIVATE KEY-----"},
+			} {
+				attrs := make(map[string]any, len(base)+1)
+				for k, v := range base {
+					attrs[k] = v
+				}
+				attrs[unsupported.key] = unsupported.value
+				if link := encodeShareLink(proxyFields(attrs)); link != "" {
+					t.Errorf("%s lost %s on export: %q", item.name, unsupported.key, link)
+				}
+			}
+			pinned := make(map[string]any, len(base)+1)
+			for k, v := range base {
+				pinned[k] = v
+			}
+			pinned["fingerprint"] = "sha256/pinned-cert-value"
+			link := encodeShareLink(proxyFields(pinned))
+			if item.alterID > 0 {
+				if link != "" {
+					t.Errorf("legacy VMess JSON silently lost pinned cert: %q", link)
+				}
+				return
+			}
+			if link == "" {
+				t.Fatal("Xray-style link can represent pcs=fingerprint")
+			}
+			decoded := handleDecodeShareLinks(LinesParams{Lines: []string{link}})
+			if len(decoded) != 1 || len(decoded[0]) != 1 ||
+				decoded[0][0]["fingerprint"] != "sha256/pinned-cert-value" {
+				t.Errorf("certificate pin failed round-trip: %+v", decoded)
+			}
+		})
+	}
+}
+
 func TestTuicShareLinksFailClosedForUnrepresentableTLSOptions(t *testing.T) {
 	base := map[string]any{
 		"name": "secure tuic", "type": "tuic", "server": "node.example",
