@@ -25,6 +25,8 @@ pub fn state() -> Option<NetworkState> {
         return Some(NetworkState {
             wifi: false,
             vpn: false,
+            default_interface: String::new(),
+            resumed: false,
         });
     };
     let device = Path::new("/sys/class/net").join(&interface);
@@ -32,6 +34,8 @@ pub fn state() -> Option<NetworkState> {
     Some(NetworkState {
         wifi: device.join("wireless").exists() || device.join("phy80211").exists(),
         vpn: matches!(kind.trim(), ARPHRD_PPP | ARPHRD_NONE) || device.join("tun_flags").exists(),
+        default_interface: interface,
+        resumed: false,
     })
 }
 

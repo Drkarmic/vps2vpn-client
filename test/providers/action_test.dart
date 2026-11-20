@@ -311,6 +311,37 @@ void main() {
       await expectLater(action.reportNetworkChange(), completes);
     });
 
+    test('resets the network only while the proxy runs', () async {
+      final core = _MockCoreHandlerInterface();
+      when(core.resetNetwork).thenAnswer((_) async {});
+      final container = ProviderContainer(
+        overrides: [
+          coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+        ],
+      );
+      addTearDown(container.dispose);
+      final action = container.read(coreActionProvider.notifier);
+
+      container.read(coreStatusProvider.notifier).value = CoreStatus.connected;
+      expect(await action.resetNetwork(), isFalse);
+      verifyNever(core.resetNetwork);
+
+      container.read(runTimeProvider.notifier).value = 1;
+      expect(await action.resetNetwork(), isTrue);
+      verify(core.resetNetwork).called(1);
+      expect(container.read(networkResetsProvider), 1);
+
+      when(core.resetNetwork).thenThrow(StateError('disconnected'));
+      expect(await action.resetNetwork(), isFalse);
+      verify(core.resetNetwork).called(1);
+      expect(container.read(networkResetsProvider), 1);
+
+      container.read(coreStatusProvider.notifier).value =
+          CoreStatus.disconnected;
+      expect(await action.resetNetwork(), isFalse);
+      verifyNever(core.resetNetwork);
+    });
+
     test('a core that fails to start keeps why for the stopped card', () async {
       TestWidgetsFlutterBinding.ensureInitialized();
       loadAppLocalizations(const Locale('en'));

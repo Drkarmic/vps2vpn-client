@@ -60,6 +60,10 @@ class Application extends ConsumerStatefulWidget {
 class ApplicationState extends ConsumerState<Application> {
   Timer? _autoUpdateProfilesTaskTimer;
   bool _preHasVpn = false;
+  // Android's NetworkObserver resets the Core on a new network itself.
+  late final _networkReset = NetworkResetTrigger(
+    onReset: ref.read(coreActionProvider.notifier).resetNetwork,
+  );
   // Windows can only watch SIGINT and SIGHUP.
   final _terminateSignals = system.isDesktop && !system.isWindows
       ? ProcessSignal.sigterm.watch()
@@ -126,7 +130,8 @@ class ApplicationState extends ConsumerState<Application> {
 
   Future<void> _handleConnectivityChanged(NetworkState state) async {
     commonPrint.log(
-      'connectivityChanged wifi: ${state.wifi} vpn: ${state.vpn}',
+      'connectivityChanged wifi: ${state.wifi} vpn: ${state.vpn}'
+      ' resumed: ${state.resumed}',
     );
     unawaited(ref.read(systemActionProvider.notifier).updateLocalIp());
     final hasVpn = state.vpn;
@@ -142,6 +147,12 @@ class ApplicationState extends ConsumerState<Application> {
       }
     }
     _preHasVpn = hasVpn;
+    if (system.isDesktop) {
+      _networkReset.report(
+        resumed: state.resumed,
+        defaultInterface: state.defaultInterface,
+      );
+    }
   }
 
   @override
@@ -203,6 +214,7 @@ class ApplicationState extends ConsumerState<Application> {
   void dispose() {
     linkManager.destroy();
     _autoUpdateProfilesTaskTimer?.cancel();
+    _networkReset.dispose();
     super.dispose();
   }
 }

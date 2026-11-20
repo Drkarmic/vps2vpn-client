@@ -31,6 +31,7 @@ const MAX_DELAY: Duration = Duration::from_secs(1);
 enum Signal {
     Listen,
     Changed,
+    Resumed,
 }
 
 static SINK: Mutex<Option<StreamSink<NetworkState, SseCodec>>> = Mutex::new(None);
@@ -58,6 +59,15 @@ impl Notifier {
     }
 }
 
+/// A wake from sleep, which the window that receives power broadcasts reports.
+/// The adapters reconnect after it, so it settles like a change.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn resumed() {
+    if let Some(Some(signals)) = SIGNALS.get() {
+        let _ = signals.send(Signal::Resumed);
+    }
+}
+
 fn start() -> Option<Sender<Signal>> {
     let (sender, receiver) = mpsc::channel();
     #[cfg(any(target_os = "linux", target_os = "macos", windows))]
@@ -71,12 +81,17 @@ fn start() -> Option<Sender<Signal>> {
 
 fn run(receiver: Receiver<Signal>) {
     while let Ok(signal) = receiver.recv() {
-        if matches!(signal, Signal::Changed) && !settle(&receiver, QUIET, MAX_DELAY) {
-            return;
+        let mut resumed = matches!(signal, Signal::Resumed);
+        if !matches!(signal, Signal::Listen) {
+            match settle(&receiver, QUIET, MAX_DELAY) {
+                Some(woke) => resumed |= woke,
+                None => return,
+            }
         }
-        let Some(state) = platform::state() else {
+        let Some(mut state) = platform::state() else {
             continue;
         };
+        state.resumed = resumed;
         if let Ok(sink) = SINK.lock() {
             if let Some(sink) = sink.as_ref() {
                 let _ = sink.add(state);
@@ -85,19 +100,20 @@ fn run(receiver: Receiver<Signal>) {
     }
 }
 
-/// Waits until `quiet` passes without a signal, or `max` since the first one;
-/// false once every sender is gone.
-fn settle(receiver: &Receiver<Signal>, quiet: Duration, max: Duration) -> bool {
+/// Waits until `quiet` passes without a signal, or `max` since the first one,
+/// and answers whether a wake came in meanwhile; None once every sender is gone.
+fn settle(receiver: &Receiver<Signal>, quiet: Duration, max: Duration) -> Option<bool> {
     let deadline = Instant::now() + max;
+    let mut resumed = false;
     loop {
         let wait = quiet.min(deadline.saturating_duration_since(Instant::now()));
         if wait.is_zero() {
-            return true;
+            return Some(resumed);
         }
         match receiver.recv_timeout(wait) {
-            Ok(_) => {}
-            Err(RecvTimeoutError::Timeout) => return true,
-            Err(RecvTimeoutError::Disconnected) => return false,
+            Ok(signal) => resumed |= matches!(signal, Signal::Resumed),
+            Err(RecvTimeoutError::Timeout) => return Some(resumed),
+            Err(RecvTimeoutError::Disconnected) => return None,
         }
     }
 }
@@ -134,11 +150,10 @@ mod tests {
             }
             sender
         });
-        assert!(settle(
-            &receiver,
-            Duration::from_millis(80),
-            Duration::from_secs(5)
-        ));
+        assert_eq!(
+            settle(&receiver, Duration::from_millis(80), Duration::from_secs(5)),
+            Some(false)
+        );
         let elapsed = started.elapsed();
         assert!(elapsed >= Duration::from_millis(160), "{elapsed:?}");
         drop(burst.join());
@@ -160,7 +175,8 @@ mod tests {
             &receiver,
             Duration::from_millis(50),
             Duration::from_millis(200)
-        ));
+        )
+        .is_some());
         assert!(started.elapsed() < Duration::from_millis(400));
         stop.store(true, std::sync::atomic::Ordering::Relaxed);
         burst.join().unwrap();
@@ -170,10 +186,22 @@ mod tests {
     fn stops_when_the_watchers_are_gone() {
         let (sender, receiver) = mpsc::channel::<Signal>();
         drop(sender);
-        assert!(!settle(
-            &receiver,
-            Duration::from_millis(50),
-            Duration::from_secs(1)
-        ));
+        assert_eq!(
+            settle(&receiver, Duration::from_millis(50), Duration::from_secs(1)),
+            None
+        );
+    }
+
+    #[test]
+    fn a_wake_inside_the_burst_is_kept() {
+        let (sender, receiver) = mpsc::channel();
+        sender.send(Signal::Changed).unwrap();
+        sender.send(Signal::Resumed).unwrap();
+        sender.send(Signal::Changed).unwrap();
+        assert_eq!(
+            settle(&receiver, Duration::from_millis(30), Duration::from_secs(1)),
+            Some(true)
+        );
+        drop(sender);
     }
 }

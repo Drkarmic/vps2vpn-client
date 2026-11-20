@@ -3170,11 +3170,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   NetworkState dco_decode_network_state(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return NetworkState(
       wifi: dco_decode_bool(arr[0]),
       vpn: dco_decode_bool(arr[1]),
+      defaultInterface: dco_decode_String(arr[2]),
+      resumed: dco_decode_bool(arr[3]),
     );
   }
 
@@ -3831,7 +3833,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_wifi = sse_decode_bool(deserializer);
     var var_vpn = sse_decode_bool(deserializer);
-    return NetworkState(wifi: var_wifi, vpn: var_vpn);
+    var var_defaultInterface = sse_decode_String(deserializer);
+    var var_resumed = sse_decode_bool(deserializer);
+    return NetworkState(
+      wifi: var_wifi,
+      vpn: var_vpn,
+      defaultInterface: var_defaultInterface,
+      resumed: var_resumed,
+    );
   }
 
   @protected
@@ -4584,6 +4593,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bool(self.wifi, serializer);
     sse_encode_bool(self.vpn, serializer);
+    sse_encode_String(self.defaultInterface, serializer);
+    sse_encode_bool(self.resumed, serializer);
   }
 
   @protected

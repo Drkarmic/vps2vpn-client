@@ -59,7 +59,12 @@ static WIFI: Mutex<Option<bool>> = Mutex::new(None);
 
 pub fn state() -> Option<NetworkState> {
     let wifi = (*WIFI.lock().ok()?)?;
-    Some(NetworkState { wifi, vpn: false })
+    Some(NetworkState {
+        wifi,
+        vpn: false,
+        default_interface: String::new(),
+        resumed: false,
+    })
 }
 
 /// The path monitor answers whether the default path runs over Wi-Fi, as

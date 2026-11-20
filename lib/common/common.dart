@@ -33,6 +33,7 @@ export 'lock.dart';
 export 'mixin.dart';
 export 'network.dart';
 export 'network_error.dart';
+export 'network_reset.dart';
 export 'num.dart';
 export 'package.dart';
 export 'path.dart';

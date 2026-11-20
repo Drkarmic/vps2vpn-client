@@ -338,6 +338,10 @@ abstract class CoreHandlerInterface {
 
   Future<void> reportNetworkChange() => _command(CoreMethod.networkChanged);
 
+  /// Closes every connection and resets the outbounds' shared sessions, then
+  /// health-checks the smart groups.
+  Future<void> resetNetwork() => _command(CoreMethod.networkReset);
+
   Future<void> startLog() => _commandUnobserved(CoreMethod.logStart);
 
   Future<void> stopLog() => _commandUnobserved(CoreMethod.logStop);
