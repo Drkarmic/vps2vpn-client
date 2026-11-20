@@ -162,6 +162,8 @@ void main() {
       '[2001:db8::1]junk',
       '[1.1.1.1]:53',
       '1.1.1.1:53:53',
+      'dns.google:53',
+      'dns.google',
     ]) {
       expect(mitmDnsServer(server), isNull, reason: server);
       expect(isMitmPlainDnsServer(server), isFalse, reason: server);

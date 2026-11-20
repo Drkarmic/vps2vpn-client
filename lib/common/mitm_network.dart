@@ -242,39 +242,9 @@ class MitmNetworkChange {
 }
 
 final _dnsScheme = RegExp(
-  r'^(?:udp|tcp|tls|https|http|quic|system|dhcp|rcode)://\S+
-
-/// A route Surge, Loon or Stash writes as an address alone reads as a host.
-String? mitmRoute(String route) {
-  final value = route.trim();
-  if (isCidr(value)) {
-    return value;
-  }
-  final address = InternetAddress.tryParse(value);
-  if (address == null) {
-    return null;
-  }
-  final bits = address.type == InternetAddressType.IPv4 ? 32 : 128;
-  return '$value/$bits';
-}
-,
+  r'^(?:udp|tcp|tls|https|http|quic|system|dhcp|rcode)://\S+$',
 );
-final _dnsPort = RegExp(r'^:[0-9]{1,5}
-
-/// A route Surge, Loon or Stash writes as an address alone reads as a host.
-String? mitmRoute(String route) {
-  final value = route.trim();
-  if (isCidr(value)) {
-    return value;
-  }
-  final address = InternetAddress.tryParse(value);
-  if (address == null) {
-    return null;
-  }
-  final bits = address.type == InternetAddressType.IPv4 ? 32 : 128;
-  return '$value/$bits';
-}
-);
+final _dnsPort = RegExp(r'^:[0-9]{1,5}$');
 
 bool _validDnsPort(String tail) {
   if (!_dnsPort.hasMatch(tail)) {
