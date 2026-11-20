@@ -744,6 +744,14 @@ class SetupAction extends _$SetupAction {
         ref
             .read(patchClashConfigProvider.notifier)
             .update((state) => state.copyWith.tun(enable: false));
+        // vps2vpn simple mode switches the system proxy off when it turns TUN
+        // on (one takeover at a time). Without TUN, put the proxy back, or the
+        // app shows "connected" while nothing goes through it.
+        if (!ref.read(appSettingProvider).advancedMode) {
+          ref
+              .read(networkSettingProvider.notifier)
+              .update((s) => s.copyWith(systemProxy: true));
+        }
         dialogs.showBanner(
           currentAppLocalizations.tunAuthorizationFailed,
           level: BannerLevel.error,

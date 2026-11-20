@@ -93,7 +93,7 @@ BEGIN
             VALUE "FileDescription", "vps2vpn" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "vps2vpn" "\0"
-            VALUE "LegalCopyright", "Based on FlClash by chen08209 (GPL-3.0)" "\0"
+            VALUE "LegalCopyright", "(C) vps2vpn. Includes GPL-3.0 components; see data/legal" "\0"
             VALUE "OriginalFilename", "vps2vpn.exe" "\0"
             VALUE "ProductName", "vps2vpn" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

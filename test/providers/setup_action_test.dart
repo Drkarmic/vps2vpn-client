@@ -862,6 +862,22 @@ void main() {
       );
     });
 
+    test('vps2vpn: a failed authorization in simple mode puts the system '
+        'proxy back', () async {
+      loadAppLocalizations(const Locale('en'));
+      container
+          .read(patchClashConfigProvider.notifier)
+          .update((state) => state.copyWith.tun(enable: true));
+      container
+          .read(networkSettingProvider.notifier)
+          .update((s) => s.copyWith(systemProxy: false));
+      action.authorizeResult = AuthorizeCode.error;
+
+      expect(await action.requestAdmin(true), isTrue);
+      expect(container.read(patchClashConfigProvider).tun.enable, isFalse);
+      expect(container.read(networkSettingProvider).systemProxy, isTrue);
+    });
+
     test('a failed authorization turns tun off and asks again on the next '
         'enable', () async {
       loadAppLocalizations(const Locale('en'));

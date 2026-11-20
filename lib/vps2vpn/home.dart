@@ -281,7 +281,11 @@ class _HeroState extends ConsumerState<_Hero> {
             '流量正经由你的服务器加密传输',
             'Traffic is encrypted through your server',
           )
-        : tr(context, '轻点"连接"，即刻接入你的私有线路', 'Tap Connect to use your private line');
+        : tr(
+            context,
+            '轻点"连接"，即刻接入你的私有线路',
+            'Tap Connect to use your private line',
+          );
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -912,13 +916,17 @@ class _Stat extends StatelessWidget {
                 children: [
                   VpsIconView(icon, size: 14, color: p.muted),
                   const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: vpsText(
-                      p,
-                      size: 12,
-                      color: p.soft,
-                      weight: FontWeight.w500,
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: vpsText(
+                        p,
+                        size: 12,
+                        color: p.soft,
+                        weight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
@@ -1049,52 +1057,70 @@ class _AiStripState extends ConsumerState<_AiStrip> {
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final state = ref.watch(serviceStatusProvider);
+    final chips = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final t in aiTargets) serviceChip(context, t, state.entryOf(t)),
+      ],
+    );
     return VpsCard(
       onTap: () => vpsTab.value = vpsTabCheck,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: p.track,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: p.line),
-            ),
-            alignment: Alignment.center,
-            child: VpsIconView(VpsIcon.sparkle, size: 18, color: p.accent),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  tr(context, 'AI 服务可用性', 'AI availability'),
-                  style: vpsText(p, size: 14.5, weight: FontWeight.w600),
-                ),
-                Text(
-                  ref.watch(isStartProvider)
-                      ? tr(context, '经由当前线路', 'Through the current line')
-                      : tr(
-                          context,
-                          '未连接 · 当前为直连结果',
-                          'Not connected · direct results',
-                        ),
-                  style: vpsText(p, size: 12.5, color: p.soft),
-                ),
-              ],
-            ),
-          ),
-          Wrap(
-            spacing: 8,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final title = Row(
             children: [
-              for (final t in aiTargets)
-                serviceChip(context, t, state.entryOf(t)),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: p.track,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: p.line),
+                ),
+                alignment: Alignment.center,
+                child: VpsIconView(VpsIcon.sparkle, size: 18, color: p.accent),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tr(context, 'AI 服务可用性', 'AI availability'),
+                      style: vpsText(p, size: 14.5, weight: FontWeight.w600),
+                    ),
+                    Text(
+                      ref.watch(isStartProvider)
+                          ? tr(context, '经由当前线路', 'Through the current line')
+                          : tr(
+                              context,
+                              '未连接 · 当前为直连结果',
+                              'Not connected · direct results',
+                            ),
+                      style: vpsText(p, size: 12.5, color: p.soft),
+                    ),
+                  ],
+                ),
+              ),
             ],
-          ),
-        ],
+          );
+          // Narrow: the chips get their own line instead of squeezing the title.
+          if (c.maxWidth < 620) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [title, const SizedBox(height: 12), chips],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: title),
+              const SizedBox(width: 12),
+              chips,
+            ],
+          );
+        },
       ),
     );
   }

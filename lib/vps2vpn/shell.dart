@@ -132,23 +132,29 @@ class _SideNav extends ConsumerWidget {
               children: [
                 const VpsLogo(size: 30),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'vps2vpn',
-                      style: vpsText(
-                        p,
-                        size: 16,
-                        weight: FontWeight.w700,
-                        spacing: 0.2,
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'vps2vpn',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: vpsText(
+                          p,
+                          size: 16,
+                          weight: FontWeight.w700,
+                          spacing: 0.2,
+                        ),
                       ),
-                    ),
-                    Text(
-                      tr(context, '私有网络', 'Private network'),
-                      style: vpsText(p, size: 11.5, color: p.soft),
-                    ),
-                  ],
+                      Text(
+                        tr(context, '私有网络', 'Private network'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: vpsText(p, size: 11.5, color: p.soft),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -228,7 +234,14 @@ class _SideStatus extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 9),
-                Text(title, style: vpsText(p, size: 13, weight: FontWeight.w600)),
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: vpsText(p, size: 13, weight: FontWeight.w600),
+                  ),
+                ),
               ],
             ),
             if (hasProfile && line != null) ...[
@@ -314,13 +327,17 @@ class _NavItem extends StatelessWidget {
           children: [
             VpsIconView(icon, size: 18, color: selected ? p.accent : p.soft),
             const SizedBox(width: 12),
-            Text(
-              label,
-              style: vpsText(
-                p,
-                size: 14,
-                weight: selected ? FontWeight.w600 : FontWeight.w500,
-                color: selected ? p.text : p.soft,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: vpsText(
+                  p,
+                  size: 14,
+                  weight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected ? p.text : p.soft,
+                ),
               ),
             ),
           ],

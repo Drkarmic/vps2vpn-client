@@ -296,11 +296,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      tr(
-                        context,
-                        '基于开源项目 FlClash（GPL-3.0）和 mihomo 内核',
-                        'Built on FlClash (GPL-3.0) and the mihomo core',
-                      ),
+                      tr(context, '你的私有网络客户端', 'Your private network client'),
                       style: vpsText(p, size: 12.5, color: p.soft),
                     ),
                   ],
@@ -309,7 +305,58 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
             ],
           ),
         ),
+        const _LegalLine(),
       ],
+    );
+  }
+}
+
+/// The licence notice the GPL asks for, kept out of the way: one faint line
+/// at the very bottom of Settings that opens on tap.
+class _LegalLine extends StatefulWidget {
+  const _LegalLine();
+
+  @override
+  State<_LegalLine> createState() => _LegalLineState();
+}
+
+class _LegalLineState extends State<_LegalLine> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final style = vpsText(p, size: 11, color: p.muted, height: 1.6);
+    return Padding(
+      padding: const EdgeInsets.only(top: 18, bottom: 8),
+      child: Column(
+        children: [
+          VpsPressable(
+            onTap: () => setState(() => _open = !_open),
+            child: Text(tr(context, '许可信息', 'Licences'), style: style),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            alignment: Alignment.topCenter,
+            child: _open
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      tr(
+                        context,
+                        '本软件包含按 GPL-3.0 许可的开源组件（FlClash、mihomo）。'
+                            '许可全文位于安装目录 data/legal，可向发布方索取对应源代码。',
+                        'Includes GPL-3.0 components (FlClash, mihomo). The licence '
+                            'is in data/legal; source is available on request.',
+                      ),
+                      textAlign: TextAlign.center,
+                      style: style,
+                    ),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -353,10 +400,7 @@ class _ShareToolsState extends ConsumerState<_ShareTools> {
         'CMD',
         'set HTTP_PROXY=$proxy && set HTTPS_PROXY=$proxy && set ALL_PROXY=$proxy',
       ),
-      (
-        'Bash',
-        'export http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy',
-      ),
+      ('Bash', 'export http_proxy=$proxy https_proxy=$proxy all_proxy=$proxy'),
     ];
     final lanAddress = localIp == null || localIp.isEmpty
         ? null

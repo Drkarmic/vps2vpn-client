@@ -1,0 +1,5 @@
+vps2vpn includes software licensed under the GNU General Public License v3.0:
+  - FlClash (https://github.com/chen08209/FlClash)
+  - mihomo (https://github.com/MetaCubeX/mihomo)
+The full license text is in LICENSE.txt next to this file. The corresponding
+source code of this build is available from the distributor on request.
