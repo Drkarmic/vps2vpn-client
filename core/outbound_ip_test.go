@@ -17,7 +17,7 @@ func TestHandleOutboundIpTakesTheFirstUsableAnswer(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	quick := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=8.8.4.4"))
+		_, _ = w.Write([]byte("ip=8.8.4.4\nloc=US"))
 	})
 
 	result := handleOutboundIp(&OutboundIpParams{
@@ -29,7 +29,7 @@ func TestHandleOutboundIpTakesTheFirstUsableAnswer(t *testing.T) {
 	if result.Error != "" {
 		t.Fatalf("error = %q, want none", result.Error)
 	}
-	if result.Body != "ip=8.8.4.4" {
+	if result.Body != "ip=8.8.4.4\nloc=US" {
 		t.Errorf("body = %q, want the quick source's", result.Body)
 	}
 	if result.Url != quick.URL {
@@ -60,9 +60,9 @@ func TestHandleOutboundIpSkipsAnAnswerWithoutAnAddress(t *testing.T) {
 
 func TestMentionsIpNeedsAWholeAddress(t *testing.T) {
 	cases := map[string]bool{
-		"fl=12f\nip=8.8.4.4\nts=1700000000.1": true,
+		"fl=12f\nip=8.8.4.4\nloc=US\nts=1700000000.1": true,
 		`{"ip":"2001:4860:4860::8888","country":"JP"}`:     true,
-		`{"ip":"::ffff:8.8.4.4"}`:             true,
+		`{"ip":"::ffff:8.8.4.4","cc":"US"}`:             true,
 		`a::after{content:""}`:                    false,
 		`div::before,li::marker{color:#fff}`:      false,
 		`::-webkit-scrollbar{width:0}`:            false,
@@ -77,12 +77,12 @@ func TestMentionsIpNeedsAWholeAddress(t *testing.T) {
 
 func TestMentionsIpSkipsLocalAddresses(t *testing.T) {
 	for _, body := range []string{
-		"ip=192.168.1.1",
-		`{"ip":"10.20.30.40"}`,
-		"ip=172.16.0.9",
-		"ip=100.64.12.34",
-		`{"ip":"fd00::1"}`,
-		`{"ip":"::ffff:192.168.1.1"}`,
+		""ip=192.168.1.1nloc=US",
+		`{"ip":"10.20.30.40","country":"US"}`,
+		""ip=172.16.0.9nloc=US",
+		""ip=100.64.12.34nloc=US",
+		`{"ip":"fd00::1","country_code":"US"}`,
+		`{"ip":"::ffff:192.168.1.1","cc":"US"}`,
 	} {
 		if mentionsIp(body) {
 			t.Errorf("mentionsIp(%q) = true, want false", body)
@@ -96,12 +96,12 @@ func TestMentionsIpRejectsSpecialUseAddresses(t *testing.T) {
 		"198.51.100.7", "203.0.113.7", "240.0.0.1",
 		"2001:db8::7", "2001:2::7", "::ffff:203.0.113.7",
 	} {
-		if mentionsIp("ip=" + ip) {
+		if mentionsIp("ip=" + ip + "\nloc=US") {
 			t.Errorf("reserved address %s was accepted as a routable exit IP", ip)
 		}
 	}
 	for _, ip := range []string{"1.1.1.1", "8.8.4.4", "2606:4700:4700::1111"} {
-		if !mentionsIp("ip=" + ip) {
+		if !mentionsIp("ip=" + ip + "\nloc=US") {
 			t.Errorf("public address %s was incorrectly rejected", ip)
 		}
 	}
@@ -110,18 +110,63 @@ func TestMentionsIpRejectsSpecialUseAddresses(t *testing.T) {
 func TestOutboundIpSkipsDocumentationAddressAndUsesLaterPublicAnswer(t *testing.T) {
 	withProbeProxies(t, "node-a")
 	reserved := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.7"))
+		_, _ = w.Write([]byte("ip=203.0.113.7\nloc=US"))
 	})
 	public := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=8.8.8.8"))
+		_, _ = w.Write([]byte("ip=8.8.8.8\nloc=US"))
 	})
 	result := handleOutboundIp(&OutboundIpParams{
 		ProxyName: "node-a",
 		Urls: []string{reserved.URL, public.URL},
 		Timeout: 4000,
 	})
-	if result.Error != "" || result.Url != public.URL || result.Body != "ip=8.8.8.8" {
+	if result.Error != "" || result.Url != public.URL || result.Body != "ip=8.8.8.8\nloc=US" {
 		t.Fatalf("reserved address won probe race: %+v", result)
+	}
+}
+
+
+func TestMentionsIpRejectsErrorDocumentsEvenWithPublicAddresses(t *testing.T) {
+	cases := map[string]bool{
+		"<html><body>Rate limit; contact 8.8.8.8</body></html>": false,
+		`{"error":"blocked","help_server":"1.1.1.1"}`:       false,
+		`{"error":"blocked","ip":"8.8.8.8","country":"US"}`: false,
+		`{"success":false,"ip":"8.8.8.8","country":"US"}`: false,
+		`{"status":"fail","ip":"8.8.8.8","country":"US"}`: false,
+		`{"ip":"8.8.8.8","country":42}`:                false,
+		`{"ip":"8.8.8.8","country":""}`:                false,
+		`{"ip":"8.8.8.8","help_server":"1.1.1.1"}`:    false,
+		"Message: contact 8.8.8.8 or see ip=1.1.1.1": false,
+		"ip=8.8.8.8": false,
+		`{"ip":"8.8.8.8","country":"US"}`:                true,
+		`{"ip":"8.8.8.8","country_code":"US"}`:           true,
+		`{"ip":"8.8.8.8","cc":"US"}`:                     true,
+		`{"ip":"8.8.8.8","location":{"country_code":"US"}}`: true,
+		"ip=8.8.8.8\nloc=US\nts=1700000000": true,
+	}
+	for input, want := range cases {
+		if got := mentionsIp(input); got != want {
+			t.Errorf("mentionsIp(%q) = %v, want %v", input, got, want)
+		}
+	}
+}
+
+func TestOutboundIpIgnoresPublicIpInHttp200ErrorPage(t *testing.T) {
+	withProbeProxies(t, "node-a")
+	bad := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("<html><body>Too many requests. DNS: 8.8.8.8</body></html>"))
+	})
+	good := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(120 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"ip":"1.1.1.1","country":"US"}`))
+	})
+	answer := handleOutboundIp(&OutboundIpParams{
+		ProxyName: "node-a",
+		Urls: []string{bad.URL, good.URL},
+		Timeout: 3000,
+	})
+	if answer.Error != "" || answer.Url != good.URL || answer.Body != `{"ip":"1.1.1.1","country":"US"}` {
+		t.Fatalf("HTTP-200 error page won probe race: %+v", answer)
 	}
 }
 
@@ -136,7 +181,7 @@ func TestHandleOutboundIpCancelsTheLosers(t *testing.T) {
 		}
 	})
 	winning := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=9.9.9.9"))
+		_, _ = w.Write([]byte("ip=9.9.9.9\nloc=US"))
 	})
 
 	result := handleOutboundIp(&OutboundIpParams{
@@ -145,7 +190,7 @@ func TestHandleOutboundIpCancelsTheLosers(t *testing.T) {
 		Timeout:   5000,
 	})
 
-	if result.Body != "ip=9.9.9.9" {
+	if result.Body != "ip=9.9.9.9\nloc=US" {
 		t.Fatalf("body = %q, want the winning source's", result.Body)
 	}
 	deadline := time.Now().Add(2 * time.Second)
@@ -169,7 +214,7 @@ func TestHandleOutboundIpCancelsALookupFromAnOlderEpoch(t *testing.T) {
 		}
 	})
 	winning := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=9.9.9.9"))
+		_, _ = w.Write([]byte("ip=9.9.9.9\nloc=US"))
 	})
 
 	stampRoute(1, 0)
@@ -198,10 +243,10 @@ func TestHandleOutboundIpLeavesALookupFromTheSameEpoch(t *testing.T) {
 	slow := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		reached <- struct{}{}
 		time.Sleep(300 * time.Millisecond)
-		_, _ = w.Write([]byte("ip=8.8.4.4"))
+		_, _ = w.Write([]byte("ip=8.8.4.4\nloc=US"))
 	})
 	fast := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=9.9.9.9"))
+		_, _ = w.Write([]byte("ip=9.9.9.9\nloc=US"))
 	})
 
 	stampRoute(1, 0)
@@ -212,7 +257,7 @@ func TestHandleOutboundIpLeavesALookupFromTheSameEpoch(t *testing.T) {
 	<-reached
 	handleOutboundIp(&OutboundIpParams{ProxyName: "node-a", Urls: []string{fast.URL}, Timeout: 5000})
 
-	if answer := <-first; answer.Body != "ip=8.8.4.4" {
+	if answer := <-first; answer.Body != "ip=8.8.4.4\nloc=US" {
 		t.Errorf("first lookup = %+v, want it to finish beside the second", answer)
 	}
 }
