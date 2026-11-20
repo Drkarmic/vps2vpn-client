@@ -50,7 +50,7 @@
 
 ## 配套服务端
 
-vps2vpn 客户端搭配 vps2vpn 服务端使用最好（一键部署、成员管理、流量统计、AI 可用性检测）。普通的 Clash / mihomo 订阅也能直接用，只是没有账户卡片等面板功能。
+vps2vpn 客户端搭配 [vps2vpn 服务端](https://github.com/xydadada/vps2vpn) 使用最好（一键部署、成员管理、流量统计、AI 可用性检测）。普通的 Clash / mihomo 订阅也能直接用，只是没有账户卡片等面板功能。
 
 ## 常见问题
 
@@ -95,7 +95,7 @@ dart tool/package.dart windows --env stable
 - **Smart line.** Fails over between the protocols of one server first (REALITY, Hysteria2, TUIC), so your exit IP stays the same. It moves to another server only when the whole server is down.
 - **AI line.** Claude, ChatGPT and Gemini stay pinned to the main server.
 - **Takeover.** On connect it closes other proxy apps, moves off busy ports and clears stale system proxies. You can turn this off in Settings.
-- **Panel features** (with the vps2vpn server):
+- **Panel features** (with the [vps2vpn server](https://github.com/xydadada/vps2vpn)):
   - account usage and expiry
   - the server's own view of the AI sites
   - automatic line-failure reports
