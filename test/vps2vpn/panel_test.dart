@@ -137,6 +137,11 @@ void main() {
         if (path == '/s/$_tok/api/me' && req.method == 'GET') {
           req.response.statusCode = meStatus;
           req.response.write(jsonEncode({'name': 'Ann', 'enabled': true}));
+        } else if (path == '/s/$_tok/api/report' &&
+            req.method == 'POST' &&
+            req.contentLength < 0) {
+          // Like the panel's Python server: a chunked body reads as empty.
+          req.response.statusCode = HttpStatus.badRequest;
         } else if (path == '/s/$_tok/api/report' && req.method == 'POST') {
           posts.add((
             req.headers.value('X-V2V'),

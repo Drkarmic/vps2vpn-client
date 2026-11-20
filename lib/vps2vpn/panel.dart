@@ -218,10 +218,13 @@ Future<(int, String)> _send(
         ? await client.getUrl(url)
         : await client.postUrl(url);
     if (body != null) {
+      // A fixed length, not chunked: the panel's server cannot read chunks.
+      final bytes = utf8.encode(jsonEncode(body));
       req.headers
         ..set('X-V2V', '1')
-        ..contentType = ContentType.json;
-      req.write(jsonEncode(body));
+        ..contentType = ContentType.json
+        ..contentLength = bytes.length;
+      req.add(bytes);
     }
     final res = await req.close().timeout(const Duration(seconds: 10));
     final text = await res
