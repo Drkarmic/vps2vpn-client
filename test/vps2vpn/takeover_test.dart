@@ -142,7 +142,7 @@ void main() {
     final left = await quitRivals(parseRivals(tasklist), run: run);
     final kills = calls.where((c) => c.first == 'taskkill').toList();
     expect(kills.map((c) => c.last), ['4120', '4188', '5000']);
-    expect(kills.every((c) => c.contains('/PID') && !c.contains('/IM')), isTrue);
+    expect(kills.every((c) => c.contains('/PID') && !c.contains('/IM') && !c.contains('/T')), isTrue);
     expect(scans, 1);
     expect(left, ['FlClash']);
   });
@@ -161,7 +161,7 @@ void main() {
     }
     await quitRivals(rivals, run: run);
     expect(kills.map((args) => args.last), ['4120', '4130']);
-    expect(kills.every((args) => args.contains('/PID')), isTrue);
+    expect(kills.every((args) => args.contains('/PID') && !args.contains('/T')), isTrue);
   });
 
   test('cancelling takeover stops pending terminations', () async {
