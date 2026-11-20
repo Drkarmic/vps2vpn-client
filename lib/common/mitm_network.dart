@@ -241,10 +241,77 @@ class MitmNetworkChange {
   };
 }
 
-final _ipWithPort = RegExp(r'^\[?([0-9a-fA-F:.]+)\]?(?::\d{1,5})?$');
 final _dnsScheme = RegExp(
-  r'^(?:udp|tcp|tls|https|http|quic|system|dhcp|rcode)://\S+$',
+  r'^(?:udp|tcp|tls|https|http|quic|system|dhcp|rcode)://\S+
+
+/// A route Surge, Loon or Stash writes as an address alone reads as a host.
+String? mitmRoute(String route) {
+  final value = route.trim();
+  if (isCidr(value)) {
+    return value;
+  }
+  final address = InternetAddress.tryParse(value);
+  if (address == null) {
+    return null;
+  }
+  final bits = address.type == InternetAddressType.IPv4 ? 32 : 128;
+  return '$value/$bits';
+}
+,
 );
+final _dnsPort = RegExp(r'^:[0-9]{1,5}
+
+/// A route Surge, Loon or Stash writes as an address alone reads as a host.
+String? mitmRoute(String route) {
+  final value = route.trim();
+  if (isCidr(value)) {
+    return value;
+  }
+  final address = InternetAddress.tryParse(value);
+  if (address == null) {
+    return null;
+  }
+  final bits = address.type == InternetAddressType.IPv4 ? 32 : 128;
+  return '$value/$bits';
+}
+);
+
+bool _validDnsPort(String tail) {
+  if (!_dnsPort.hasMatch(tail)) {
+    return false;
+  }
+  final port = int.parse(tail.substring(1));
+  return port > 0 && port <= 65535;
+}
+
+/// DNS IPs may be bare IPv4/IPv6, IPv4:port or [IPv6]:port.
+/// Parsing the bare address first avoids mistaking the final IPv6 hextet
+/// for a port. Only IPv4 can use the unbracketed host:port spelling.
+bool _plainDnsServer(String value) {
+  if (InternetAddress.tryParse(value) != null) {
+    return true;
+  }
+  if (value.startsWith('[')) {
+    final closing = value.indexOf(']');
+    if (closing <= 1) {
+      return false;
+    }
+    final host = InternetAddress.tryParse(value.substring(1, closing));
+    if (host == null || host.type != InternetAddressType.IPv6) {
+      return false;
+    }
+    final tail = value.substring(closing + 1);
+    return tail.isEmpty || _validDnsPort(tail);
+  }
+  final split = value.lastIndexOf(':');
+  if (split <= 0) {
+    return false;
+  }
+  final host = InternetAddress.tryParse(value.substring(0, split));
+  return host != null &&
+      host.type == InternetAddressType.IPv4 &&
+      _validDnsPort(value.substring(split));
+}
 
 String? mitmDnsServer(String server) {
   final value = server.trim();
@@ -258,14 +325,11 @@ String? mitmDnsServer(String server) {
   if (_dnsScheme.hasMatch(value)) {
     return value;
   }
-  final address = _ipWithPort.firstMatch(value)?.group(1);
-  return address != null && InternetAddress.tryParse(address) != null
-      ? value
-      : null;
+  return _plainDnsServer(value) ? value : null;
 }
 
 bool isMitmPlainDnsServer(String server) =>
-    server == 'system://' || _ipWithPort.hasMatch(server);
+    server == 'system://' || _plainDnsServer(server);
 
 /// A route Surge, Loon or Stash writes as an address alone reads as a host.
 String? mitmRoute(String route) {
