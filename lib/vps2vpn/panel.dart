@@ -103,9 +103,10 @@ class VpsClientRelease {
 
   static VpsClientRelease? fromJson(Object? json) {
     if (json is! Map) return null;
-    final version = '${json['version'] ?? ''}'
-        .trim()
-        .replaceFirst(RegExp(r'^[vV]+'), '');
+    final version = '${json['version'] ?? ''}'.trim().replaceFirst(
+      RegExp(r'^[vV]+'),
+      '',
+    );
     final raw = json['files'];
     final files = <String, Uri>{
       if (raw is Map)
@@ -668,7 +669,11 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
           groups.first;
       final candidates = smart != null
           ? [smart]
-          : [fallback, for (final g in groups) if (g.name != fallback.name) g];
+          : [
+              fallback,
+              for (final g in groups)
+                if (g.name != fallback.name) g,
+            ];
       final lines = <VpsWatchedLine>[];
       final pins = <String>{
         ...await _pinnedFromProfileFile(profileId, updatedAt, base.host),
@@ -728,3 +733,70 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
   });
   watch.start();
 });
+
+/// Certificate pins for the current subscription's panel host (the leaf
+/// certificate its Hysteria2/TUIC entries pin), empty when there are none.
+final vpsPanelPinsProvider = FutureProvider.autoDispose<Set<String>>((
+  ref,
+) async {
+  final (profileId, url, updatedAt) = ref.watch(
+    currentProfileProvider.select(
+      (p) => (p?.id, p?.url ?? '', p?.lastUpdateDate),
+    ),
+  );
+  final base = vpsApiBase(url);
+  if (base == null) return const {};
+  return _pinnedSha256ForProfile(ref, profileId, updatedAt, base.host);
+});
+
+final _releaseFileName = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$');
+const _maxReleaseBytes = 512 * 1024 * 1024;
+
+/// Downloads a client release from the panel into [dir], always direct and
+/// over HTTPS. A self-signed panel is trusted only through [pinnedSha256],
+/// like /api/me, so the browser's certificate warning never comes up.
+Future<File> vpsDownloadRelease(
+  Uri url,
+  Directory dir, {
+  Set<String> pinnedSha256 = const {},
+}) async {
+  if (!url.isScheme('https')) {
+    throw const HttpException('Release link is not HTTPS');
+  }
+  final name = url.pathSegments.isEmpty ? '' : url.pathSegments.last;
+  if (!_releaseFileName.hasMatch(name)) {
+    throw const HttpException('Unexpected release file name');
+  }
+  final client = _client(base: url, pinnedSha256: pinnedSha256);
+  final part = File('${dir.path}${Platform.pathSeparator}$name.part');
+  try {
+    final req = await client.getUrl(url);
+    req.followRedirects = false;
+    final res = await req.close().timeout(const Duration(seconds: 15));
+    if (res.statusCode != HttpStatus.ok) {
+      await res.drain<void>();
+      throw HttpException('Download failed (HTTP ${res.statusCode})');
+    }
+    final sink = part.openWrite();
+    var size = 0;
+    try {
+      await for (final chunk in res.timeout(const Duration(seconds: 60))) {
+        size += chunk.length;
+        if (size > _maxReleaseBytes) {
+          throw const HttpException('Release file too large');
+        }
+        sink.add(chunk);
+      }
+    } finally {
+      await sink.close();
+    }
+    final out = File('${dir.path}${Platform.pathSeparator}$name');
+    if (await out.exists()) await out.delete();
+    return await part.rename(out.path);
+  } catch (_) {
+    if (await part.exists()) await part.delete();
+    rethrow;
+  } finally {
+    client.close(force: true);
+  }
+}

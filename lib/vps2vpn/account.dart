@@ -347,8 +347,9 @@ class VpsUpdateCard extends ConsumerWidget {
               label: tr(context, '下载', 'Download'),
               filled: true,
               onTap: () => unawaited(
-                _openDownload(
+                _download(
                   context,
+                  ref,
                   release.downloadFor(Platform.operatingSystem),
                 ),
               ),
@@ -359,22 +360,55 @@ class VpsUpdateCard extends ConsumerWidget {
     );
   }
 
+  /// Downloads inside the app with the panel's pinned certificate (a
+  /// self-signed panel would trip the browser), then shows the folder.
+  /// Falls back to the browser when that does not work.
+  Future<void> _download(BuildContext context, WidgetRef ref, Uri url) async {
+    dialogs.showBanner(
+      tr(context, '正在下载新版本…', 'Downloading the new version…'),
+      level: BannerLevel.info,
+    );
+    try {
+      final pins = await ref.read(vpsPanelPinsProvider.future);
+      final dir = Directory(await appPath.downloadDirPath);
+      await dir.create(recursive: true);
+      final file = await vpsDownloadRelease(url, dir, pinnedSha256: pins);
+      if (!context.mounted) return;
+      dialogs.showBanner(
+        tr(
+          context,
+          '已下载到 ${file.path}，关闭 vps2vpn 后运行它即可升级',
+          'Saved to ${file.path}. Quit vps2vpn, then run it to upgrade',
+        ),
+        level: BannerLevel.info,
+      );
+      await launchUrl(Uri.file(dir.path));
+    } catch (_) {
+      if (context.mounted) await _openDownload(context, url);
+    }
+  }
+
   Future<void> _openDownload(BuildContext context, Uri url) async {
     try {
-      final opened = await launchUrl(
-        url,
-        mode: LaunchMode.externalApplication,
-      );
+      final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!opened && context.mounted) {
         dialogs.showBanner(
-          tr(context, '无法打开下载链接，请手动在浏览器中访问', 'Could not open the download link'),
+          tr(
+            context,
+            '无法打开下载链接，请手动在浏览器中访问',
+            'Could not open the download link',
+          ),
           level: BannerLevel.warning,
         );
       }
     } catch (_) {
       if (context.mounted) {
         dialogs.showBanner(
-          tr(context, '无法打开下载链接，请手动在浏览器中访问', 'Could not open the download link'),
+          tr(
+            context,
+            '无法打开下载链接，请手动在浏览器中访问',
+            'Could not open the download link',
+          ),
           level: BannerLevel.warning,
         );
       }

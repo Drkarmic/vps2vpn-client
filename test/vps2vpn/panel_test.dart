@@ -157,7 +157,9 @@ void main() {
 
     tearDown(() => server.close(force: true));
 
-    Uri base() => vpsApiBase('http://127.0.0.1:${server.port}/s/$_tok')!.replace(scheme: 'http'); // plain local test server
+    Uri base() => vpsApiBase(
+      'http://127.0.0.1:${server.port}/s/$_tok',
+    )!.replace(scheme: 'http'); // plain local test server
 
     test('fetches the member', () async {
       final r = await fetchMember(base());
@@ -197,15 +199,46 @@ void main() {
     // The panel answers an unknown token with a bare 404.
     expect(VpsMemberResult.fromResponse(base, 404, '').linkChanged, isTrue);
     expect(
-      VpsMemberResult.fromResponse(base.replace(scheme: 'http'), 404, '')
-          .linkChanged,
+      VpsMemberResult.fromResponse(
+        base.replace(scheme: 'http'),
+        404,
+        '',
+      ).linkChanged,
       isFalse,
     );
     final up = jsonEncode({'service': 'vps2vpn', 'error': 'https_required'});
     expect(
-      VpsMemberResult.fromResponse(base.replace(scheme: 'http'), 426, up)
-          .problem,
+      VpsMemberResult.fromResponse(
+        base.replace(scheme: 'http'),
+        426,
+        up,
+      ).problem,
       VpsPanelProblem.httpsRequired,
     );
   });
+
+  test(
+    'a release is only downloaded over HTTPS with a plain file name',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('v2v-release');
+      addTearDown(() => dir.delete(recursive: true));
+      await expectLater(
+        vpsDownloadRelease(
+          Uri.parse(
+            'http://panel.invalid/s/$_tok/download/vps2vpn-1.0.3-windows-amd64-setup.exe',
+          ),
+          dir,
+        ),
+        throwsA(isA<HttpException>()),
+      );
+      await expectLater(
+        vpsDownloadRelease(
+          Uri.parse('https://panel.invalid/s/$_tok/download/..%5Cevil.exe'),
+          dir,
+        ),
+        throwsA(isA<HttpException>()),
+      );
+      expect(dir.listSync(), isEmpty);
+    },
+  );
 }
