@@ -17,7 +17,7 @@ func TestHandleOutboundIpTakesTheFirstUsableAnswer(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	quick := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.7"))
+		_, _ = w.Write([]byte("ip=8.8.4.4"))
 	})
 
 	result := handleOutboundIp(&OutboundIpParams{
@@ -29,7 +29,7 @@ func TestHandleOutboundIpTakesTheFirstUsableAnswer(t *testing.T) {
 	if result.Error != "" {
 		t.Fatalf("error = %q, want none", result.Error)
 	}
-	if result.Body != "ip=203.0.113.7" {
+	if result.Body != "ip=8.8.4.4" {
 		t.Errorf("body = %q, want the quick source's", result.Body)
 	}
 	if result.Url != quick.URL {
@@ -44,7 +44,7 @@ func TestHandleOutboundIpSkipsAnAnswerWithoutAnAddress(t *testing.T) {
 	})
 	later := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(200 * time.Millisecond)
-		_, _ = w.Write([]byte(`{"ip":"2001:db8::7","country":"JP"}`))
+		_, _ = w.Write([]byte(`{"ip":"2001:4860:4860::8888","country":"JP"}`))
 	})
 
 	result := handleOutboundIp(&OutboundIpParams{
@@ -60,9 +60,9 @@ func TestHandleOutboundIpSkipsAnAnswerWithoutAnAddress(t *testing.T) {
 
 func TestMentionsIpNeedsAWholeAddress(t *testing.T) {
 	cases := map[string]bool{
-		"fl=12f\nip=203.0.113.7\nts=1700000000.1": true,
-		`{"ip":"2001:db8::7","country":"JP"}`:     true,
-		`{"ip":"::ffff:203.0.113.7"}`:             true,
+		"fl=12f\nip=8.8.4.4\nts=1700000000.1": true,
+		`{"ip":"2001:4860:4860::8888","country":"JP"}`:     true,
+		`{"ip":"::ffff:8.8.4.4"}`:             true,
 		`a::after{content:""}`:                    false,
 		`div::before,li::marker{color:#fff}`:      false,
 		`::-webkit-scrollbar{width:0}`:            false,
@@ -90,6 +90,41 @@ func TestMentionsIpSkipsLocalAddresses(t *testing.T) {
 	}
 }
 
+func TestMentionsIpRejectsSpecialUseAddresses(t *testing.T) {
+	for _, ip := range []string{
+		"192.0.0.10", "192.0.2.7", "192.88.99.1", "198.18.0.7",
+		"198.51.100.7", "203.0.113.7", "240.0.0.1",
+		"2001:db8::7", "2001:2::7", "::ffff:203.0.113.7",
+	} {
+		if mentionsIp("ip=" + ip) {
+			t.Errorf("reserved address %s was accepted as a routable exit IP", ip)
+		}
+	}
+	for _, ip := range []string{"1.1.1.1", "8.8.4.4", "2606:4700:4700::1111"} {
+		if !mentionsIp("ip=" + ip) {
+			t.Errorf("public address %s was incorrectly rejected", ip)
+		}
+	}
+}
+
+func TestOutboundIpSkipsDocumentationAddressAndUsesLaterPublicAnswer(t *testing.T) {
+	withProbeProxies(t, "node-a")
+	reserved := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ip=203.0.113.7"))
+	})
+	public := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ip=8.8.8.8"))
+	})
+	result := handleOutboundIp(&OutboundIpParams{
+		ProxyName: "node-a",
+		Urls: []string{reserved.URL, public.URL},
+		Timeout: 4000,
+	})
+	if result.Error != "" || result.Url != public.URL || result.Body != "ip=8.8.8.8" {
+		t.Fatalf("reserved address won probe race: %+v", result)
+	}
+}
+
 func TestHandleOutboundIpCancelsTheLosers(t *testing.T) {
 	withProbeProxies(t, "node-a")
 	var cancelled atomic.Bool
@@ -101,7 +136,7 @@ func TestHandleOutboundIpCancelsTheLosers(t *testing.T) {
 		}
 	})
 	winning := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.9"))
+		_, _ = w.Write([]byte("ip=9.9.9.9"))
 	})
 
 	result := handleOutboundIp(&OutboundIpParams{
@@ -110,7 +145,7 @@ func TestHandleOutboundIpCancelsTheLosers(t *testing.T) {
 		Timeout:   5000,
 	})
 
-	if result.Body != "ip=203.0.113.9" {
+	if result.Body != "ip=9.9.9.9" {
 		t.Fatalf("body = %q, want the winning source's", result.Body)
 	}
 	deadline := time.Now().Add(2 * time.Second)
@@ -134,7 +169,7 @@ func TestHandleOutboundIpCancelsALookupFromAnOlderEpoch(t *testing.T) {
 		}
 	})
 	winning := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.9"))
+		_, _ = w.Write([]byte("ip=9.9.9.9"))
 	})
 
 	stampRoute(1, 0)
@@ -163,10 +198,10 @@ func TestHandleOutboundIpLeavesALookupFromTheSameEpoch(t *testing.T) {
 	slow := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		reached <- struct{}{}
 		time.Sleep(300 * time.Millisecond)
-		_, _ = w.Write([]byte("ip=203.0.113.7"))
+		_, _ = w.Write([]byte("ip=8.8.4.4"))
 	})
 	fast := probeServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ip=203.0.113.9"))
+		_, _ = w.Write([]byte("ip=9.9.9.9"))
 	})
 
 	stampRoute(1, 0)
@@ -177,7 +212,7 @@ func TestHandleOutboundIpLeavesALookupFromTheSameEpoch(t *testing.T) {
 	<-reached
 	handleOutboundIp(&OutboundIpParams{ProxyName: "node-a", Urls: []string{fast.URL}, Timeout: 5000})
 
-	if answer := <-first; answer.Body != "ip=203.0.113.7" {
+	if answer := <-first; answer.Body != "ip=8.8.4.4" {
 		t.Errorf("first lookup = %+v, want it to finish beside the second", answer)
 	}
 }
