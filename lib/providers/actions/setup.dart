@@ -46,6 +46,8 @@ class SetupAction extends _$SetupAction {
   _SetupInputs? _appliedInputs;
   var _lastPushDuration = Duration.zero;
   var _pendingForceApply = false;
+  // The mode the Core runs, from the last config push or update.
+  Mode? _coreMode;
 
   bool get _isRunning => _startTime != null && _startTime!.isBeforeNow;
 
@@ -383,13 +385,36 @@ class SetupAction extends _$SetupAction {
         return;
       }
       final networkSetting = ref.read(networkSettingProvider);
-      await _core.updateConfig(
-        _effectivePatchConfig(patchConfig).toUpdateParams(
-          authentication: networkSetting.authentication.credentials,
-          options: ref.read(coreOptionsProvider),
-        ),
+      final params = _effectivePatchConfig(patchConfig).toUpdateParams(
+        authentication: networkSetting.authentication.credentials,
+        options: ref.read(coreOptionsProvider),
       );
+      await _core.updateConfig(params);
+      await coreModeApplied(params.mode);
     });
+  }
+
+  /// Connections opened under the mode the Core just left keep that mode's
+  /// exit, so a switch to Direct would leave them on the proxy (FlClash
+  /// #2944). They go as on a proxy change: closed, or with the setting off,
+  /// only reset.
+  @visibleForTesting
+  Future<void> coreModeApplied(Mode mode) async {
+    final previous = _coreMode;
+    _coreMode = mode;
+    if (previous == null || previous == mode) return;
+    try {
+      if (ref.read(appSettingProvider).closeConnections) {
+        await _core.closeConnections();
+      } else {
+        await _core.resetConnections();
+      }
+    } catch (error) {
+      commonPrint.log(
+        'mode change ($previous -> $mode) connection reset failed: $error',
+        logLevel: coreFailureLogLevel(error),
+      );
+    }
   }
 
   @protected
@@ -919,6 +944,7 @@ class SetupAction extends _$SetupAction {
         if (system.isAndroid) {
           await preferences.saveAppliedConfigMd5(yamlMd5);
         }
+        await coreModeApplied(realPatchConfig.mode);
         await onUpdated?.call();
       },
       silence: true,

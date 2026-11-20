@@ -2115,7 +2115,9 @@ UTF-8 bytes rather than a `String` so that decoding them stays off the UI isolat
   proxy or `/flclash.pac` URL still set to FlClash's `127.0.0.1:<port>` with nothing listening on that port. In the app
   `SystemProxyQueue` (`lib/common/proxy.dart`) sets the system proxy when the Core starts with it on, and stops it on
   a stop or exit only when this run set it, since a stop also clears a proxy, PAC or auto-detect setting someone else
-  made. Nothing is stored, so a launch leaves alone the proxy a crashed run left.
+  made. Nothing is stored; instead the runner calls `flclash_clear_stale_proxy` on a background thread at every launch
+  that passes the single-instance check, so a proxy a crashed or killed run left on a dead port goes at once rather
+  than at the next connect, while one another running proxy app listens behind stays.
 - `window/` drives the desktop window the Flutter view lives in, one submodule per platform (Win32 and DWM, AppKit
   through `objc2`, GTK through the `-sys` crates). See Desktop Window.
 
