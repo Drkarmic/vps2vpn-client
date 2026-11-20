@@ -1,4 +1,5 @@
 import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/vps2vpn/simple_mode.dart';
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/color.dart';
 
@@ -6,6 +7,8 @@ import 'app_localizations.dart';
 
 extension PageLabelL10n on PageLabel {
   String get label {
+    final simple = simplePageLabel(this);
+    if (simple != null) return simple;
     final appLocalizations = currentAppLocalizations;
     return switch (this) {
       PageLabel.dashboard => appLocalizations.dashboard,
@@ -35,6 +38,8 @@ extension DnsQueryInitiatorL10n on DnsQueryInitiator {
 
 extension ModeL10n on Mode {
   String get label {
+    final simple = simpleModeLabel(this);
+    if (simple != null) return simple;
     final appLocalizations = currentAppLocalizations;
     return switch (this) {
       Mode.rule => appLocalizations.rule,

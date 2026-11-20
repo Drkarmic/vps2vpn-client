@@ -180,7 +180,8 @@ const proxiesListStoreKey = PageStorageKey<String>('proxies_list');
 const toolsStoreKey = PageStorageKey<String>('tools');
 const profilesStoreKey = PageStorageKey<String>('profiles');
 
-const defaultPrimaryColor = 0xFF007AFF;
+// vps2vpn coral.
+const defaultPrimaryColor = 0xFFFF6F61;
 
 const maxLogsLength = 5000;
 const maxRequestsLength = 2000;
@@ -195,6 +196,7 @@ const trafficSampleLength = 30;
 // macOS accent colors.
 const defaultPrimaryColors = [
   defaultPrimaryColor,
+  0xFF007AFF,
   0xFFCB30E0,
   0xFFFF2D55,
   0xFFFF383C,

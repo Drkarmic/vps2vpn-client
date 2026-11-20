@@ -61,7 +61,10 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     final sideWidth = ref.watch(sideWidthProvider);
     final scale = math.max(1.0, MediaQuery.textScalerOf(context).scale(1));
     final size = Size(viewSize.width - sideWidth, viewSize.height) / scale;
-    final editable = !DashboardDensity.of(size).isDesktop;
+    final advancedMode = ref.watch(
+      appSettingProvider.select((state) => state.advancedMode),
+    );
+    final editable = advancedMode && !DashboardDensity.of(size).isDesktop;
     if (!editable) {
       _editing = false;
     }
@@ -72,7 +75,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
       backgroundColor: DashboardColors.of(context).page,
       title: editing
           ? appLocalizations.editDashboard
-          : appLocalizations.dashboard,
+          : PageLabel.dashboard.label,
       actions: [
         if (!editing) const LiveStatusButton(),
         if (editable && !editing)
@@ -101,6 +104,7 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
             scale: scale,
             child: layout.isDesktop
                 ? _DesktopDashboard(
+                    simple: !advancedMode,
                     platform: platform,
                     columns: dashboardColumnsOf(room.width),
                     gap: gap,
@@ -125,11 +129,14 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
 /// the summary cards instead, so no list scrolls inside a page that scrolls.
 class _DesktopDashboard extends StatelessWidget {
   const _DesktopDashboard({
+    this.simple = false,
     required this.platform,
     required this.columns,
     required this.gap,
   });
 
+  /// vps2vpn simple mode: status, speed, routing, switches, subscription.
+  final bool simple;
   final SupportPlatform platform;
   final int columns;
   final double gap;
@@ -186,6 +193,59 @@ class _DesktopDashboard extends StatelessWidget {
           (half, const ConnectionStatsCard()),
           (half, const ProxyGroupsSummaryCard()),
         ]);
+        if (simple) {
+          final wide = columns >= 4;
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: padding,
+            child: Column(
+              spacing: gap,
+              children: [
+                if (wide)
+                  sized(
+                    topHeight,
+                    row(const [
+                      (2, CurrentOutboundCard()),
+                      (1, SpeedCard(direction: TrafficDirection.upload)),
+                      (1, SpeedCard(direction: TrafficDirection.download)),
+                    ]),
+                  )
+                else ...[
+                  sized(
+                    topHeight,
+                    const RepaintBoundary(child: CurrentOutboundCard()),
+                  ),
+                  sized(
+                    topHeight,
+                    row(const [
+                      (1, SpeedCard(direction: TrafficDirection.upload)),
+                      (1, SpeedCard(direction: TrafficDirection.download)),
+                    ]),
+                  ),
+                ],
+                if (wide)
+                  sized(
+                    controlHeight,
+                    row([(2, const OutboundModeBar()), ...switches]),
+                  )
+                else ...[
+                  sized(
+                    controlHeight,
+                    const RepaintBoundary(child: OutboundModeBar()),
+                  ),
+                  sized(controlHeight, row(switches)),
+                ],
+                sized(
+                  middleHeight,
+                  row([
+                    (half, const ProfilesCard()),
+                    (half, ServiceStatusCard(columns: wide ? 2 : 1)),
+                  ]),
+                ),
+              ],
+            ),
+          );
+        }
         if (columns == 2) {
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),

@@ -298,10 +298,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sendFromPhonePermissionDenied =>
-      'Receiving a link from your phone needs the Nearby devices permission, which lets FlClash reach the local network. Turn it on in the app\'s settings.';
+      'Receiving a link from your phone needs the Nearby devices permission, which lets vps2vpn reach the local network. Turn it on in the app\'s settings.';
 
   @override
-  String get sendFromPhonePageTitle => 'Send a link to FlClash';
+  String get sendFromPhonePageTitle => 'Send a link to vps2vpn';
 
   @override
   String get sendFromPhonePageHint => 'Subscription link or proxy share link';
@@ -318,7 +318,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shareQrcodeTip =>
-      'Scan with FlClash on another device to import this profile.';
+      'Scan with vps2vpn on another device to import this profile.';
 
   @override
   String get qrcodeTooLongTip =>
@@ -942,7 +942,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get disclaimerDesc =>
-      'Before using FlClash (\"the Software\"), please read this statement carefully and make sure you understand it. Tapping \"Agree\" means you have read and understood what follows. If you do not want to continue, tap \"Exit\".';
+      'Before using vps2vpn (\"the Software\"), please read this statement carefully and make sure you understand it. Tapping \"Agree\" means you have read and understood what follows. If you do not want to continue, tap \"Exit\".';
 
   @override
   String get disclaimerSoftwareTitle => 'Nature of the software';
@@ -1933,7 +1933,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get helperCorruptTip =>
-      'Helper service unavailable; TUN mode cannot be enabled. Reinstall FlClash to restore it.';
+      'Helper service unavailable; TUN mode cannot be enabled. Reinstall vps2vpn to restore it.';
 
   @override
   String get tunAuthorizationFailed =>
@@ -1944,12 +1944,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String coreBlockedByPolicyTip(Object code) {
-    return 'Windows refused to run FlClashCore.exe (error $code). An app control policy such as Smart App Control or AppLocker blocks unsigned programs; allow FlClash in that policy or turn it off, then try again.';
+    return 'Windows refused to run vps2vpnCore.exe (error $code). An app control policy such as Smart App Control or AppLocker blocks unsigned programs; allow vps2vpn in that policy or turn it off, then try again.';
   }
 
   @override
   String get coreBlockedBySmartAppControlTip =>
-      'Windows Smart App Control blocked FlClashCore.exe because it is not signed. Open Windows Security → App & browser control → Smart App Control settings, choose Off, then start FlClash again. Smart App Control cannot be turned back on without reinstalling Windows.';
+      'Windows Smart App Control blocked vps2vpnCore.exe because it is not signed. Open Windows Security → App & browser control → Smart App Control settings, choose Off, then start vps2vpn again. Smart App Control cannot be turned back on without reinstalling Windows.';
 
   @override
   String get hideFromList => 'Hide from list';
@@ -2768,7 +2768,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get initFailedTip =>
-      'FlClash ran into an error while starting and can\'t continue. Copy the details to report the problem. If it keeps happening, clearing the data usually lets the app start again.';
+      'vps2vpn ran into an error while starting and can\'t continue. Copy the details to report the problem. If it keeps happening, clearing the data usually lets the app start again.';
 
   @override
   String get errorDetails => 'Error details';
@@ -3373,7 +3373,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mitmEnableTip =>
-      'FlClash will be able to read everything sent to the decrypted hosts, cookies and passwords included. Turn this on only for hosts you mean to rewrite.';
+      'vps2vpn will be able to read everything sent to the decrypted hosts, cookies and passwords included. Turn this on only for hosts you mean to rewrite.';
 
   @override
   String get generateCertificate => 'Generate certificate';
@@ -3383,7 +3383,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get regenerateCertificateTip =>
-      'The new certificate replaces the current one, which FlClash takes out of this device\'s trusted roots where it can. Every other device that trusts the current one has to install the new one.';
+      'The new certificate replaces the current one, which vps2vpn takes out of this device\'s trusted roots where it can. Every other device that trusts the current one has to install the new one.';
 
   @override
   String get exportCertificate => 'Export certificate';
@@ -3496,7 +3496,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String mitmOldSystemCertificateLeftTip(Object name) {
-    return 'The old certificate, $name, is still among the system\'s trusted CAs. Allow FlClash root access in your root manager and regenerate, or remove the FlClash MITM CA module there and restart.';
+    return 'The old certificate, $name, is still among the system\'s trusted CAs. Allow vps2vpn root access in your root manager and regenerate, or remove the FlClash MITM CA module there and restart.';
   }
 
   @override
@@ -3522,14 +3522,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mitmRemoveSystemCertificateTip =>
-      'The FlClash MITM CA root module added the certificate to the system. Allow FlClash root access in your root manager and try again, or remove the module there and restart.';
+      'The FlClash MITM CA root module added the certificate to the system. Allow vps2vpn root access in your root manager and try again, or remove the module there and restart.';
 
   @override
   String get mitmDecryptHost => 'Decrypt this host';
 
   @override
   String mitmDecryptHostTip(Object host) {
-    return 'Add $host to the hostname list? FlClash can then read what is sent to it, cookies and passwords included.';
+    return 'Add $host to the hostname list? vps2vpn can then read what is sent to it, cookies and passwords included.';
   }
 
   @override
@@ -3612,7 +3612,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mitmNetworkRisk =>
-      'When the config is generated, it changes the network settings below, ahead of what you set for the same ones in FlClash. Turning the module off or deleting it undoes this.';
+      'When the config is generated, it changes the network settings below, ahead of what you set for the same ones in vps2vpn. Turning the module off or deleting it undoes this.';
 
   @override
   String mitmSkipVerifyRisk(Object hosts) {
@@ -3621,7 +3621,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String mitmClientSourceRisk(Object addresses) {
-    return 'It decrypts only for these clients: $addresses. With TUN on, this device\'s apps reach FlClash from the TUN\'s address, so they may be left out.';
+    return 'It decrypts only for these clients: $addresses. With TUN on, this device\'s apps reach vps2vpn from the TUN\'s address, so they may be left out.';
   }
 
   @override
@@ -3678,7 +3678,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mitmSkipDeviceRule =>
-      'This rule needs device or network details FlClash cannot read';
+      'This rule needs device or network details vps2vpn cannot read';
 
   @override
   String get mitmSkipRequirement =>
@@ -3686,7 +3686,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mitmSkipManagedCa =>
-      'FlClash manages the CA certificate; a module cannot change it';
+      'vps2vpn manages the CA certificate; a module cannot change it';
 
   @override
   String get mitmSkipProxies =>
@@ -3694,11 +3694,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mitmSkipAppOnly =>
-      'A feature of the app this was written for that FlClash does not have';
+      'A feature of the app this was written for that vps2vpn does not have';
 
   @override
   String get mitmSkipReflect =>
-      'FlClash cannot send packets back to their sender';
+      'vps2vpn cannot send packets back to their sender';
 
   @override
   String get mitmSkipConditional => 'Conditional rewrites are not supported';
@@ -3856,7 +3856,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateRestartTip =>
-      'FlClash closes to install the update and opens again when it is done.';
+      'vps2vpn closes to install the update and opens again when it is done.';
 
   @override
   String get updateDownloadFailed => 'The update could not be downloaded.';
@@ -3956,4 +3956,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get vpnServiceStartFailed => 'The VPN service could not start.';
+
+  @override
+  String get vHome => 'Home';
+
+  @override
+  String get vServers => 'Servers';
+
+  @override
+  String get vMine => 'Me';
+
+  @override
+  String get vSmartRouting => 'Smart routing';
+
+  @override
+  String get vProxyAll => 'Proxy everything';
+
+  @override
+  String get vAdvancedMode => 'Advanced mode';
+
+  @override
+  String get vAdvancedModeDesc => 'Show every page and expert setting';
+
+  @override
+  String get vSubscriptions => 'Subscriptions';
+
+  @override
+  String get vSettings => 'Settings';
+
+  @override
+  String get vRouting => 'Routing';
 }

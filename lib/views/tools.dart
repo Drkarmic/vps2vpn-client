@@ -9,6 +9,7 @@ import 'package:fl_clash/views/access.dart';
 import 'package:fl_clash/views/backup_and_restore.dart';
 import 'package:fl_clash/views/config/general.dart';
 import 'package:fl_clash/views/hotkey.dart';
+import 'package:fl_clash/vps2vpn/simple_mode.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,6 +65,7 @@ class _ToolViewState extends ConsumerState<ToolsView> {
     return generateSection(
       title: context.appLocalizations.settings,
       items: [
+        const AdvancedModeItem(),
         const _LocaleItem(),
         const _ThemeItem(),
         if (system.isDesktop) const _HotkeyItem(),

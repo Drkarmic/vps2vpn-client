@@ -280,6 +280,8 @@ abstract class AppSettingProps with _$AppSettingProps {
     @Default(true) bool minimizeOnExit,
     @Default(false) bool hidden,
     @Default(false) bool developerMode,
+    // vps2vpn: false = simple mode (few pages, plain words); true = every FlClash page.
+    @Default(false) bool advancedMode,
     @Default(RestoreStrategy.compatible) RestoreStrategy restoreStrategy,
     @Default(true) bool showTrayTitle,
     @Default(true) bool monochromeTrayIcon,

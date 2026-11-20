@@ -3,6 +3,8 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/ui/icons/app_glyphs.dart';
 import 'package:fl_clash/views/views.dart';
+import 'package:fl_clash/vps2vpn/home.dart';
+import 'package:fl_clash/vps2vpn/simple_mode.dart';
 
 class Navigation implements NavigationPort {
   static Navigation? _instance;
@@ -11,7 +13,15 @@ class Navigation implements NavigationPort {
   List<NavigationItem> getItems({
     bool openLogs = false,
     bool hasProxies = false,
+    bool advancedMode = false,
   }) {
+    if (!advancedMode) {
+      return simpleNavigationItems(
+        hasProxies: hasProxies,
+        dashboard: (_) => const VpsHomeView(),
+        proxies: (_) => const ProxiesView(),
+      );
+    }
     return [
       NavigationItem(
         glyph: AppGlyphs.dashboard,

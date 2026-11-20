@@ -3,6 +3,10 @@ part of '../state.dart';
 @riverpod
 NavigationItemsState navigationItemsState(Ref ref) {
   final openLogs = ref.watch(appSettingProvider).openLogs;
+  final advancedMode = ref.watch(
+    appSettingProvider.select((state) => state.advancedMode),
+  );
+  vps2vpnAdvancedMode = advancedMode;
   final hasProfiles = ref.watch(
     profilesProvider.select((state) => state.isNotEmpty),
   );
@@ -15,6 +19,7 @@ NavigationItemsState navigationItemsState(Ref ref) {
         navigationPort?.getItems(
           openLogs: openLogs,
           hasProxies: !isInit ? hasProfiles : hasProxies,
+          advancedMode: advancedMode,
         ) ??
         const [],
   );
@@ -78,7 +83,14 @@ DashboardState dashboardState(Ref ref) {
   final dashboardWidgets = ref.watch(
     appSettingProvider.select((state) => state.dashboardWidgets),
   );
-  return DashboardState(dashboardWidgets: dashboardWidgets);
+  final advancedMode = ref.watch(
+    appSettingProvider.select((state) => state.advancedMode),
+  );
+  return DashboardState(
+    dashboardWidgets: advancedMode
+        ? dashboardWidgets
+        : simpleDashboardWidgets,
+  );
 }
 
 @riverpod

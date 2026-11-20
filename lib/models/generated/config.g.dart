@@ -49,6 +49,7 @@ _AppSettingProps _$AppSettingPropsFromJson(
   minimizeOnExit: json['minimizeOnExit'] as bool? ?? true,
   hidden: json['hidden'] as bool? ?? false,
   developerMode: json['developerMode'] as bool? ?? false,
+  advancedMode: json['advancedMode'] as bool? ?? false,
   restoreStrategy:
       $enumDecodeNullable(_$RestoreStrategyEnumMap, json['restoreStrategy']) ??
       RestoreStrategy.compatible,
@@ -120,6 +121,7 @@ Map<String, dynamic> _$AppSettingPropsToJson(_AppSettingProps instance) =>
       'minimizeOnExit': instance.minimizeOnExit,
       'hidden': instance.hidden,
       'developerMode': instance.developerMode,
+      'advancedMode': instance.advancedMode,
       'restoreStrategy': _$RestoreStrategyEnumMap[instance.restoreStrategy]!,
       'showTrayTitle': instance.showTrayTitle,
       'monochromeTrayIcon': instance.monochromeTrayIcon,

@@ -3046,7 +3046,7 @@ final class NavigationItemsStateProvider
 }
 
 String _$navigationItemsStateHash() =>
-    r'3c633d4f3e5f2e80b7cfd166a46397f9a207bb1e';
+    r'ae91d50628ce11cdfb3642f5938d694e0da2f0f8';
 
 @ProviderFor(currentNavigationItemsState)
 final currentNavigationItemsStateProvider =
@@ -3219,7 +3219,7 @@ final class DashboardStateProvider
   }
 }
 
-String _$dashboardStateHash() => r'33838f85f2b6a0ab601891aa2f26adc8870302b6';
+String _$dashboardStateHash() => r'98e3ce6813457714e20373cb5d403f4cc95c53db';
 
 @ProviderFor(moreToolsSelectorState)
 final moreToolsSelectorStateProvider = MoreToolsSelectorStateProvider._();
