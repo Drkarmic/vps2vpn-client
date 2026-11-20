@@ -1,8 +1,10 @@
 import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../helpers/test_app.dart';
 
 Future<void> _pump(
   WidgetTester tester,
@@ -10,16 +12,23 @@ Future<void> _pump(
   VpsMemberResult? result,
 ) async {
   await tester.pumpWidget(
-    ProviderScope(
+    TestApp(
+      // A fresh scope per pump, so a new override takes effect.
+      key: UniqueKey(),
+      includeNavigatorKey: false,
+      locale: const Locale('en'),
       overrides: [vpsMemberProvider.overrideWith((ref) async => result)],
-      child: MaterialApp(
-        locale: const Locale('en'),
-        home: Scaffold(body: SingleChildScrollView(child: child)),
-      ),
+      child: SingleChildScrollView(child: child),
     ),
   );
   await tester.pumpAndSettle();
 }
+
+/// Text inside the card under test, not the app around it.
+Finder _texts() => find.descendant(
+  of: find.byType(SingleChildScrollView),
+  matching: find.byType(Text),
+);
 
 const _gb = 1024 * 1024 * 1024;
 
@@ -28,9 +37,9 @@ void main() {
     tester,
   ) async {
     await _pump(tester, const VpsAccountCard(), null);
-    expect(find.byType(Text), findsNothing);
+    expect(_texts(), findsNothing);
     await _pump(tester, const VpsServerAiCard(), null);
-    expect(find.byType(Text), findsNothing);
+    expect(_texts(), findsNothing);
   });
 
   testWidgets('shows usage against the quota and the expiry', (tester) async {
@@ -126,6 +135,6 @@ void main() {
       const VpsUpdateCard(currentVersion: '1.2.0'),
       withClient('1.1.0'),
     );
-    expect(find.byType(Text), findsNothing);
+    expect(_texts(), findsNothing);
   });
 }
