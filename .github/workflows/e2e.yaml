@@ -9,7 +9,7 @@ on:
       tag:
         description: Release tag that carries the setup .exe
         required: true
-        default: v1.0.0
+        default: v1.0.1
 
 jobs:
   e2e:
