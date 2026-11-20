@@ -5,6 +5,7 @@ import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/providers/routed_probe.dart';
 import 'package:fl_clash/providers/service_status.dart';
+import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/home.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
@@ -255,7 +256,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  ClipRRect(
+                  ClipRSuperellipse(
                     borderRadius: BorderRadius.circular(99),
                     child: SizedBox(
                       height: 8,
@@ -311,6 +312,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
               ],
             ),
           ),
+          if (name == 'AI') const VpsServerAiCard(),
         ],
       ],
     );
@@ -354,10 +356,12 @@ class _ServiceLine extends StatelessWidget {
             width: 34,
             height: 34,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: p.track,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: p.line),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(9),
+                side: BorderSide(color: p.line),
+              ),
             ),
             child: serviceLogo(target, size: 16, color: p.text),
           ),

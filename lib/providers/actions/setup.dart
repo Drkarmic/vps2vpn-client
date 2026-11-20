@@ -209,6 +209,7 @@ class SetupAction extends _$SetupAction {
     // system proxy. A resume after a core restart is our own run continuing.
     if (!request.resume) {
       await globalState.safeRun(() => vpsBeforeConnect(ref), silence: true);
+      vpsStartLineWatch(ref);
     }
     if (request.initialize) {
       var applied = false;

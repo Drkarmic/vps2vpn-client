@@ -205,11 +205,13 @@ class _SideStatus extends ConsumerWidget {
       onTap: () => vpsTab.value = vpsTabHome,
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: p.card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: p.line),
-          boxShadow: p.raise,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: p.line),
+          ),
+          shadows: p.raise,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -317,11 +319,13 @@ class _NavItem extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: selected
               ? (p.dark ? const Color(0x0DFFFFFF) : const Color(0xFFEEF0F3))
               : const Color(0x00000000),
-          borderRadius: BorderRadius.circular(9),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(9),
+          ),
         ),
         child: Row(
           children: [
@@ -358,11 +362,13 @@ class _BottomNav extends StatelessWidget {
     return Container(
       height: 66,
       padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: p.dark ? const Color(0xE6181A2B) : const Color(0xF2FFFFFF),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: p.line),
-        boxShadow: [
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: p.line),
+        ),
+        shadows: [
           BoxShadow(
             color: const Color(0xFF000000).withValues(alpha: 0.18),
             blurRadius: 24,
@@ -378,13 +384,15 @@ class _BottomNav extends StatelessWidget {
                 onTap: () => vpsTab.value = i,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: i == tab
                         ? (p.dark
                               ? const Color(0x14FFFFFF)
                               : const Color(0xFFEEF0F3))
                         : const Color(0x00000000),
-                    borderRadius: BorderRadius.circular(18),
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,

@@ -50,3 +50,7 @@ const simpleDashboardWidgets = [
   DashboardWidget.networkTakeover,
   DashboardWidget.profiles,
 ];
+
+/// The core's smart groups (core/vps2vpn_smart.go) under plain names.
+const vpsSmartGroupName = '⚡ 智能线路';
+const vpsAIGroupName = '🤖 AI 专线';

@@ -7,6 +7,7 @@ import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/services.dart';
@@ -108,6 +109,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                   ),
                 ),
         ),
+        const VpsAccountCard(),
         for (final profile in profiles)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
@@ -521,10 +523,12 @@ class _ChoiceRow extends StatelessWidget {
             width: 34,
             height: 34,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: p.track,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: p.line),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(9),
+                side: BorderSide(color: p.line),
+              ),
             ),
             child: VpsIconView(icon, size: 17, color: p.soft),
           ),
@@ -584,10 +588,12 @@ class _ProfileCard extends ConsumerWidget {
                 width: 34,
                 height: 34,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: p.track,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: p.line),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: BorderRadius.circular(9),
+                    side: BorderSide(color: p.line),
+                  ),
                 ),
                 child: VpsIconView(
                   VpsIcon.servers,
@@ -642,7 +648,7 @@ class _ProfileCard extends ConsumerWidget {
           if (total > 0 || expire != null) ...[
             const SizedBox(height: 14),
             if (total > 0)
-              ClipRRect(
+              ClipRSuperellipse(
                 borderRadius: BorderRadius.circular(99),
                 child: SizedBox(
                   height: 6,

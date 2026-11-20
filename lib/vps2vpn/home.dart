@@ -12,6 +12,7 @@ import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/providers/routed_probe.dart';
 import 'package:fl_clash/providers/service_status.dart';
+import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
@@ -19,6 +20,9 @@ import 'package:fl_clash/vps2vpn/takeover_notice.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+export 'package:fl_clash/vps2vpn/flags.dart'
+    show vpsSmartGroupName, vpsAIGroupName;
 
 const _countryZh = {
   'SG': '新加坡',
@@ -49,10 +53,6 @@ String countryName(BuildContext context, String code) {
   final c = code.toUpperCase();
   return vpsZh(context) ? (_countryZh[c] ?? c) : c;
 }
-
-/// The core's smart groups (core/vps2vpn_smart.go) under plain names.
-const vpsSmartGroupName = '⚡ 智能线路';
-const vpsAIGroupName = '🤖 AI 专线';
 
 String friendlyLineName(BuildContext context, String name) => switch (name) {
   vpsSmartGroupName => tr(context, '智能线路', 'Smart line'),
@@ -417,11 +417,13 @@ class _HeroState extends ConsumerState<_Hero> {
         );
         return Container(
           clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: p.card,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: p.line),
-            boxShadow: p.raise,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: p.line),
+            ),
+            shadows: p.raise,
           ),
           child: Stack(
             children: [
@@ -866,7 +868,7 @@ class _Stats extends ConsumerWidget {
               ),
             );
           }
-          return ClipRRect(
+          return ClipRSuperellipse(
             borderRadius: BorderRadius.circular(16),
             child: Column(children: rows),
           );
@@ -1076,10 +1078,12 @@ class _AiStripState extends ConsumerState<_AiStrip> {
               Container(
                 width: 38,
                 height: 38,
-                decoration: BoxDecoration(
+                decoration: ShapeDecoration(
                   color: p.track,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: p.line),
+                  shape: RoundedSuperellipseBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: p.line),
+                  ),
                 ),
                 alignment: Alignment.center,
                 child: VpsIconView(VpsIcon.sparkle, size: 18, color: p.accent),

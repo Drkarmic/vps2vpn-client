@@ -178,13 +178,15 @@ class VpsCard extends StatelessWidget {
     final p = VpsPalette.of(context);
     final box = Container(
       padding: padding,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: highlight ? p.cardHi : p.card,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(
-          color: highlight ? p.accent.withValues(alpha: 0.5) : p.line,
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(radius),
+          side: BorderSide(
+            color: highlight ? p.accent.withValues(alpha: 0.5) : p.line,
+          ),
         ),
-        boxShadow: p.raise,
+        shadows: p.raise,
       ),
       child: child,
     );
@@ -257,11 +259,13 @@ class VpsButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: filled ? p.accent : p.card,
-          borderRadius: BorderRadius.circular(10),
-          border: filled ? null : Border.all(color: p.line),
-          boxShadow: filled ? const [] : p.raise,
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: filled ? BorderSide.none : BorderSide(color: p.line),
+          ),
+          shadows: filled ? const [] : p.raise,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -299,11 +303,13 @@ class VpsSwitch extends StatelessWidget {
         width: 40,
         height: 24,
         padding: const EdgeInsets.all(2.5),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: value
               ? p.accent
               : (p.dark ? const Color(0xFF2A2D35) : const Color(0xFFDCDFE4)),
-          borderRadius: BorderRadius.circular(99),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(99),
+          ),
         ),
         child: AnimatedAlign(
           duration: const Duration(milliseconds: 220),
@@ -355,10 +361,12 @@ class VpsSegmented<T> extends StatelessWidget {
         return Container(
           height: 40,
           padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             color: p.track,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: p.line),
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: p.line),
+            ),
           ),
           child: Stack(
             children: [
@@ -370,13 +378,15 @@ class VpsSegmented<T> extends StatelessWidget {
                 bottom: 0,
                 width: w,
                 child: Container(
-                  decoration: BoxDecoration(
+                  decoration: ShapeDecoration(
                     color: p.thumb,
-                    borderRadius: BorderRadius.circular(7),
-                    border: p.dark
-                        ? Border.all(color: const Color(0x0FFFFFFF))
-                        : null,
-                    boxShadow: p.dark
+                    shape: RoundedSuperellipseBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      side: p.dark
+                          ? const BorderSide(color: Color(0x0FFFFFFF))
+                          : BorderSide.none,
+                    ),
+                    shadows: p.dark
                         ? const [
                             BoxShadow(
                               color: Color(0x66000000),
@@ -442,10 +452,12 @@ class VpsChip extends StatelessWidget {
     final c = color ?? p.accent;
     return Container(
       padding: const EdgeInsets.fromLTRB(9, 4, 11, 4),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: p.track,
-        borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: p.line),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(99),
+          side: BorderSide(color: p.line),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -479,10 +491,12 @@ class VpsLogo extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         gradient: p.accentGradient,
-        borderRadius: BorderRadius.circular(size * 0.28),
-        boxShadow: [
+        shape: RoundedSuperellipseBorder(
+          borderRadius: BorderRadius.circular(size * 0.28),
+        ),
+        shadows: [
           BoxShadow(
             color: vpsCoral.withValues(alpha: 0.22),
             blurRadius: size * 0.35,
@@ -577,8 +591,14 @@ class _IconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
     Offset o(double x, double y) => Offset(x * u, y * u);
-    RRect rr(double l, double t, double r, double b, double rad) =>
-        RRect.fromLTRBR(l * u, t * u, r * u, b * u, Radius.circular(rad * u));
+    RSuperellipse rr(double l, double t, double r, double b, double rad) =>
+        RSuperellipse.fromLTRBR(
+          l * u,
+          t * u,
+          r * u,
+          b * u,
+          Radius.circular(rad * u),
+        );
     Path poly(List<List<double>> pts, {bool close = false}) {
       final path = Path()..moveTo(pts[0][0] * u, pts[0][1] * u);
       for (final pt in pts.skip(1)) {
@@ -611,8 +631,8 @@ class _IconPainter extends CustomPainter {
         canvas.drawLine(o(14, 20), o(14, 15), p);
         canvas.drawLine(o(10, 15), o(14, 15), p);
       case VpsIcon.servers:
-        canvas.drawRRect(rr(4, 4, 20, 10.5, 2.5), p);
-        canvas.drawRRect(rr(4, 13.5, 20, 20, 2.5), p);
+        canvas.drawRSuperellipse(rr(4, 4, 20, 10.5, 2.5), p);
+        canvas.drawRSuperellipse(rr(4, 13.5, 20, 20, 2.5), p);
         canvas.drawCircle(o(7.5, 7.25), 0.9 * u, p..style = PaintingStyle.fill);
         canvas.drawCircle(o(7.5, 16.75), 0.9 * u, p);
         p.style = PaintingStyle.stroke;
@@ -692,8 +712,8 @@ class _IconPainter extends CustomPainter {
           p,
         );
       case VpsIcon.paste:
-        canvas.drawRRect(rr(5, 5, 19, 21, 2.5), p);
-        canvas.drawRRect(rr(9, 3, 15, 7, 1.5), p);
+        canvas.drawRSuperellipse(rr(5, 5, 19, 21, 2.5), p);
+        canvas.drawRSuperellipse(rr(9, 3, 15, 7, 1.5), p);
         canvas.drawLine(o(9, 12), o(15, 12), p);
         canvas.drawLine(o(9, 16), o(13, 16), p);
       case VpsIcon.file:
@@ -906,10 +926,12 @@ class VpsRow extends StatelessWidget {
           Container(
             width: 34,
             height: 34,
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: p.track,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: p.line),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(9),
+                side: BorderSide(color: p.line),
+              ),
             ),
             alignment: Alignment.center,
             child: VpsIconView(icon, size: 17, color: p.soft),
@@ -966,11 +988,13 @@ class VpsInfoTip extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 320),
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: p.dark ? const Color(0xF2232536) : const Color(0xF7FFFFFF),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: p.line),
-              boxShadow: [
+              shape: RoundedSuperellipseBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: p.line),
+              ),
+              shadows: [
                 BoxShadow(
                   color: const Color(
                     0xFF000000,

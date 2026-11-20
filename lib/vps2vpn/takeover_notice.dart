@@ -101,10 +101,12 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
           child: VpsCard(
             padding: const EdgeInsets.fromLTRB(18, 14, 12, 14),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: zh.length == 1
+                  ? CrossAxisAlignment.center
+                  : CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(top: 5),
+                  padding: EdgeInsets.only(top: zh.length == 1 ? 0 : 5),
                   child: Container(
                     width: 8,
                     height: 8,

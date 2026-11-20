@@ -1,0 +1,301 @@
+// vps2vpn member API: the panel the subscription comes from also answers
+//   GET  <sub>/api/me      account, usage, expiry, server-side AI check
+//   POST <sub>/api/report  "this line keeps failing / works again"
+// where <sub> is the imported link https://host:port/s/<token> without its
+// query. The token in the path is the only credential.
+
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/core/controller.dart';
+import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/vps2vpn/flags.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+final _token = RegExp(r'^[A-Za-z0-9_-]{16,64}$');
+
+/// `<sub>/api/` for a vps2vpn subscription link, else null.
+Uri? vpsApiBase(String subUrl) {
+  final uri = Uri.tryParse(subUrl.trim());
+  if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+    return null;
+  }
+  final segs = uri.pathSegments.where((s) => s.isNotEmpty).toList();
+  if (segs.length != 2 || segs[0] != 's' || !_token.hasMatch(segs[1])) {
+    return null;
+  }
+  return Uri(
+    scheme: uri.scheme,
+    host: uri.host,
+    port: uri.hasPort ? uri.port : null,
+    pathSegments: ['s', segs[1], 'api', ''],
+  );
+}
+
+/// What the server itself sees when it opens the AI sites.
+class VpsAiStatus {
+  const VpsAiStatus({
+    required this.summary,
+    this.place,
+    this.at,
+    this.sites = const {},
+  });
+
+  final String summary;
+  final String? place;
+  final DateTime? at;
+
+  /// claude, claude_api, chatgpt, gemini → ok | blocked | unreachable | unknown
+  final Map<String, String> sites;
+
+  static VpsAiStatus? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final at = json['at'];
+    final sites = json['sites'];
+    return VpsAiStatus(
+      summary: '${json['summary'] ?? ''}',
+      place: json['place'] is String ? json['place'] as String : null,
+      at: at is num
+          ? DateTime.fromMillisecondsSinceEpoch(at.toInt() * 1000)
+          : null,
+      sites: sites is Map
+          ? {for (final e in sites.entries) '${e.key}': '${e.value}'}
+          : const {},
+    );
+  }
+}
+
+class VpsMember {
+  const VpsMember({
+    required this.name,
+    required this.enabled,
+    this.disabledReason,
+    this.usedUp = 0,
+    this.usedDown = 0,
+    this.quotaGb = 0,
+    this.expireAt,
+    this.ai,
+  });
+
+  final String name;
+  final bool enabled;
+
+  /// quota | expired | manual | devices; null when enabled
+  final String? disabledReason;
+  final int usedUp;
+  final int usedDown;
+
+  /// What applies after sharing; 0 = unlimited.
+  final double quotaGb;
+  final DateTime? expireAt;
+  final VpsAiStatus? ai;
+
+  int get used => usedUp + usedDown;
+
+  static int _int(Object? v) => v is num ? v.toInt() : 0;
+
+  factory VpsMember.fromJson(Map<String, Object?> json) {
+    final expire = _int(json['expire_at']);
+    final quota = json['quota_eff'] ?? json['quota_gb'];
+    return VpsMember(
+      name: '${json['name'] ?? ''}',
+      enabled: json['enabled'] != false,
+      disabledReason: switch (json['disabled_reason']) {
+        final String r when r.isNotEmpty => r,
+        _ => null,
+      },
+      usedUp: _int(json['used_up']),
+      usedDown: _int(json['used_down']),
+      quotaGb: quota is num ? quota.toDouble() : 0,
+      expireAt: expire > 0
+          ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
+          : null,
+      ai: VpsAiStatus.fromJson(json['ai']),
+    );
+  }
+}
+
+/// [member] when the panel answered; [linkChanged] when it said the token
+/// is unknown (rotated or removed), so the user has to import the new link.
+class VpsMemberResult {
+  const VpsMemberResult({this.member, this.linkChanged = false});
+
+  final VpsMember? member;
+  final bool linkChanged;
+}
+
+HttpClient _client({int? proxyPort}) {
+  final c = HttpClient()
+    ..connectionTimeout = const Duration(seconds: 6)
+    ..idleTimeout = const Duration(seconds: 2);
+  c.findProxy = (_) =>
+      proxyPort == null ? 'DIRECT' : 'PROXY 127.0.0.1:$proxyPort';
+  return c;
+}
+
+Future<(int, String)> _send(
+  Uri url, {
+  Map<String, Object?>? body,
+  int? proxyPort,
+}) async {
+  final client = _client(proxyPort: proxyPort);
+  try {
+    final req = body == null
+        ? await client.getUrl(url)
+        : await client.postUrl(url);
+    if (body != null) {
+      req.headers
+        ..set('X-V2V', '1')
+        ..contentType = ContentType.json;
+      req.write(jsonEncode(body));
+    }
+    final res = await req.close().timeout(const Duration(seconds: 10));
+    final text = await res
+        .transform(utf8.decoder)
+        .join()
+        .timeout(const Duration(seconds: 10));
+    return (res.statusCode, text);
+  } finally {
+    client.close(force: true);
+  }
+}
+
+/// Direct first, like the subscription fetch; through our own proxy when
+/// direct fails and [proxyPort] is given.
+Future<VpsMemberResult?> fetchMember(Uri base, {int? proxyPort}) async {
+  for (final port in [null, ?proxyPort]) {
+    try {
+      final (code, text) = await _send(base.resolve('me'), proxyPort: port);
+      if (code == HttpStatus.notFound) {
+        return const VpsMemberResult(linkChanged: true);
+      }
+      if (code != HttpStatus.ok) continue;
+      final json = jsonDecode(text);
+      if (json is! Map<String, Object?>) continue;
+      return VpsMemberResult(member: VpsMember.fromJson(json));
+    } catch (_) {}
+  }
+  return null;
+}
+
+/// Always direct: the line being reported is the one that is down.
+Future<bool> reportLine(
+  Uri base, {
+  required String line,
+  required bool ok,
+  required String host,
+}) async {
+  try {
+    final (code, _) = await _send(
+      base.resolve('report'),
+      body: {'line': line, 'ok': ok, 'host': host},
+    );
+    return code == HttpStatus.ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// reality | hy2 | tuic for a node definition, else null.
+String? vpsLineKind(Map<String, dynamic> def) {
+  return switch ('${def['type']}'.toLowerCase()) {
+    'hysteria2' => 'hy2',
+    'tuic' => 'tuic',
+    'vless' when def['reality-opts'] != null => 'reality',
+    _ => null,
+  };
+}
+
+/// One report per change: [threshold] failures in a row → down; the first
+/// success after that → up again. Blips in between say nothing.
+class VpsLineHealth {
+  VpsLineHealth({this.threshold = 3});
+
+  final int threshold;
+  final _fails = <String, int>{};
+  final _down = <String>{};
+
+  /// false = report down, true = report up, null = nothing to say.
+  bool? record(String key, bool ok) {
+    if (ok) {
+      _fails.remove(key);
+      return _down.remove(key) ? true : null;
+    }
+    final n = (_fails[key] ?? 0) + 1;
+    _fails[key] = n;
+    if (n >= threshold && _down.add(key)) return false;
+    return null;
+  }
+}
+
+/// The signed-in member for the current subscription, or null when it is
+/// not a vps2vpn link (or the panel did not answer).
+final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
+  ref,
+) async {
+  final url = ref.watch(currentProfileProvider.select((p) => p?.url ?? ''));
+  final base = vpsApiBase(url);
+  if (base == null) return null;
+  final on = ref.watch(isStartProvider);
+  final port = on ? ref.read(patchClashConfigProvider).mixedPort : null;
+  final keep = ref.keepAlive();
+  // Refresh now and then while someone looks.
+  final timer = Timer(const Duration(minutes: 5), keep.close);
+  ref.onDispose(timer.cancel);
+  return fetchMember(base, proxyPort: port);
+});
+
+Timer? _watch;
+final _health = VpsLineHealth();
+
+/// While connected, quietly tests each line of the smart group and tells the
+/// panel when one keeps failing (and when it is back), so the owner can move
+/// it to a new port. Never in safe mode or tests.
+void vpsStartLineWatch(Ref ref) {
+  _watch?.cancel();
+  if (safeModeBuild || Platform.environment.containsKey('FLUTTER_TEST')) {
+    return;
+  }
+  _watch = Timer.periodic(const Duration(minutes: 4), (timer) async {
+    if (!ref.read(isStartProvider)) {
+      timer.cancel();
+      return;
+    }
+    final base = vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
+    if (base == null) return;
+    await _checkLines(ref, base);
+  });
+}
+
+Future<void> _checkLines(Ref ref, Uri base) async {
+  final groups = ref.read(groupsProvider);
+  final smart = groups.where((g) => g.name == vpsSmartGroupName).firstOrNull;
+  if (smart == null) return;
+  for (final proxy in smart.all) {
+    try {
+      final def = await coreController.getProxyDefinition(proxy.name);
+      if (def == null) continue;
+      final kind = vpsLineKind(def);
+      final host = '${def['server'] ?? ''}';
+      if (kind == null || host.isEmpty) continue;
+      final delay = await coreController.testDelay(
+        TestDelayParams(
+          proxyName: proxy.name,
+          testUrl: smart.testUrl ?? defaultTestUrl,
+          timeout: 5000,
+        ),
+      );
+      final ok = (delay.value ?? -1) > 0;
+      final change = _health.record('$kind@$host', ok);
+      if (change != null) {
+        await reportLine(base, line: kind, ok: change, host: host);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('vps2vpn line watch: $e');
+    }
+  }
+}

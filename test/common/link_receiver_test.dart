@@ -122,7 +122,8 @@ void main() {
 
       await expectLater(
         _request(receiver.address),
-        throwsA(isA<SocketException>()),
+        // Refused, or cut off while the server is still shutting down.
+        throwsA(anyOf(isA<SocketException>(), isA<HttpException>())),
       );
     });
 

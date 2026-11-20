@@ -281,13 +281,15 @@ class _GroupTab extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: selected ? p.thumb : const Color(0x00000000),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: selected ? p.line : const Color(0x00000000),
+          shape: RoundedSuperellipseBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
+              color: selected ? p.line : const Color(0x00000000),
+            ),
           ),
-          boxShadow: selected ? p.raise : null,
+          shadows: selected ? p.raise : null,
         ),
         child: Text(
           label,
@@ -374,9 +376,11 @@ class _ProxyCard extends ConsumerWidget {
                           horizontal: 6,
                           vertical: 1.5,
                         ),
-                        decoration: BoxDecoration(
+                        decoration: ShapeDecoration(
                           color: p.good.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(5),
+                          shape: RoundedSuperellipseBorder(
+                            borderRadius: BorderRadius.circular(5),
+                          ),
                         ),
                         child: Text(
                           tr(context, '最快', 'Fastest'),

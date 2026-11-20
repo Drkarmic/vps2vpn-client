@@ -143,6 +143,7 @@ Future<List<String>> quitRivals(
   VpsRun run = _run,
 }) async {
   if (rivals.isEmpty) return const [];
+  if (_underTest && identical(run, _run)) return rivalNames(rivals);
   for (final image in {for (final r in rivals) r.image}) {
     try {
       // /T takes the app's own core with it; /F because tray apps ignore a
@@ -241,10 +242,14 @@ final vpsTakeoverReport = ValueNotifier<VpsTakeoverReport>(
 
 Timer? _guard;
 
+/// `flutter test` must never close the developer's own proxy apps or touch
+/// the real port and system proxy, whatever the test drives.
+final bool _underTest = Platform.environment.containsKey('FLUTTER_TEST');
+
 /// Runs before every connect. Safe mode, and takeover switched off, only
 /// report what they see; nothing is closed or changed.
 Future<void> vpsBeforeConnect(Ref ref) async {
-  if (!Platform.isWindows) return;
+  if (!Platform.isWindows || _underTest) return;
   final act = !safeModeBuild && ref.read(appSettingProvider).takeover;
   final rivals = await scanRivals();
   final names = rivalNames(rivals);
@@ -288,7 +293,7 @@ Future<void> vpsBeforeConnect(Ref ref) async {
 
 /// Only detects (for the overview notice); never closes anything.
 Future<void> vpsScanOnly() async {
-  if (!Platform.isWindows) return;
+  if (!Platform.isWindows || _underTest) return;
   final names = rivalNames(await scanRivals());
   final last = vpsTakeoverReport.value;
   vpsTakeoverReport.value = VpsTakeoverReport(

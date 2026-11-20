@@ -84,6 +84,12 @@ void main() {
     });
   });
 
+  test('under flutter test the real runner never ends anything', () async {
+    // A made-up image, so even a broken guard could not close a real app.
+    const fake = VpsRival('vps2vpn-guard-probe.exe', 1, 'Probe');
+    expect(await quitRivals(const [fake]), ['Probe']);
+  });
+
   test('quitting ends each image once and reports what is left', () async {
     final calls = <List<String>>[];
     var scans = 0;
