@@ -1013,6 +1013,99 @@ void main() {
     });
   });
 
+  group('mode change', () {
+    ({
+      _MockCoreHandlerInterface core,
+      TestSetupAction action,
+      ProviderContainer container,
+    })
+    buildScoped({bool closeConnections = true}) {
+      final core = _MockCoreHandlerInterface();
+      when(() => core.updateConfig(any())).thenAnswer((_) async {});
+      when(core.closeConnections).thenAnswer((_) async {});
+      when(core.resetConnections).thenAnswer((_) async {});
+      final scopedAction = TestSetupAction();
+      final scoped = ProviderContainer(
+        overrides: [
+          profilesProvider.overrideWith(TestProfiles.new),
+          setupActionProvider.overrideWith(() => scopedAction),
+          coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+        ],
+      );
+      addTearDown(scoped.dispose);
+      scoped.read(setupActionProvider.notifier);
+      scoped
+          .read(appSettingProvider.notifier)
+          .update(
+            (state) => state.copyWith(closeConnections: closeConnections),
+          );
+      return (core: core, action: scopedAction, container: scoped);
+    }
+
+    Future<void> switchTo(ProviderContainer container, Mode mode) {
+      container
+          .read(patchClashConfigProvider.notifier)
+          .update((state) => state.copyWith(mode: mode));
+      return container.read(setupActionProvider.notifier).updateConfig();
+    }
+
+    test('closes the connections opened under the mode left', () async {
+      final (:core, action: _, :container) = buildScoped();
+
+      await switchTo(container, Mode.rule);
+      verifyNever(core.closeConnections);
+
+      await switchTo(container, Mode.direct);
+      verify(core.closeConnections).called(1);
+
+      await switchTo(container, Mode.direct);
+      verifyNever(core.closeConnections);
+
+      await switchTo(container, Mode.global);
+      verify(core.closeConnections).called(1);
+      verifyNever(core.resetConnections);
+    });
+
+    test('only resets them with auto close switched off', () async {
+      final (:core, action: _, :container) = buildScoped(
+        closeConnections: false,
+      );
+
+      await switchTo(container, Mode.rule);
+      await switchTo(container, Mode.global);
+
+      verify(core.resetConnections).called(1);
+      verifyNever(core.closeConnections);
+    });
+
+    test('takes the mode a config push carried as the one running', () async {
+      final (:core, :action, :container) = buildScoped();
+
+      await action.coreModeApplied(Mode.global);
+      await switchTo(container, Mode.global);
+      verifyNever(core.closeConnections);
+
+      await action.coreModeApplied(Mode.rule);
+      verify(core.closeConnections).called(1);
+    });
+
+    test('a failed close does not fail the mode change', () async {
+      final (:core, action: _, :container) = buildScoped();
+      when(core.closeConnections).thenThrow(
+        const CoreMethodException(code: 'timeout', message: 'no answer'),
+      );
+
+      await switchTo(container, Mode.rule);
+      await switchTo(container, Mode.direct);
+
+      final params =
+          verify(() => core.updateConfig(captureAny())).captured.last
+              as UpdateParams;
+      expect(params.mode, Mode.direct);
+      verify(core.closeConnections).called(1);
+    });
+  });
+
   group('recoverMissingProfile', () {
     ProviderContainer buildScoped(List<Profile> profiles, int? profileId) {
       final scoped = ProviderContainer(
