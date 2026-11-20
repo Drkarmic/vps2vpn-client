@@ -11,10 +11,8 @@ part 'generated/profile.freezed.dart';
 part 'generated/profile.g.dart';
 
 /// Why the config at the path cannot be used, or null.
-typedef ValidateConfig = Future<String?> Function(
-  String path,
-  String ageSecretKey,
-);
+typedef ValidateConfig =
+    Future<String?> Function(String path, String ageSecretKey);
 
 @freezed
 abstract class SubscriptionInfo with _$SubscriptionInfo {
@@ -185,7 +183,11 @@ extension ProfileExtension on Profile {
   }
 
   Future<Profile> update({required ValidateConfig validate}) async {
-    final response = await request.getFileResponseForUrl(url);
+    final response = await request.getSubscriptionResponse(url);
+    final bytes = decompressUnlabeled(response.data ?? Uint8List(0));
+    if (_isBlank(bytes)) {
+      throw MessageException(currentAppLocalizations.subscriptionEmpty);
+    }
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
     final updateInterval = int.tryParse(
@@ -200,10 +202,7 @@ extension ProfileExtension on Profile {
       autoUpdateDuration: updateInterval != null
           ? Duration(hours: updateInterval.clamp(1, 168))
           : autoUpdateDuration,
-    ).saveFile(
-      decompressUnlabeled(response.data ?? Uint8List(0)),
-      validate: validate,
-    );
+    ).saveFile(bytes, validate: validate);
   }
 
   Future<Profile> saveFile(
@@ -224,6 +223,13 @@ extension ProfileExtension on Profile {
       await tempFile.safeDelete().then((_) {}, onError: (Object _) {});
     }
   }
+}
+
+bool _isBlank(Uint8List bytes) {
+  for (final byte in bytes) {
+    if (byte case != 0x20 && != 0x09 && != 0x0a && != 0x0d) return false;
+  }
+  return true;
 }
 
 const _profileReplaceAttempts = 10;

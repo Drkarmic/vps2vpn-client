@@ -3882,4 +3882,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get vRouting => '라우팅';
+
+  @override
+  String get subscriptionEmpty => '구독이 빈 설정을 반환했습니다';
+
+  @override
+  String subscriptionUpdateKeptLast(Object label) {
+    return '$label을(를) 업데이트하지 못했습니다. 마지막으로 작동한 설정을 계속 사용합니다';
+  }
 }

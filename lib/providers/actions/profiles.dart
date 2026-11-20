@@ -4,6 +4,9 @@ part of '../action.dart';
 class ProfilesAction extends _$ProfilesAction {
   final Map<int, Future<void>> _profileUpdates = {};
 
+  @visibleForTesting
+  final autoUpdateBackoff = AutoUpdateBackoff();
+
   CoreController get _core => ref.read(coreHandlerProvider);
 
   @override
@@ -77,13 +80,25 @@ class ProfilesAction extends _$ProfilesAction {
       final isNotNeedUpdate = profile.lastUpdateDate
           ?.add(profile.autoUpdateDuration)
           .isBeforeNow;
-      if (isNotNeedUpdate == false || profile.type != ProfileType.url) {
+      if (isNotNeedUpdate == false ||
+          profile.type != ProfileType.url ||
+          !autoUpdateBackoff.isDue(id)) {
         continue;
       }
       try {
         await updateProfile(profile);
       } catch (e) {
-        commonPrint.log(compactError(e), logLevel: LogLevel.warning);
+        commonPrint.log(
+          'autoUpdateProfiles($id) failed '
+          '${autoUpdateBackoff.failures(id) + 1} time(s): ${compactError(e)}',
+          logLevel: LogLevel.warning,
+        );
+        if (autoUpdateBackoff.fail(id)) {
+          final label = ref.read(profilesProvider.notifier).labeled(profile);
+          dialogs.showBanner(
+            currentAppLocalizations.subscriptionUpdateKeptLast(label.realLabel),
+          );
+        }
       }
     }
   }
@@ -210,6 +225,7 @@ class ProfilesAction extends _$ProfilesAction {
               : updated.autoUpdateDuration,
         );
         ref.read(profilesProvider.notifier).put(newProfile);
+        autoUpdateBackoff.succeed(target.id);
         if (target.id == ref.read(currentProfileIdProvider)) {
           ref
               .read(setupActionProvider.notifier)

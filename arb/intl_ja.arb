@@ -1147,5 +1147,7 @@
   "vAdvancedModeDesc": "すべてのページと詳細設定を表示",
   "vSubscriptions": "サブスクリプション",
   "vSettings": "設定",
-  "vRouting": "ルーティング"
+  "vRouting": "ルーティング",
+  "subscriptionEmpty": "サブスクリプションが空の設定を返しました",
+  "subscriptionUpdateKeptLast": "{label} を更新できませんでした。前回動作した設定を引き続き使用します"
 }

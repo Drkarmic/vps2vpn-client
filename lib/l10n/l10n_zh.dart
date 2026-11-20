@@ -3758,4 +3758,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get vRouting => '上网方式';
+
+  @override
+  String get subscriptionEmpty => '订阅返回了空配置';
+
+  @override
+  String subscriptionUpdateKeptLast(Object label) {
+    return '$label 更新失败，继续使用上次可用的配置';
+  }
 }

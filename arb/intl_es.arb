@@ -1147,5 +1147,7 @@
   "vAdvancedModeDesc": "Mostrar todas las páginas y ajustes expertos",
   "vSubscriptions": "Suscripciones",
   "vSettings": "Ajustes",
-  "vRouting": "Enrutamiento"
+  "vRouting": "Enrutamiento",
+  "subscriptionEmpty": "La suscripción devolvió una configuración vacía",
+  "subscriptionUpdateKeptLast": "No se pudo actualizar {label}; se sigue usando la última configuración que funcionaba"
 }

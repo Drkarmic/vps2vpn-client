@@ -1147,5 +1147,7 @@
   "vAdvancedModeDesc": "Afficher toutes les pages et réglages experts",
   "vSubscriptions": "Abonnements",
   "vSettings": "Réglages",
-  "vRouting": "Routage"
+  "vRouting": "Routage",
+  "subscriptionEmpty": "L'abonnement a renvoyé une configuration vide",
+  "subscriptionUpdateKeptLast": "Impossible de mettre à jour {label} ; la dernière configuration fonctionnelle reste utilisée"
 }

@@ -7001,6 +7001,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Routing'**
   String get vRouting;
+
+  /// No description provided for @subscriptionEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'The subscription returned an empty config'**
+  String get subscriptionEmpty;
+
+  /// No description provided for @subscriptionUpdateKeptLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t update {label}; still using the last working config'**
+  String subscriptionUpdateKeptLast(Object label);
 }
 
 class _AppLocalizationsDelegate
