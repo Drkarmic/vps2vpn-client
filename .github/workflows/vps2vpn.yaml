@@ -1,0 +1,103 @@
+name: vps2vpn Windows
+
+# Builds the Windows installer, then installs it on the throwaway runner and
+# checks the takeover end to end (see .github/scripts/takeover-e2e.ps1).
+on:
+  push:
+    branches: [vps2vpn]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.50.0'
+  GO_VERSION: '1.27.1'
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Enable git long paths
+        run: git config --global core.longpaths true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            plugins/rust_api/rust
+            services/helper
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Flutter dependencies
+        run: |
+          flutter --version
+          flutter pub get
+
+      - name: Fetch CA certificates
+        shell: bash
+        env:
+          CA_BUNDLE: cacert-2026-09-25.pem
+          CA_BUNDLE_SHA256: a41b5d356aea97a529fe27e0f7316d2f9d946d75927476cf9cf1b90637d00505
+        run: |
+          bundle=core/Clash.Meta/component/ca/ca-certificates.crt
+          curl -fsSL --retry 3 -o "$bundle" "https://curl.se/ca/$CA_BUNDLE"
+          echo "$CA_BUNDLE_SHA256  $bundle" | sha256sum -c -
+
+      - name: vps2vpn tests
+        run: flutter test test/vps2vpn
+
+      - name: Package
+        run: dart tool/package.dart windows --env stable -v
+
+      - name: Name the installer for the panel
+        shell: pwsh
+        run: |
+          $ver = (Select-String pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          $src = Get-ChildItem dist -Filter 'vps2vpn-*-windows-amd64-setup.exe' | Select-Object -First 1
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item $src.FullName "release/vps2vpn-$ver-windows-amd64-setup.exe"
+          Get-ChildItem release
+
+      - name: Install and take over (end to end)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem release -Filter '*.exe' | Select-Object -First 1).FullName
+          ./.github/scripts/takeover-e2e.ps1 -Setup $setup -Out e2e
+
+      - name: Upload installer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vps2vpn-windows
+          path: |
+            release
+            dist/*.zip
+          if-no-files-found: ignore
+
+      - name: Upload end-to-end results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e
+          path: e2e
+          if-no-files-found: ignore
