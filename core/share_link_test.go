@@ -322,6 +322,42 @@ func TestShareLinksLeaveOutWhatNoLinkCarries(t *testing.T) {
 // The pinned Mihomo TUIC link decoder cannot carry TLS identity policies.
 // A link that silently removes a cert pin or client certificate is not a
 // faithful representation of the source proxy and must not be exported.
+func TestVShareLinksRejectTLSModesThePinnedDecoderWouldDrop(t *testing.T) {
+	cases := []struct {
+		name string
+		proxy map[string]any
+	}{
+		{
+			"vless TLS allows invalid certificates",
+			map[string]any{"name": "vless", "type": "vless", "server": "node.example",
+				"port": 443, "uuid": "u", "tls": true, "skip-cert-verify": true},
+		},
+		{
+			"VMess AEAD TLS allows invalid certificates",
+			map[string]any{"name": "vmess aead", "type": "vmess", "server": "node.example",
+				"port": 443, "uuid": "u", "alterId": 0, "tls": true,
+				"skip-cert-verify": true},
+		},
+		{
+			"VMess legacy TLS allows invalid certificates",
+			map[string]any{"name": "vmess legacy", "type": "vmess", "server": "node.example",
+				"port": 443, "uuid": "u", "alterId": 64, "tls": true,
+				"skip-cert-verify": true},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := encodeShareLink(proxyFields(tc.proxy)); got != "" {
+				t.Fatalf("export lost the source TLS trust policy: %q", got)
+			}
+			tc.proxy["skip-cert-verify"] = false
+			if got := encodeShareLink(proxyFields(tc.proxy)); got == "" {
+				t.Fatal("normal TLS proxy should still export")
+			}
+		})
+	}
+}
+
 func TestTuicShareLinksFailClosedForUnrepresentableTLSOptions(t *testing.T) {
 	base := map[string]any{
 		"name": "secure tuic", "type": "tuic", "server": "node.example",
