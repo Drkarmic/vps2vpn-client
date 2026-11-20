@@ -551,7 +551,37 @@ String? vpsLineReportHost(Map<String, dynamic> def) {
   if (!host.contains(':')) return host;
   final ip = InternetAddress.tryParse(host);
   if (ip == null || ip.type != InternetAddressType.IPv6) return null;
-  return ip.address;
+  // InternetAddress.address is platform text (Windows does not compress
+  // zeros), so the RFC 5952 form is built here to match the server.
+  return vpsCompressIPv6(ip.rawAddress);
+}
+
+/// RFC 5952 text for a 16-byte IPv6 address: lower-case hex, no leading
+/// zeros, and the longest run (two or more) of zero groups shortened to "::".
+String vpsCompressIPv6(List<int> raw) {
+  final groups = [
+    for (var i = 0; i < 16; i += 2) (raw[i] << 8) | raw[i + 1],
+  ];
+  var bestStart = -1, bestLen = 0;
+  for (var i = 0; i < 8;) {
+    if (groups[i] != 0) {
+      i++;
+      continue;
+    }
+    var j = i;
+    while (j < 8 && groups[j] == 0) {
+      j++;
+    }
+    if (j - i > bestLen) {
+      bestStart = i;
+      bestLen = j - i;
+    }
+    i = j;
+  }
+  String hex(Iterable<int> g) => g.map((v) => v.toRadixString(16)).join(':');
+  if (bestLen < 2) return hex(groups);
+  return '${hex(groups.take(bestStart))}::'
+      '${hex(groups.skip(bestStart + bestLen))}';
 }
 
 /// The signed-in member for the current subscription, or null when it is
@@ -764,6 +794,7 @@ final vpsPanelPinsProvider = FutureProvider.autoDispose<Set<String>>((
 final _releaseFileName = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$');
 const _maxReleaseBytes = 512 * 1024 * 1024;
 var _downloadSeq = 0;
+const _releaseTransferTimeout = Duration(minutes: 8);
 
 /// Downloads a client release from the panel into [dir], always direct and
 /// over HTTPS. A self-signed panel is trusted only through [pinnedSha256],
@@ -797,17 +828,26 @@ Future<File> vpsDownloadRelease(
       throw HttpException('Download failed (HTTP ${res.statusCode})');
     }
     final sink = part.openWrite();
+    final elapsed = Stopwatch()..start();
     var size = 0;
     try {
+      // The stream timeout only measures the gap between chunks; a server
+      // trickling a byte at a time also meets the overall deadline.
       await for (final chunk in res.timeout(const Duration(seconds: 60))) {
         size += chunk.length;
         if (size > _maxReleaseBytes) {
           throw const HttpException('Release file too large');
         }
+        if (elapsed.elapsed > _releaseTransferTimeout) {
+          throw const HttpException('Release download took too long');
+        }
         sink.add(chunk);
       }
     } finally {
       await sink.close();
+    }
+    if (size == 0) {
+      throw const HttpException('Release file was empty');
     }
     // rename replaces an existing file in one step; deleting it first would
     // lose the old copy whenever the rename then fails.

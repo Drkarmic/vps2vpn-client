@@ -16,6 +16,18 @@ void main() {
       vpsLineReportHost({'server': '2001:0db8:0:0:0:0:0:1'}),
       '2001:db8::1',
     );
+    // RFC 5952: first longest zero run, single zero group kept, lower case.
+    expect(vpsCompressIPv6(List.filled(16, 0)), '::');
+    expect(
+      vpsLineReportHost({'server': '2001:DB8:0:0:1:0:0:1'}),
+      '2001:db8::1:0:0:1',
+    );
+    expect(
+      vpsLineReportHost({'server': '2001:db8:0:1:1:1:1:1'}),
+      '2001:db8:0:1:1:1:1:1',
+    );
+    expect(vpsLineReportHost({'server': 'fe80:0:0:0:0:0:0:0'}), 'fe80::');
+    expect(vpsLineReportHost({'server': '0:0:0:0:0:0:0:1'}), '::1');
     expect(vpsLineReportHost({'server': 'proxy.example'}), 'proxy.example');
     expect(vpsLineReportHost({'server': '192.0.2.8'}), '192.0.2.8');
     expect(vpsLineReportHost({'server': 'proxy.example:443'}), isNull);
