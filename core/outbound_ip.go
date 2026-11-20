@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"net/netip"
 	"strings"
 	"sync"
@@ -127,7 +128,7 @@ func probeOutboundIpSource(ctx context.Context, url string, proxyName string, ti
 		maxBody:   outboundIpMaxBody,
 		recorder:  hits,
 	})
-	if result == nil || result.Error != "" || result.StatusCode != http.StatusOK || !mentionsIp(result.Body) {
+	if result == nil || result.Error != "" || result.StatusCode != http.StatusOK || !validOutboundIpSource(url, result.Body) {
 		return nil
 	}
 	return &OutboundIpResult{
@@ -156,24 +157,158 @@ func nodeHits(chains []string, proxyName string, hits []RouteHit) []RouteHit {
 	return through
 }
 
-// RFC 6598 space for carrier-grade NAT, which IsPrivate leaves out.
-var sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
+// IsGlobalUnicast means the address has unicast *syntax*, not that it is
+// globally routable. Documentation, benchmarking and protocol-assignment
+// prefixes must never count as a successful exit-IP probe. Unmap IPv4-mapped
+// IPv6 addresses before checking these prefixes.
+var nonPublicProbePrefixes = []netip.Prefix{
+	// RFC 6598 shared address space.
+	netip.MustParsePrefix("100.64.0.0/10"),
+	// IANA special purpose, RFC 5737 TEST-NET, RFC 2544 benchmarking.
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("192.88.99.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	// RFC 3849 documentation and RFC 5180 benchmarking.
+	netip.MustParsePrefix("2001:db8::/32"),
+	netip.MustParsePrefix("2001:2::/48"),
+}
 
-// A rate-limit or captcha page can still answer 200, and Dart cannot fall back
-// once the race is decided, so a body without a public address must not win it.
+// HTTP status and a random public-IP token are not enough. The Dart side
+// accepts a Cloudflare trace or JSON with a known IP/country schema, not an
+// arbitrary HTML page, help link, or error document mentioning a public IP.
+// Accept the same envelope here BEFORE a competing probe wins the race.
 func mentionsIp(body string) bool {
-	tokens := strings.FieldsFunc(body, func(r rune) bool {
-		return !(r == '.' || r == ':' || '0' <= r && r <= '9' || 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z')
-	})
-	for _, token := range tokens {
-		addr, err := netip.ParseAddr(token)
-		if err != nil {
+	text := strings.TrimSpace(body)
+	if text == "" {
+		return false
+	}
+	if strings.HasPrefix(text, "{") {
+		var doc map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(text), &doc); err != nil || doc == nil {
+			return false
+		}
+		if e := doc["error"]; len(e) > 0 && string(e) != "null" &&
+			string(e) != "false" && string(e) != `""` {
+			return false
+		}
+		if string(doc["success"]) == "false" {
+			return false
+		}
+		switch strings.ToLower(jsonString(doc["status"])) {
+		case "fail", "failed", "error", "denied", "blocked":
+			return false
+		}
+		ip := jsonString(doc["ip"])
+		if ip == "" {
+			return false
+		}
+		// Mirrors the actual source parsers in lib/models/common.dart:
+		// ipinfo.io / country.is: country
+		// ip.sb / ipwho.is / geojs: country_code
+		// ident.me: cc
+		// ipquery: location.country_code
+		country := jsonString(doc["country"])
+		if country == "" {
+			country = jsonString(doc["country_code"])
+		}
+		if country == "" {
+			country = jsonString(doc["cc"])
+		}
+		if country == "" && len(doc["location"]) > 0 {
+			var location map[string]json.RawMessage
+			if json.Unmarshal(doc["location"], &location) == nil {
+				country = jsonString(location["country_code"])
+			}
+		}
+		return country != "" && publicEgressIp(ip)
+	}
+	// Cloudflare /cdn-cgi/trace uses full key=value lines, with both
+	// ip and loc required by the matching Dart parser.
+	if strings.HasPrefix(text, "<") || strings.HasPrefix(text, "[") {
+		return false
+	}
+	var ip, country string
+	for _, line := range strings.Split(text, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
 			continue
 		}
-		addr = addr.Unmap()
-		if addr.IsGlobalUnicast() && !addr.IsPrivate() && !sharedAddressSpace.Contains(addr) {
-			return true
+		switch key {
+		case "ip":
+			ip = strings.TrimSpace(value)
+		case "loc":
+			country = strings.TrimSpace(value)
 		}
 	}
-	return false
+	return country != "" && publicEgressIp(ip)
+}
+
+// The Dart consumer chooses a different parser for each of its named sources.
+// A valid union-of-sources JSON object can still fail its *specific* parser and
+// prematurely cancel other probes. Keep these URL/field pairs in sync with
+// lib/common/service_probe.dart and lib/models/common.dart.
+func validOutboundIpSource(url string, body string) bool {
+	if !mentionsIp(body) {
+		return false
+	}
+	switch url {
+	case "https://www.cloudflare.com/cdn-cgi/trace":
+		// The Dart Cloudflare parser accepts key=value trace lines, never JSON.
+		return !strings.HasPrefix(strings.TrimSpace(body), "{")
+	case "https://ipinfo.io/json", "https://api.country.is":
+		return jsonHasCountryField(body, "country")
+	case "https://api.ip.sb/geoip", "https://ipwho.is",
+		"https://get.geojs.io/v1/ip/geo.json":
+		return jsonHasCountryField(body, "country_code")
+	case "https://ident.me/json":
+		return jsonHasCountryField(body, "cc")
+	case "https://api.ipquery.io/?format=json":
+		return jsonHasCountryField(body, "location.country_code")
+	}
+	// The core API also permits custom URLs; preserve generic envelope support.
+	return true
+}
+
+func jsonHasCountryField(body string, field string) bool {
+	var doc map[string]json.RawMessage
+	if json.Unmarshal([]byte(body), &doc) != nil || doc == nil {
+		return false
+	}
+	if field == "location.country_code" {
+		var location map[string]json.RawMessage
+		if json.Unmarshal(doc["location"], &location) != nil {
+			return false
+		}
+		return jsonString(location["country_code"]) != ""
+	}
+	return jsonString(doc[field]) != ""
+}
+
+func jsonString(raw json.RawMessage) string {
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func publicEgressIp(s string) bool {
+	addr, err := netip.ParseAddr(s)
+	if err != nil {
+		return false
+	}
+	addr = addr.Unmap()
+	if !addr.IsGlobalUnicast() || addr.IsPrivate() {
+		return false
+	}
+	for _, prefix := range nonPublicProbePrefixes {
+		if prefix.Contains(addr) {
+			return false
+		}
+	}
+	return true
 }
