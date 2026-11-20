@@ -156,8 +156,25 @@ func nodeHits(chains []string, proxyName string, hits []RouteHit) []RouteHit {
 	return through
 }
 
-// RFC 6598 space for carrier-grade NAT, which IsPrivate leaves out.
-var sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
+// IsGlobalUnicast means the address has unicast *syntax*, not that it is
+// globally routable. Documentation, benchmarking and protocol-assignment
+// prefixes must never count as a successful exit-IP probe. Unmap IPv4-mapped
+// IPv6 addresses before checking these prefixes.
+var nonPublicProbePrefixes = []netip.Prefix{
+	// RFC 6598 shared address space.
+	netip.MustParsePrefix("100.64.0.0/10"),
+	// IANA special purpose, RFC 5737 TEST-NET, RFC 2544 benchmarking.
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("192.88.99.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	// RFC 3849 documentation and RFC 5180 benchmarking.
+	netip.MustParsePrefix("2001:db8::/32"),
+	netip.MustParsePrefix("2001:2::/48"),
+}
 
 // A rate-limit or captcha page can still answer 200, and Dart cannot fall back
 // once the race is decided, so a body without a public address must not win it.
@@ -171,7 +188,17 @@ func mentionsIp(body string) bool {
 			continue
 		}
 		addr = addr.Unmap()
-		if addr.IsGlobalUnicast() && !addr.IsPrivate() && !sharedAddressSpace.Contains(addr) {
+		if !addr.IsGlobalUnicast() || addr.IsPrivate() {
+			continue
+		}
+		reserved := false
+		for _, prefix := range nonPublicProbePrefixes {
+			if prefix.Contains(addr) {
+				reserved = true
+				break
+			}
+		}
+		if !reserved {
 			return true
 		}
 	}
