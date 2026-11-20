@@ -132,6 +132,42 @@ void main() {
     );
   });
 
+  test('plain DNS accepts IPv4 ports and bracketed IPv6 ports', () {
+    for (final server in [
+      '8.8.8.8:53',
+      '1.1.1.1:853',
+      '127.0.0.1:5353',
+      '2001:db8::1',
+      '[2001:db8::1]',
+      '[2001:db8::1]:853',
+    ]) {
+      expect(mitmDnsServer(server), server, reason: server);
+      expect(isMitmPlainDnsServer(server), isTrue, reason: server);
+    }
+    expect(isMitmPlainDnsServer('system://'), isTrue);
+    expect(isMitmPlainDnsServer('tls://dns.example'), isFalse);
+  });
+
+  test('plain DNS refuses malformed addresses and invalid ports', () {
+    for (final server in [
+      '8.8.8.8:0',
+      '8.8.8.8:65536',
+      '8.8.8.8:999999',
+      '8.8.8.8:-1',
+      '8.8.8.8:abc',
+      '8.8.8.8::53',
+      '999.999.999.999:53',
+      '[2001:db8::1]:0',
+      '[2001:db8::1]:65536',
+      '[2001:db8::1]junk',
+      '[1.1.1.1]:53',
+      '1.1.1.1:53:53',
+    ]) {
+      expect(mitmDnsServer(server), isNull, reason: server);
+      expect(isMitmPlainDnsServer(server), isFalse, reason: server);
+    }
+  });
+
   test('DNS servers and routes read as the Core takes them', () {
     expect(mitmDnsServer('system'), 'system://');
     expect(mitmDnsServer('223.5.5.5'), '223.5.5.5');
