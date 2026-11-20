@@ -35,10 +35,22 @@ class FlClashHttpOverrides extends HttpOverrides {
     return findProxyForReader(container.read, url);
   }
 
-  static const _loopbackHosts = {'127.0.0.1', 'localhost', '::1'};
+  /// Local helper and diagnostics traffic must never be sent back into the
+  /// proxy. 127.0.0.0/8 is *all* loopback, not just 127.0.0.1.
+  static bool _isLoopbackHost(String host) {
+    final lower = host.toLowerCase();
+    final name = lower.endsWith('.')
+        ? lower.substring(0, lower.length - 1)
+        : lower;
+    if (name == 'localhost' || name.endsWith('.localhost')) {
+      return true;
+    }
+    // Numeric parsing is synchronous and never performs DNS resolution.
+    return InternetAddress.tryParse(lower)?.isLoopback ?? false;
+  }
 
   static String findProxyForReader(ProviderReader read, Uri url) {
-    if (_loopbackHosts.contains(url.host.toLowerCase())) {
+    if (_isLoopbackHost(url.host)) {
       return 'DIRECT';
     }
     final isStart = read(isStartProvider);

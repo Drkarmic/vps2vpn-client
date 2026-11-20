@@ -69,6 +69,33 @@ void main() {
     );
   });
 
+  test('bypasses every IPv4 loopback address and localhost name', () {
+    final container = buildContainer(mixedPort: 7891);
+    for (final host in [
+      '127.0.0.2',
+      '127.255.255.254',
+      'localhost.',
+      'api.localhost',
+      'api.localhost.',
+      '[::1]',
+    ]) {
+      final url = Uri.parse('http://$host:9090/health');
+      expect(
+        FlClashHttpOverrides.findProxyFor(container, url),
+        'DIRECT',
+        reason: 'Loopback URL must not be proxied: $url',
+      );
+    }
+    for (final host in ['127.0.0.2.example.com', '192.0.2.1', 'example.com']) {
+      final url = Uri.parse('https://$host/status');
+      expect(
+        FlClashHttpOverrides.findProxyFor(container, url),
+        'PROXY 127.0.0.1:7891',
+        reason: 'Non-loopback host must keep normal routing: $url',
+      );
+    }
+  });
+
   test('routes through the mixed port while the core is running', () {
     final container = buildContainer(mixedPort: 7891);
 

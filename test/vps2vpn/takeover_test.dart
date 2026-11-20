@@ -126,7 +126,7 @@ void main() {
     expect(await quitRivals(const [fake]), ['Probe']);
   });
 
-  test('quitting ends each image once and reports what is left', () async {
+  test('quitting targets only observed PIDs and reports what is left', () async {
     final calls = <List<String>>[];
     var scans = 0;
     Future<ProcessResult> run(String exe, List<String> args) async {
@@ -139,13 +139,54 @@ void main() {
       return _ok('');
     }
 
-    if (!Platform.isWindows) return;
     final left = await quitRivals(parseRivals(tasklist), run: run);
-    expect(
-      calls.where((c) => c.first == 'taskkill').map((c) => c.last).toList(),
-      ['flclash.exe', 'flclashcore.exe', 'verge-mihomo.exe'],
-    );
+    final kills = calls.where((c) => c.first == 'taskkill').toList();
+    expect(kills.map((c) => c.last), ['4120', '4188', '5000']);
+    expect(kills.every((c) => c.contains('/PID') && !c.contains('/IM') && !c.contains('/T')), isTrue);
     expect(scans, 1);
     expect(left, ['FlClash']);
+  });
+
+  test('same executable name kills only the scanned PIDs', () async {
+    const rivals = [
+      VpsRival('flclash.exe', 4120, 'FlClash'),
+      VpsRival('flclash.exe', 4130, 'FlClash'),
+      VpsRival('flclash.exe', 0, 'FlClash'),
+    ];
+    final kills = <List<String>>[];
+    Future<ProcessResult> run(String exe, List<String> args) async {
+      if (exe == 'taskkill') kills.add(args);
+      if (exe == 'tasklist') return _ok('');
+      return _ok('');
+    }
+    await quitRivals(rivals, run: run);
+    expect(kills.map((args) => args.last), ['4120', '4130']);
+    expect(kills.every((args) => args.contains('/PID') && !args.contains('/T')), isTrue);
+  });
+
+  test('cancelling takeover stops pending terminations', () async {
+    const rivals = [
+      VpsRival('flclash.exe', 4120, 'FlClash'),
+      VpsRival('mihomo.exe', 5000, 'mihomo'),
+    ];
+    var current = true;
+    final kills = <List<String>>[];
+    Future<ProcessResult> run(String exe, List<String> args) async {
+      if (exe == 'taskkill') {
+        kills.add(args);
+        current = false; // user disconnected during the first termination
+      }
+      if (exe == 'tasklist') {
+        fail('Cancelled operation must not scan after kills');
+      }
+      return _ok('');
+    }
+    final left = await quitRivals(rivals, run: run, isCurrent: () => current);
+    expect(kills.map((args) => args.last), ['4120']);
+    expect(left, ['FlClash', 'mihomo']);
+
+    kills.clear();
+    await quitRivals(rivals, run: run, isCurrent: () => false);
+    expect(kills, isEmpty);
   });
 }
