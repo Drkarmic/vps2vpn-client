@@ -1147,5 +1147,7 @@
   "vAdvancedModeDesc": "모든 페이지와 전문 설정 표시",
   "vSubscriptions": "구독",
   "vSettings": "설정",
-  "vRouting": "라우팅"
+  "vRouting": "라우팅",
+  "subscriptionEmpty": "구독이 빈 설정을 반환했습니다",
+  "subscriptionUpdateKeptLast": "{label}을(를) 업데이트하지 못했습니다. 마지막으로 작동한 설정을 계속 사용합니다"
 }

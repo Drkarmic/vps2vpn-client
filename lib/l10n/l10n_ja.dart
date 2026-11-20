@@ -3807,4 +3807,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get vRouting => 'ルーティング';
+
+  @override
+  String get subscriptionEmpty => 'サブスクリプションが空の設定を返しました';
+
+  @override
+  String subscriptionUpdateKeptLast(Object label) {
+    return '$label を更新できませんでした。前回動作した設定を引き続き使用します';
+  }
 }

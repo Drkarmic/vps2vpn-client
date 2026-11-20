@@ -4029,4 +4029,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get vRouting => 'Enrutamiento';
+
+  @override
+  String get subscriptionEmpty =>
+      'La suscripción devolvió una configuración vacía';
+
+  @override
+  String subscriptionUpdateKeptLast(Object label) {
+    return 'No se pudo actualizar $label; se sigue usando la última configuración que funcionaba';
+  }
 }

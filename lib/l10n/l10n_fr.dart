@@ -4034,4 +4034,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get vRouting => 'Routage';
+
+  @override
+  String get subscriptionEmpty =>
+      'L\'abonnement a renvoyé une configuration vide';
+
+  @override
+  String subscriptionUpdateKeptLast(Object label) {
+    return 'Impossible de mettre à jour $label ; la dernière configuration fonctionnelle reste utilisée';
+  }
 }

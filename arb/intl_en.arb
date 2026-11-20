@@ -1262,5 +1262,7 @@
   "vAdvancedModeDesc": "Show every page and expert setting",
   "vSubscriptions": "Subscriptions",
   "vSettings": "Settings",
-  "vRouting": "Routing"
+  "vRouting": "Routing",
+  "subscriptionEmpty": "The subscription returned an empty config",
+  "subscriptionUpdateKeptLast": "Couldn't update {label}; still using the last working config"
 }

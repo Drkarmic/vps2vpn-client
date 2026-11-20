@@ -14,7 +14,12 @@ import 'package:path/path.dart' show join;
 
 class Request {
   late final Dio dio;
-  late final Dio _clashDio;
+
+  @visibleForTesting
+  late final Dio clashDio;
+
+  @visibleForTesting
+  late final Dio directDio;
 
   /// Refuses an untrusted certificate even with the certificate check turned
   /// off, because what it fetches is installed, on Windows as administrator.
@@ -38,17 +43,8 @@ class Request {
         receiveTimeout: _requestTimeout,
       ),
     );
-    _clashDio = Dio();
-    _clashDio.httpClientAdapter = IOHttpClientAdapter(
-      createHttpClient: () {
-        final client = HttpClient();
-        client.findProxy = (Uri uri) {
-          client.userAgent = globalState.ua;
-          return _findProxy(uri);
-        };
-        return client;
-      },
-    );
+    clashDio = _downloadDio(_findProxy);
+    directDio = _downloadDio((_) => 'DIRECT');
     releaseDio = Dio(
       BaseOptions(
         headers: {'User-Agent': browserUa},
@@ -65,6 +61,20 @@ class Request {
     );
   }
 
+  static Dio _downloadDio(String Function(Uri uri) findProxy) {
+    return Dio()
+      ..httpClientAdapter = IOHttpClientAdapter(
+        createHttpClient: () {
+          final client = HttpClient();
+          client.findProxy = (Uri uri) {
+            client.userAgent = globalState.ua;
+            return findProxy(uri);
+          };
+          return client;
+        },
+      );
+  }
+
   String _findProxy(Uri uri) {
     final read = _read;
     if (read == null) {
@@ -73,10 +83,14 @@ class Request {
     return FlClashHttpOverrides.findProxyForReader(read, uri);
   }
 
-  Future<Response<T>> _download<T>(String url, ResponseType responseType) {
+  Future<Response<T>> _download<T>(
+    String url,
+    ResponseType responseType, {
+    Dio? via,
+  }) {
     final target = downloadTarget(url);
     final cancelToken = CancelToken();
-    return _clashDio
+    return (via ?? clashDio)
         .getUri<T>(
           target.uri,
           options: Options(responseType: responseType, headers: target.headers),
@@ -100,6 +114,41 @@ class Request {
     } catch (e) {
       commonPrint.log(
         'getFileResponseForUrl error ${compactError(e)}',
+        logLevel: LogLevel.warning,
+      );
+      rethrow;
+    }
+  }
+
+  /// Retries directly when the proxy route fails, since the lines this
+  /// update would replace may be the ones that died.
+  Future<Response<Uint8List>> getSubscriptionResponse(String url) async {
+    final proxied = _findProxy(downloadTarget(url).uri) != 'DIRECT';
+    try {
+      return await _download<Uint8List>(url, ResponseType.bytes);
+    } catch (error) {
+      if (!proxied || !isRouteFailure(error)) {
+        commonPrint.log(
+          'getSubscriptionResponse error ${compactError(error)}',
+          logLevel: LogLevel.warning,
+        );
+        rethrow;
+      }
+      commonPrint.log(
+        'getSubscriptionResponse via proxy failed, retrying directly: '
+        '${compactError(error)}',
+        logLevel: LogLevel.warning,
+      );
+    }
+    try {
+      return await _download<Uint8List>(
+        url,
+        ResponseType.bytes,
+        via: directDio,
+      );
+    } catch (error) {
+      commonPrint.log(
+        'getSubscriptionResponse direct retry error ${compactError(error)}',
         logLevel: LogLevel.warning,
       );
       rethrow;
@@ -220,6 +269,28 @@ Uint8List decompressUnlabeled(Uint8List bytes) {
   } on FormatException {
     return bytes;
   }
+}
+
+/// A 4xx is the server's verdict on the link, except 407 and 408, which come
+/// from the route.
+@visibleForTesting
+bool isRouteFailure(Object error) {
+  return switch (error) {
+    DioException(type: DioExceptionType.cancel) => false,
+    DioException(type: DioExceptionType.badResponse, :final response) =>
+      switch (response?.statusCode) {
+        HttpStatus.proxyAuthenticationRequired ||
+        HttpStatus.requestTimeout ||
+        null => true,
+        final code => code >= HttpStatus.internalServerError,
+      },
+    DioException() ||
+    SocketException() ||
+    HttpException() ||
+    TlsException() ||
+    TimeoutException() => true,
+    _ => false,
+  };
 }
 
 /// dart:io turns [Uri.userInfo] into Basic credentials still percent-encoded.

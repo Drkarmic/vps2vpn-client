@@ -1147,5 +1147,7 @@
   "vAdvancedModeDesc": "Показать все страницы и экспертные настройки",
   "vSubscriptions": "Подписки",
   "vSettings": "Настройки",
-  "vRouting": "Маршрутизация"
+  "vRouting": "Маршрутизация",
+  "subscriptionEmpty": "Подписка вернула пустую конфигурацию",
+  "subscriptionUpdateKeptLast": "Не удалось обновить {label}; используется последняя рабочая конфигурация"
 }

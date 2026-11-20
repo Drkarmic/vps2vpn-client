@@ -3986,4 +3986,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get vRouting => 'Routing';
+
+  @override
+  String get subscriptionEmpty => 'The subscription returned an empty config';
+
+  @override
+  String subscriptionUpdateKeptLast(Object label) {
+    return 'Couldn\'t update $label; still using the last working config';
+  }
 }

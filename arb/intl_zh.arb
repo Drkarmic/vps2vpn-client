@@ -1147,5 +1147,7 @@
   "vAdvancedModeDesc": "显示全部页面和专业设置",
   "vSubscriptions": "订阅",
   "vSettings": "设置",
-  "vRouting": "上网方式"
+  "vRouting": "上网方式",
+  "subscriptionEmpty": "订阅返回了空配置",
+  "subscriptionUpdateKeptLast": "{label} 更新失败，继续使用上次可用的配置"
 }

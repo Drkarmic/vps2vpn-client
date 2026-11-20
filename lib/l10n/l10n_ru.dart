@@ -3981,4 +3981,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get vRouting => 'Маршрутизация';
+
+  @override
+  String get subscriptionEmpty => 'Подписка вернула пустую конфигурацию';
+
+  @override
+  String subscriptionUpdateKeptLast(Object label) {
+    return 'Не удалось обновить $label; используется последняя рабочая конфигурация';
+  }
 }

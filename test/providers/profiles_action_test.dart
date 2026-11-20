@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/core/controller.dart';
 import 'package:fl_clash/core/interface.dart';
@@ -21,6 +23,28 @@ import '../helpers/test_app.dart';
 import '../helpers/test_profiles.dart';
 
 class _MockCoreHandlerInterface extends Mock implements CoreHandlerInterface {}
+
+class _RouteAdapter implements HttpClientAdapter {
+  _RouteAdapter(this.answer);
+
+  ResponseBody Function() answer;
+  int calls = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    calls++;
+    return answer();
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+ResponseBody _refused() => throw const SocketException('Connection refused');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -216,6 +240,122 @@ void main() {
       );
       expect(container.read(profilesProvider), isEmpty);
       verifyNever(() => core.validateConfig(any()));
+    });
+  });
+
+  group('autoUpdateProfiles', () {
+    late _RouteAdapter proxied;
+    late _RouteAdapter direct;
+    late DateTime now;
+    late Profile profile;
+
+    setUp(() async {
+      final clashAdapter = request.clashDio.httpClientAdapter;
+      final directAdapter = request.directDio.httpClientAdapter;
+      addTearDown(() {
+        request.clashDio.httpClientAdapter = clashAdapter;
+        request.directDio.httpClientAdapter = directAdapter;
+      });
+      proxied = _RouteAdapter(_refused);
+      direct = _RouteAdapter(_refused);
+      request
+        ..attach(container.read)
+        ..clashDio.httpClientAdapter = proxied
+        ..directDio.httpClientAdapter = direct;
+      container.read(runTimeProvider.notifier).value = 1;
+      now = DateTime(2026, 11, 20, 8);
+      container
+          .read(profilesActionProvider.notifier)
+          .autoUpdateBackoff
+          .now = () =>
+          now;
+      profile = Profile.normal(label: 'Sub', url: 'https://sub.example.com/t');
+      await (await profile.file).writeAsString('proxies: [old]');
+      container.read(profilesProvider.notifier).put(profile);
+    });
+
+    Future<String> saved() async => (await profile.file).readAsString();
+
+    test('fetches directly when the proxied route is dead', () async {
+      direct.answer = () => ResponseBody.fromString('proxies: [new]', 200);
+
+      await container
+          .read(profilesActionProvider.notifier)
+          .autoUpdateProfiles();
+
+      expect((proxied.calls, direct.calls), (1, 1));
+      expect(await saved(), 'proxies: [new]');
+      expect(container.read(profilesProvider).single.lastUpdateDate, isNotNull);
+    });
+
+    test('does not retry a link the server refuses', () async {
+      proxied.answer = () => ResponseBody.fromString('', 403);
+
+      await container
+          .read(profilesActionProvider.notifier)
+          .autoUpdateProfiles();
+
+      expect((proxied.calls, direct.calls), (1, 0));
+      expect(await saved(), 'proxies: [old]');
+    });
+
+    test('keeps the last config when the download is empty', () async {
+      proxied.answer = () => ResponseBody.fromString(' \r\n', 200);
+
+      await container
+          .read(profilesActionProvider.notifier)
+          .autoUpdateProfiles();
+
+      expect(await saved(), 'proxies: [old]');
+      expect(container.read(profilesProvider).single, profile);
+      verifyNever(() => core.validateConfig(any()));
+    });
+
+    testWidgets('keeps the last config and says so when both routes fail', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+      final action = container.read(profilesActionProvider.notifier);
+      final notice = currentAppLocalizations.subscriptionUpdateKeptLast('Sub');
+
+      await tester.runAsync(action.autoUpdateProfiles);
+      await tester.pump();
+
+      expect((proxied.calls, direct.calls), (1, 1));
+      expect(find.text(notice), findsNothing);
+
+      now = now.add(AutoUpdateBackoff.firstDelay);
+      await tester.runAsync(action.autoUpdateProfiles);
+      await tester.pump();
+
+      expect((proxied.calls, direct.calls), (2, 2));
+      expect(find.text(notice), findsOne);
+      expect(await tester.runAsync(saved), 'proxies: [old]');
+      expect(container.read(profilesProvider).single, profile);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    test('backs off after each failure until one succeeds', () async {
+      final action = container.read(profilesActionProvider.notifier);
+
+      await action.autoUpdateProfiles();
+      await action.autoUpdateProfiles();
+      expect(proxied.calls, 1);
+
+      now = now.add(AutoUpdateBackoff.firstDelay);
+      await action.autoUpdateProfiles();
+      expect(proxied.calls, 2);
+
+      now = now.add(AutoUpdateBackoff.firstDelay);
+      await action.autoUpdateProfiles();
+      expect(proxied.calls, 2);
+
+      now = now.add(AutoUpdateBackoff.firstDelay);
+      direct.answer = () => ResponseBody.fromString('proxies: [new]', 200);
+      await action.autoUpdateProfiles();
+      expect(proxied.calls, 3);
+      expect(action.autoUpdateBackoff.failures(profile.id), 0);
     });
   });
 }
