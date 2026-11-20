@@ -244,6 +244,7 @@ func applyConfig(params *SetupParams) error {
 	setProxyDefinitionCache(runningConfigPath(), raw)
 	hub.ApplyConfig(cfg)
 	patchSelectGroup(params.SelectedMap)
+	startLineWatch()
 	updateListeners(cfg)
 	// After the listeners: a probe sent while the TUN is rebuilt carries the
 	// older epoch, and its failure goes with it.
