@@ -128,7 +128,7 @@ func probeOutboundIpSource(ctx context.Context, url string, proxyName string, ti
 		maxBody:   outboundIpMaxBody,
 		recorder:  hits,
 	})
-	if result == nil || result.Error != "" || result.StatusCode != http.StatusOK || !mentionsIp(result.Body) {
+	if result == nil || result.Error != "" || result.StatusCode != http.StatusOK || !validOutboundIpSource(url, result.Body) {
 		return nil
 	}
 	return &OutboundIpResult{
@@ -245,6 +245,47 @@ func mentionsIp(body string) bool {
 		}
 	}
 	return country != "" && publicEgressIp(ip)
+}
+
+// The Dart consumer chooses a different parser for each of its named sources.
+// A valid union-of-sources JSON object can still fail its *specific* parser and
+// prematurely cancel other probes. Keep these URL/field pairs in sync with
+// lib/common/service_probe.dart and lib/models/common.dart.
+func validOutboundIpSource(url string, body string) bool {
+	if !mentionsIp(body) {
+		return false
+	}
+	switch url {
+	case "https://www.cloudflare.com/cdn-cgi/trace":
+		// The Dart Cloudflare parser accepts key=value trace lines, never JSON.
+		return !strings.HasPrefix(strings.TrimSpace(body), "{")
+	case "https://ipinfo.io/json", "https://api.country.is":
+		return jsonHasCountryField(body, "country")
+	case "https://api.ip.sb/geoip", "https://ipwho.is",
+		"https://get.geojs.io/v1/ip/geo.json":
+		return jsonHasCountryField(body, "country_code")
+	case "https://ident.me/json":
+		return jsonHasCountryField(body, "cc")
+	case "https://api.ipquery.io/?format=json":
+		return jsonHasCountryField(body, "location.country_code")
+	}
+	// The core API also permits custom URLs; preserve generic envelope support.
+	return true
+}
+
+func jsonHasCountryField(body string, field string) bool {
+	var doc map[string]json.RawMessage
+	if json.Unmarshal([]byte(body), &doc) != nil || doc == nil {
+		return false
+	}
+	if field == "location.country_code" {
+		var location map[string]json.RawMessage
+		if json.Unmarshal(doc["location"], &location) != nil {
+			return false
+		}
+		return jsonString(location["country_code"]) != ""
+	}
+	return jsonString(doc[field]) != ""
 }
 
 func jsonString(raw json.RawMessage) string {
