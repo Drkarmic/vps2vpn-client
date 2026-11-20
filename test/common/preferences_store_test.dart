@@ -119,7 +119,22 @@ void main() {
 
   test('a save that cannot be written leaves the previous file', () async {
     File(path).writeAsStringSync(json.encode({'flutter.config': 'old'}));
-    Directory('$path.$pid.tmp').createSync();
+    // Temp names are random now, so the write is made to fail by taking away
+    // the right to create files next to the store. Windows and root ignore
+    // that; there the case cannot be set up and is skipped, not faked.
+    if (Platform.isWindows) {
+      markTestSkipped('a read-only folder does not stop file creation here');
+      return;
+    }
+    Process.runSync('chmod', ['555', dir.path]);
+    addTearDown(() => Process.runSync('chmod', ['755', dir.path]));
+    try {
+      File(join(dir.path, 'probe')).createSync();
+      markTestSkipped('running with rights that ignore a read-only folder');
+      return;
+    } on FileSystemException {
+      // expected: nothing can be created here
+    }
 
     expect(
       await openStore().setValue('String', 'flutter.config', 'new'),
