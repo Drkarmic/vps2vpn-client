@@ -38,6 +38,30 @@ void main() {
       expect(Directory(path).existsSync(), isFalse);
     });
 
+    test('unlinks dangling and directory symlinks without deleting targets', () async {
+      final target = Directory(join(root.path, 'target'))..createSync();
+      final keep = File(join(target.path, 'keep.txt'))..writeAsStringSync('keep');
+      final linked = Link(join(root.path, 'linked-target'));
+      await linked.create(target.path);
+
+      await safeDeletePath(linked.path);
+
+      expect(FileSystemEntity.typeSync(linked.path, followLinks: false),
+          FileSystemEntityType.notFound);
+      expect(await keep.readAsString(), 'keep');
+
+      final dangling = Link(join(root.path, 'dangling'));
+      await dangling.create(join(root.path, 'missing-target'));
+      expect(FileSystemEntity.typeSync(dangling.path, followLinks: false),
+          FileSystemEntityType.link);
+
+      await safeDeletePath(dangling.path);
+
+      expect(FileSystemEntity.typeSync(dangling.path, followLinks: false),
+          FileSystemEntityType.notFound);
+      expect(await keep.readAsString(), 'keep');
+    }, testOn: 'linux || mac-os');
+
     test('accepts a path that is already gone', () async {
       await expectLater(safeDeletePath(join(root.path, 'missing')), completes);
     });
