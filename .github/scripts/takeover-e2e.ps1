@@ -45,6 +45,10 @@ foreach ($f in 'vps2vpnCore.exe', 'vps2vpnHelperService.exe', 'data\legal\LICENS
 }
 Check (-not (Get-ChildItem $dir -Recurse -Filter '*flclash*' -ErrorAction SilentlyContinue)) 'no FlClash-named file installed'
 
+# A real user accepts the disclaimer once; the app reads this variable to do
+# the same unattended (bootstrap.dart, _isDisclaimerAcceptedByEnvironment).
+$env:FLCLASH_ACCEPT_DISCLAIMER = '1'
+
 # 2. First run creates the settings; then close it.
 $app = Start-Process $exe -PassThru
 Start-Sleep 20
@@ -59,6 +63,7 @@ $d = Get-Content $prefs -Raw | ConvertFrom-Json
 $c = $d.'flutter.config' | ConvertFrom-Json
 $c.appSettingProps | Add-Member -Force autoRun $true
 $c.appSettingProps | Add-Member -Force takeover $true
+$c.appSettingProps | Add-Member -Force acceptedDisclaimerVersion 1
 $port = 7890
 if ($c.patchClashConfig -and $c.patchClashConfig.'mixed-port') { $port = [int]$c.patchClashConfig.'mixed-port' }
 $d.'flutter.config' = ($c | ConvertTo-Json -Depth 50 -Compress)
@@ -88,6 +93,8 @@ Check (-not $holder.HasExited) 'the port holder was left alone'
 $after = (Get-Content $prefs -Raw | ConvertFrom-Json).'flutter.config' | ConvertFrom-Json
 $newPort = $after.patchClashConfig.'mixed-port'
 "mixed port after: $newPort"
+"after run: autoRun=$($after.appSettingProps.autoRun) takeover=$($after.appSettingProps.takeover) disclaimer=$($after.appSettingProps.acceptedDisclaimerVersion)"
+"vps2vpn processes: $((Get-Process vps2vpn, vps2vpnCore -ErrorAction SilentlyContinue | ForEach-Object Name) -join ', ')"
 Check ($newPort -and [int]$newPort -ne $port -and [int]$newPort -ge 17890 -and [int]$newPort -lt 17990) "moved off the taken port $port (now $newPort)"
 $reg = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 "system proxy: enable=$($reg.ProxyEnable) server=$($reg.ProxyServer)"

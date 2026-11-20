@@ -37,6 +37,8 @@ jobs:
 
       - name: Upload results
         if: always()
+        # The account's artifact storage can be full; results are in the log too.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: e2e
