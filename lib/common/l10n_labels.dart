@@ -1,5 +1,5 @@
 import 'package:fl_clash/enum/enum.dart';
-import 'package:fl_clash/vps2vpn/simple_mode.dart';
+import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:flutter/widgets.dart';
 import 'package:prism_ui/color.dart';
 

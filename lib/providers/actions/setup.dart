@@ -205,6 +205,11 @@ class SetupAction extends _$SetupAction {
   }
 
   Future<bool> _start(_RunRequest request) async {
+    // vps2vpn: close other proxy apps, move off a taken port, clear a stale
+    // system proxy. A resume after a core restart is our own run continuing.
+    if (!request.resume) {
+      await globalState.safeRun(() => vpsBeforeConnect(ref), silence: true);
+    }
     if (request.initialize) {
       var applied = false;
       try {
@@ -747,7 +752,7 @@ class SetupAction extends _$SetupAction {
         // vps2vpn simple mode switches the system proxy off when it turns TUN
         // on (one takeover at a time). Without TUN, put the proxy back, or the
         // app shows "connected" while nothing goes through it.
-        if (!ref.read(appSettingProvider).advancedMode) {
+        if (!ref.read(appSettingProvider).advancedMode && !vps2vpnUpstreamUi) {
           ref
               .read(networkSettingProvider.notifier)
               .update((s) => s.copyWith(systemProxy: true));

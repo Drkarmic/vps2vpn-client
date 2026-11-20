@@ -18,26 +18,26 @@ void main() {
     test('names the APK built for the running ABI', () {
       expect(
         nameOn(Abi.androidArm64, windowsInstalled: false),
-        'FlClash-dev-0.9.4-android-arm64.apk',
+        'vps2vpn-dev-0.9.4-android-arm64.apk',
       );
       expect(
         nameOn(Abi.androidArm, windowsInstalled: false),
-        'FlClash-dev-0.9.4-android-armv7.apk',
+        'vps2vpn-dev-0.9.4-android-armv7.apk',
       );
       expect(
         nameOn(Abi.androidX64, windowsInstalled: false),
-        'FlClash-dev-0.9.4-android-amd64.apk',
+        'vps2vpn-dev-0.9.4-android-amd64.apk',
       );
     });
 
     test('names the Windows installer only for an installed build', () {
       expect(
         nameOn(Abi.windowsX64, windowsInstalled: true),
-        'FlClash-dev-0.9.4-windows-amd64-setup.exe',
+        'vps2vpn-dev-0.9.4-windows-amd64-setup.exe',
       );
       expect(
         nameOn(Abi.windowsArm64, windowsInstalled: true),
-        'FlClash-dev-0.9.4-windows-arm64-setup.exe',
+        'vps2vpn-dev-0.9.4-windows-arm64-setup.exe',
       );
       expect(nameOn(Abi.windowsX64, windowsInstalled: false), isNull);
     });
@@ -62,11 +62,11 @@ void main() {
 
     expect(
       updateAssetName('v0.9.4-pre.1+2', asset),
-      'FlClash-dev-0.9.4-pre.1.2-android-arm64.apk',
+      'vps2vpn-dev-0.9.4-pre.1.2-android-arm64.apk',
     );
     expect(
       updateChecksumsName('v0.9.4-pre.1+2'),
-      'FlClash-dev-0.9.4-pre.1.2-SHA256SUMS',
+      'vps2vpn-dev-0.9.4-pre.1.2-SHA256SUMS',
     );
   });
 
@@ -83,11 +83,11 @@ void main() {
 
     test('reads the entry sha256sum wrote for a file', () {
       final sums =
-          '$digest  ./FlClash-0.9.2-android-arm64-v8a.apk\n'
-          '${'0' * 64}  ./FlClash-0.9.2-windows-amd64-setup.exe\n';
+          '$digest  ./vps2vpn-0.9.2-android-arm64-v8a.apk\n'
+          '${'0' * 64}  ./vps2vpn-0.9.2-windows-amd64-setup.exe\n';
 
       expect(
-        releaseChecksum(sums, 'FlClash-0.9.2-android-arm64-v8a.apk'),
+        releaseChecksum(sums, 'vps2vpn-0.9.2-android-arm64-v8a.apk'),
         digest,
       );
     });

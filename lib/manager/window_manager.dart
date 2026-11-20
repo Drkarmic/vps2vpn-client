@@ -9,6 +9,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/ui/ui.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/simple_mode.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -404,7 +405,9 @@ class _WindowHeaderState extends ConsumerState<WindowHeader> {
         : ref.watch(windowBlurProvider);
     // vps2vpn: in simple mode the title bar blends into our own backdrop.
     final simple = !ref.watch(
-      appSettingProvider.select((state) => state.advancedMode),
+      appSettingProvider.select(
+        (state) => state.advancedMode || vps2vpnUpstreamUi,
+      ),
     );
     return WindowHeaderBar(
       height: kHeaderHeight,
@@ -457,7 +460,8 @@ class WindowHeaderBar extends StatelessWidget {
     final backdropOpacity = this.backdropOpacity;
     final fill = this.fill;
     return Surface(
-      color: fill ??
+      color:
+          fill ??
           (backdropOpacity != null ? Colors.transparent : colorScheme.surface),
       shape: fill != null
           ? null
@@ -474,11 +478,13 @@ class WindowHeaderBar extends StatelessWidget {
                 },
                 onDoubleTap: onDoubleTap,
                 child: ColoredBox(
-                  color: fill ?? (backdropOpacity != null
-                      ? colorScheme.chromeSurface.withValues(
-                          alpha: backdropOpacity,
-                        )
-                      : colorScheme.chromeSurface),
+                  color:
+                      fill ??
+                      (backdropOpacity != null
+                          ? colorScheme.chromeSurface.withValues(
+                              alpha: backdropOpacity,
+                            )
+                          : colorScheme.chromeSurface),
                 ),
               ),
             ),

@@ -15,7 +15,7 @@ class Navigation implements NavigationPort {
     bool hasProxies = false,
     bool advancedMode = false,
   }) {
-    if (!advancedMode) {
+    if (!advancedMode && !vps2vpnUpstreamUi) {
       return simpleNavigationItems(
         hasProxies: hasProxies,
         dashboard: (_) => const VpsHomePage(),

@@ -3952,32 +3952,33 @@ class AppLocalizationsRu extends AppLocalizations {
   String get vpnServiceStartFailed => 'Не удалось запустить службу VPN.';
 
   @override
-  String get vHome => 'Home';
+  String get vHome => 'Главная';
 
   @override
-  String get vServers => 'Servers';
+  String get vServers => 'Серверы';
 
   @override
-  String get vMine => 'Me';
+  String get vMine => 'Я';
 
   @override
-  String get vSmartRouting => 'Smart routing';
+  String get vSmartRouting => 'Умная маршрутизация';
 
   @override
-  String get vProxyAll => 'Proxy everything';
+  String get vProxyAll => 'Всё через прокси';
 
   @override
-  String get vAdvancedMode => 'Advanced mode';
+  String get vAdvancedMode => 'Расширенный режим';
 
   @override
-  String get vAdvancedModeDesc => 'Show every page and expert setting';
+  String get vAdvancedModeDesc =>
+      'Показать все страницы и экспертные настройки';
 
   @override
-  String get vSubscriptions => 'Subscriptions';
+  String get vSubscriptions => 'Подписки';
 
   @override
-  String get vSettings => 'Settings';
+  String get vSettings => 'Настройки';
 
   @override
-  String get vRouting => 'Routing';
+  String get vRouting => 'Маршрутизация';
 }

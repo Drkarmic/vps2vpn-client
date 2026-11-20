@@ -3854,32 +3854,32 @@ class AppLocalizationsKo extends AppLocalizations {
   String get vpnServiceStartFailed => 'VPN 서비스를 시작하지 못했습니다.';
 
   @override
-  String get vHome => 'Home';
+  String get vHome => '홈';
 
   @override
-  String get vServers => 'Servers';
+  String get vServers => '서버';
 
   @override
-  String get vMine => 'Me';
+  String get vMine => '내 정보';
 
   @override
-  String get vSmartRouting => 'Smart routing';
+  String get vSmartRouting => '스마트 라우팅';
 
   @override
-  String get vProxyAll => 'Proxy everything';
+  String get vProxyAll => '모두 프록시 경유';
 
   @override
-  String get vAdvancedMode => 'Advanced mode';
+  String get vAdvancedMode => '고급 모드';
 
   @override
-  String get vAdvancedModeDesc => 'Show every page and expert setting';
+  String get vAdvancedModeDesc => '모든 페이지와 전문 설정 표시';
 
   @override
-  String get vSubscriptions => 'Subscriptions';
+  String get vSubscriptions => '구독';
 
   @override
-  String get vSettings => 'Settings';
+  String get vSettings => '설정';
 
   @override
-  String get vRouting => 'Routing';
+  String get vRouting => '라우팅';
 }

@@ -20,7 +20,7 @@ String? profileUrlFromQrCodes(Iterable<String?> values) {
       return text;
     }
     final uri = Uri.tryParse(text);
-    if (uri == null || !protocolSchemes.contains(uri.scheme)) {
+    if (uri == null || !linkSchemes.contains(uri.scheme)) {
       continue;
     }
     final url = _installConfigUrl(uri);
@@ -92,7 +92,7 @@ class LinkManager {
   }
 
   void _handle(Uri uri, Function(String url) installConfigCallBack) {
-    if (!protocolSchemes.contains(uri.scheme)) {
+    if (!linkSchemes.contains(uri.scheme)) {
       return;
     }
     commonPrint.log('onAppLink: $uri');

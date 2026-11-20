@@ -6,6 +6,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/widgets/widgets.dart';
+import 'package:fl_clash/vps2vpn/simple_mode.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,7 +27,9 @@ class HomePage extends ConsumerWidget {
     }
     // vps2vpn: our own window for everyday use; FlClash's in advanced mode.
     final advancedMode = ref.watch(
-      appSettingProvider.select((state) => state.advancedMode),
+      appSettingProvider.select(
+        (state) => state.advancedMode || vps2vpnUpstreamUi,
+      ),
     );
     if (!advancedMode) {
       return const HomeBackScopeContainer(child: VpsShell());

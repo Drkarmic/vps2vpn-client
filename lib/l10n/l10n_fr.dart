@@ -4005,32 +4005,33 @@ class AppLocalizationsFr extends AppLocalizations {
   String get vpnServiceStartFailed => 'Le service VPN n\'a pas pu démarrer.';
 
   @override
-  String get vHome => 'Home';
+  String get vHome => 'Accueil';
 
   @override
-  String get vServers => 'Servers';
+  String get vServers => 'Serveurs';
 
   @override
-  String get vMine => 'Me';
+  String get vMine => 'Moi';
 
   @override
-  String get vSmartRouting => 'Smart routing';
+  String get vSmartRouting => 'Routage intelligent';
 
   @override
-  String get vProxyAll => 'Proxy everything';
+  String get vProxyAll => 'Tout via le proxy';
 
   @override
-  String get vAdvancedMode => 'Advanced mode';
+  String get vAdvancedMode => 'Mode avancé';
 
   @override
-  String get vAdvancedModeDesc => 'Show every page and expert setting';
+  String get vAdvancedModeDesc =>
+      'Afficher toutes les pages et réglages experts';
 
   @override
-  String get vSubscriptions => 'Subscriptions';
+  String get vSubscriptions => 'Abonnements';
 
   @override
-  String get vSettings => 'Settings';
+  String get vSettings => 'Réglages';
 
   @override
-  String get vRouting => 'Routing';
+  String get vRouting => 'Routage';
 }

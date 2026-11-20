@@ -26,12 +26,10 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
 
   Future<void> _paste() async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text?.trim() ?? '';
-    final ok =
-        text.startsWith('http://') ||
-        text.startsWith('https://') ||
-        text.contains('://');
-    if (!ok) {
+    // A plain URL, a share link, or a clash://install-config?url=… wrapper
+    // (what many panels hand out) all come down to one subscription link.
+    final link = profileUrlFromQrCodes([data?.text]);
+    if (link == null) {
       setState(
         () => _note = tr(
           context,
@@ -43,7 +41,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
     }
     setState(() => _note = null);
     final before = ref.read(profilesProvider).length;
-    await ref.read(profilesActionProvider.notifier).addProfileFromLink(text);
+    await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
     if (!mounted) return;
     if (ref.read(profilesProvider).length > before) {
       // Added: the next step is connecting, which lives on Home.
@@ -245,6 +243,24 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                         .read(setupActionProvider.notifier)
                         .applyProfileDebounce(force: true);
                   },
+                ),
+              ),
+              Container(height: 1, color: p.line),
+              VpsRow(
+                icon: VpsIcon.shield,
+                title: tr(context, '连接时自动接管', 'Take over on Connect'),
+                subtitle: tr(
+                  context,
+                  '自动关闭其他代理软件、避开被占用的端口、清理失效的系统代理',
+                  'Close other proxy apps, avoid taken ports, clear stale proxies',
+                ),
+                trailing: VpsSwitch(
+                  value: ref.watch(
+                    appSettingProvider.select((s) => s.takeover),
+                  ),
+                  onChanged: (v) => ref
+                      .read(appSettingProvider.notifier)
+                      .update((s) => s.copyWith(takeover: v)),
                 ),
               ),
               Container(height: 1, color: p.line),

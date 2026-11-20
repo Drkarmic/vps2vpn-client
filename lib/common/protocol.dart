@@ -9,6 +9,11 @@ import 'print.dart';
 // installed FlClash or Clash Verge is never taken over.
 const protocolSchemes = ['vps2vpn'];
 
+/// Links vps2vpn reads when they reach it (paste, QR code, the link
+/// receiver): its own scheme plus the common clash ones subscription
+/// services hand out. Reading them claims nothing in the OS.
+const linkSchemes = ['vps2vpn', 'clash', 'clashmeta', 'flclash'];
+
 /// A user-level desktop entry that claims the schemes for the running binary,
 /// so an AppImage or a development build is reachable without a packaged
 /// .desktop file. Rewritten on every launch, like the Windows registry keys.

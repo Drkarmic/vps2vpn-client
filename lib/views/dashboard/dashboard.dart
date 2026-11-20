@@ -5,6 +5,7 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/widgets/widgets.dart';
+import 'package:fl_clash/vps2vpn/simple_mode.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/widgets.dart';
 
@@ -62,7 +63,9 @@ class _DashboardViewState extends ConsumerState<DashboardView> {
     final scale = math.max(1.0, MediaQuery.textScalerOf(context).scale(1));
     final size = Size(viewSize.width - sideWidth, viewSize.height) / scale;
     final advancedMode = ref.watch(
-      appSettingProvider.select((state) => state.advancedMode),
+      appSettingProvider.select(
+        (state) => state.advancedMode || vps2vpnUpstreamUi,
+      ),
     );
     final editable = advancedMode && !DashboardDensity.of(size).isDesktop;
     if (!editable) {

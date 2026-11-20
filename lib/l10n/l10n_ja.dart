@@ -3779,32 +3779,32 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vpnServiceStartFailed => 'VPN サービスを起動できませんでした。';
 
   @override
-  String get vHome => 'Home';
+  String get vHome => 'ホーム';
 
   @override
-  String get vServers => 'Servers';
+  String get vServers => 'サーバー';
 
   @override
-  String get vMine => 'Me';
+  String get vMine => 'マイページ';
 
   @override
-  String get vSmartRouting => 'Smart routing';
+  String get vSmartRouting => 'スマートルーティング';
 
   @override
-  String get vProxyAll => 'Proxy everything';
+  String get vProxyAll => 'すべてプロキシ経由';
 
   @override
-  String get vAdvancedMode => 'Advanced mode';
+  String get vAdvancedMode => '詳細モード';
 
   @override
-  String get vAdvancedModeDesc => 'Show every page and expert setting';
+  String get vAdvancedModeDesc => 'すべてのページと詳細設定を表示';
 
   @override
-  String get vSubscriptions => 'Subscriptions';
+  String get vSubscriptions => 'サブスクリプション';
 
   @override
-  String get vSettings => 'Settings';
+  String get vSettings => '設定';
 
   @override
-  String get vRouting => 'Routing';
+  String get vRouting => 'ルーティング';
 }

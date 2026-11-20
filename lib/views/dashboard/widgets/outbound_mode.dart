@@ -33,7 +33,11 @@ class OutboundModeCard extends ConsumerWidget {
       patchClashConfigProvider.select((state) => state.mode),
     );
     final modes = visibleModes(
-      ref.watch(appSettingProvider.select((state) => state.advancedMode)),
+      ref.watch(
+        appSettingProvider.select(
+          (state) => state.advancedMode || vps2vpnUpstreamUi,
+        ),
+      ),
     );
     final tone = DashboardColors.of(context).tone;
     final style = AppTextStyle.footnote.of(context, emphasized: true);
@@ -103,7 +107,11 @@ class OutboundModeBar extends ConsumerWidget {
       patchClashConfigProvider.select((state) => state.mode),
     );
     final modes = visibleModes(
-      ref.watch(appSettingProvider.select((state) => state.advancedMode)),
+      ref.watch(
+        appSettingProvider.select(
+          (state) => state.advancedMode || vps2vpnUpstreamUi,
+        ),
+      ),
     );
     final outer = dashboardCardRadius(density) - _inset;
     final style = AppTextStyle.subheadline.of(context, emphasized: true);

@@ -4,7 +4,9 @@ part of '../state.dart';
 NavigationItemsState navigationItemsState(Ref ref) {
   final openLogs = ref.watch(appSettingProvider).openLogs;
   final advancedMode = ref.watch(
-    appSettingProvider.select((state) => state.advancedMode),
+    appSettingProvider.select(
+      (state) => state.advancedMode || vps2vpnUpstreamUi,
+    ),
   );
   vps2vpnAdvancedMode = advancedMode;
   final hasProfiles = ref.watch(
@@ -84,12 +86,12 @@ DashboardState dashboardState(Ref ref) {
     appSettingProvider.select((state) => state.dashboardWidgets),
   );
   final advancedMode = ref.watch(
-    appSettingProvider.select((state) => state.advancedMode),
+    appSettingProvider.select(
+      (state) => state.advancedMode || vps2vpnUpstreamUi,
+    ),
   );
   return DashboardState(
-    dashboardWidgets: advancedMode
-        ? dashboardWidgets
-        : simpleDashboardWidgets,
+    dashboardWidgets: advancedMode ? dashboardWidgets : simpleDashboardWidgets,
   );
 }
 

@@ -283,6 +283,8 @@ abstract class AppSettingProps with _$AppSettingProps {
     // vps2vpn: false = simple mode (few pages, plain words); true = every FlClash page.
     @Default(false) bool advancedMode,
     @Default(true) bool smartLines,
+    // vps2vpn: on Connect, close other proxy apps and clear what they left.
+    @Default(true) bool takeover,
     @Default(RestoreStrategy.compatible) RestoreStrategy restoreStrategy,
     @Default(true) bool showTrayTitle,
     @Default(true) bool monochromeTrayIcon,

@@ -15,6 +15,7 @@ import 'package:fl_clash/providers/service_status.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:fl_clash/vps2vpn/takeover_notice.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -93,6 +94,7 @@ class VpsHomePage extends ConsumerWidget {
         'Your private network, under your control',
       ),
       children: [
+        const VpsTakeoverNotice(),
         const _Hero(),
         const SizedBox(height: 16),
         const _Stats(),

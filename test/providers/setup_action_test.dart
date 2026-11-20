@@ -18,6 +18,7 @@ import 'package:fl_clash/providers/state.dart';
 import 'package:fl_clash/state.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
+import 'package:fl_clash/vps2vpn/simple_mode.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -864,6 +865,8 @@ void main() {
 
     test('vps2vpn: a failed authorization in simple mode puts the system '
         'proxy back', () async {
+      vps2vpnUpstreamUi = false;
+      addTearDown(() => vps2vpnUpstreamUi = true);
       loadAppLocalizations(const Locale('en'));
       container
           .read(patchClashConfigProvider.notifier)

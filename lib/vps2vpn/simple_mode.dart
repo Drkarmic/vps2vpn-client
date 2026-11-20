@@ -14,53 +14,16 @@ import 'package:fl_clash/views/about.dart';
 import 'package:fl_clash/views/profiles/profiles.dart';
 import 'package:fl_clash/views/theme.dart';
 import 'package:fl_clash/widgets/widgets.dart';
+
+import 'flags.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Mirrors AppSettingProps.advancedMode for label getters that have no ref.
-/// Set by the navigation provider, which every page watches.
-bool vps2vpnAdvancedMode = false;
-
-/// The dashboard cards simple mode shows, in this order.
-const simpleDashboardWidgets = [
-  DashboardWidget.currentOutbound,
-  DashboardWidget.networkSpeed,
-  DashboardWidget.outboundMode,
-  DashboardWidget.vpnButton,
-  DashboardWidget.networkTakeover,
-  DashboardWidget.profiles,
-];
-
-/// Simple mode offers only "smart routing" and "proxy everything".
-List<Mode> visibleModes(bool advancedMode) =>
-    advancedMode ? Mode.values : const [Mode.rule, Mode.global];
-
-/// Plain-word page titles in simple mode; null keeps FlClash's own.
-String? simplePageLabel(PageLabel label) {
-  if (vps2vpnAdvancedMode) return null;
-  final l = currentAppLocalizations;
-  return switch (label) {
-    PageLabel.dashboard => l.vHome,
-    PageLabel.proxies => l.vServers,
-    PageLabel.profiles => l.vSubscriptions,
-    PageLabel.tools => l.vMine,
-    _ => null,
-  };
-}
-
-/// Plain-word routing names in simple mode; null keeps FlClash's own.
-String? simpleModeLabel(Mode mode) {
-  if (vps2vpnAdvancedMode) return null;
-  final l = currentAppLocalizations;
-  return switch (mode) {
-    Mode.rule => l.vSmartRouting,
-    Mode.global => l.vProxyAll,
-    Mode.direct => null,
-  };
-}
+export 'flags.dart';
 
 /// "Outbound mode" in advanced mode, "How you go online" in simple mode.
-String outboundModeTitle(BuildContext context) => vps2vpnAdvancedMode
+String outboundModeTitle(BuildContext context) =>
+    vps2vpnAdvancedMode || vps2vpnUpstreamUi
     ? context.appLocalizations.outboundMode
     : context.appLocalizations.vRouting;
 

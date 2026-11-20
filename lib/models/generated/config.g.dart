@@ -51,6 +51,7 @@ _AppSettingProps _$AppSettingPropsFromJson(
   developerMode: json['developerMode'] as bool? ?? false,
   advancedMode: json['advancedMode'] as bool? ?? false,
   smartLines: json['smartLines'] as bool? ?? true,
+  takeover: json['takeover'] as bool? ?? true,
   restoreStrategy:
       $enumDecodeNullable(_$RestoreStrategyEnumMap, json['restoreStrategy']) ??
       RestoreStrategy.compatible,
@@ -124,6 +125,7 @@ Map<String, dynamic> _$AppSettingPropsToJson(_AppSettingProps instance) =>
       'developerMode': instance.developerMode,
       'advancedMode': instance.advancedMode,
       'smartLines': instance.smartLines,
+      'takeover': instance.takeover,
       'restoreStrategy': _$RestoreStrategyEnumMap[instance.restoreStrategy]!,
       'showTrayTitle': instance.showTrayTitle,
       'monochromeTrayIcon': instance.monochromeTrayIcon,

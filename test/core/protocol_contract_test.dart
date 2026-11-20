@@ -296,6 +296,7 @@ void main() {
         'skip-cert-verify': false,
         'delay-test-timeout': defaultDelayTestTimeout,
         'mitm-capture': false,
+        'vps2vpn-smart': true,
       },
     });
     expect(handler.calls[CoreMethod.routeWatch], {'watch': true});
