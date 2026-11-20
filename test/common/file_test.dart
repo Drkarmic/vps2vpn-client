@@ -38,29 +38,40 @@ void main() {
       expect(Directory(path).existsSync(), isFalse);
     });
 
-    test('unlinks dangling and directory symlinks without deleting targets', () async {
-      final target = Directory(join(root.path, 'target'))..createSync();
-      final keep = File(join(target.path, 'keep.txt'))..writeAsStringSync('keep');
-      final linked = Link(join(root.path, 'linked-target'));
-      await linked.create(target.path);
+    test(
+      'unlinks dangling and directory symlinks without deleting targets',
+      () async {
+        final target = Directory(join(root.path, 'target'))..createSync();
+        final keep = File(join(target.path, 'keep.txt'))
+          ..writeAsStringSync('keep');
+        final linked = Link(join(root.path, 'linked-target'));
+        await linked.create(target.path);
 
-      await safeDeletePath(linked.path);
+        await safeDeletePath(linked.path);
 
-      expect(FileSystemEntity.typeSync(linked.path, followLinks: false),
-          FileSystemEntityType.notFound);
-      expect(await keep.readAsString(), 'keep');
+        expect(
+          FileSystemEntity.typeSync(linked.path, followLinks: false),
+          FileSystemEntityType.notFound,
+        );
+        expect(await keep.readAsString(), 'keep');
 
-      final dangling = Link(join(root.path, 'dangling'));
-      await dangling.create(join(root.path, 'missing-target'));
-      expect(FileSystemEntity.typeSync(dangling.path, followLinks: false),
-          FileSystemEntityType.link);
+        final dangling = Link(join(root.path, 'dangling'));
+        await dangling.create(join(root.path, 'missing-target'));
+        expect(
+          FileSystemEntity.typeSync(dangling.path, followLinks: false),
+          FileSystemEntityType.link,
+        );
 
-      await safeDeletePath(dangling.path);
+        await safeDeletePath(dangling.path);
 
-      expect(FileSystemEntity.typeSync(dangling.path, followLinks: false),
-          FileSystemEntityType.notFound);
-      expect(await keep.readAsString(), 'keep');
-    }, testOn: 'linux || mac-os');
+        expect(
+          FileSystemEntity.typeSync(dangling.path, followLinks: false),
+          FileSystemEntityType.notFound,
+        );
+        expect(await keep.readAsString(), 'keep');
+      },
+      testOn: 'linux || mac-os',
+    );
 
     test('accepts a path that is already gone', () async {
       await expectLater(safeDeletePath(join(root.path, 'missing')), completes);
@@ -88,23 +99,26 @@ void main() {
       expect(file.readAsStringSync(), 'mode: rule');
     });
 
-    test('failed replacement cleans staged files without deleting the target', () async {
-      final path = join(root.path, 'config.yaml');
-      final target = Directory(path)..createSync();
+    test(
+      'failed replacement cleans staged files without deleting the target',
+      () async {
+        final path = join(root.path, 'config.yaml');
+        final target = Directory(path)..createSync();
 
-      await expectLater(
-        File(path).writeAsStringAtomically('mode: global'),
-        throwsA(isA<FileSystemException>()),
-      );
-      expect(target.existsSync(), isTrue);
-      expect(root.listSync().map((entity) => basename(entity.path)), [
-        'config.yaml',
-      ]);
-    });
+        await expectLater(
+          File(path).writeAsStringAtomically('mode: global'),
+          throwsA(isA<FileSystemException>()),
+        );
+        expect(target.existsSync(), isTrue);
+        expect(root.listSync().map((entity) => basename(entity.path)), [
+          'config.yaml',
+        ]);
+      },
+    );
 
     test('overlapping writes never share a temporary sibling', () async {
       final file = File(join(root.path, 'config.yaml'));
-      final values = List.generate(16, (i) => 'entry-$i:' + ('x' * 32768));
+      final values = List.generate(16, (i) => 'entry-$i:${'x' * 32768}');
 
       await Future.wait(values.map(file.writeAsStringAtomically));
 
@@ -114,13 +128,16 @@ void main() {
       ]);
     });
 
-    test('a stale legacy staging directory cannot block later writes', () async {
-      final file = File(join(root.path, 'config.yaml'));
-      final legacyStaging = Directory('${file.path}.$pid.tmp')..createSync();
-      await file.writeAsStringAtomically('mode: rule');
+    test(
+      'a stale legacy staging directory cannot block later writes',
+      () async {
+        final file = File(join(root.path, 'config.yaml'));
+        final legacyStaging = Directory('${file.path}.$pid.tmp')..createSync();
+        await file.writeAsStringAtomically('mode: rule');
 
-      expect(file.readAsStringSync(), 'mode: rule');
-      expect(legacyStaging.existsSync(), isTrue);
-    });
+        expect(file.readAsStringSync(), 'mode: rule');
+        expect(legacyStaging.existsSync(), isTrue);
+      },
+    );
   });
 }

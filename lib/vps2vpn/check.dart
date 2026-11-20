@@ -39,10 +39,11 @@ List<ServiceTarget> get _all => [for (final (_, ts) in _groups) ...ts];
 
 String statusText(BuildContext context, ProbeEntry<ServiceCheck> entry) {
   final s = entry.value?.status;
-  if (s == null)
+  if (s == null) {
     return entry.isLoading
         ? tr(context, '检测中…', 'Checking…')
         : tr(context, '未检测', 'Not checked');
+  }
   return switch (s) {
     ServiceProbeStatus.available => tr(context, '可用', 'Available'),
     ServiceProbeStatus.restricted => tr(context, '受限', 'Limited'),
@@ -278,11 +279,12 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
                 ],
               ),
             );
-            if (!wide)
+            if (!wide) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [exit, const SizedBox(height: 12), score],
               );
+            }
             return IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

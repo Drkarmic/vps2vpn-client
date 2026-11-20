@@ -842,7 +842,7 @@ class SetupAction extends _$SetupAction {
       // whatever was applied last; safeRun has already shown the error.
       return _SetupTaskResult.failed;
     }
-    final setupParams = _setupParams.copyWith(base: realProfile?.base);
+    final setupParams = _setupParams.copyWith(base: realProfile.base);
     final inputs = switch (setupState) {
       final state? when !profileFailed => (
         state,
@@ -852,8 +852,8 @@ class SetupAction extends _$SetupAction {
       ),
       _ => null,
     };
-    final yamlString = realProfile?.yaml ?? '';
-    final yamlMd5 = realProfile?.md5 ?? '';
+    final yamlString = realProfile.yaml;
+    final yamlMd5 = realProfile.md5;
     if (!profileFailed && yamlMd5 == globalState.lastConfigMd5 && !force) {
       _appliedInputs = inputs;
       globalState.lastConfigCounts = realProfile.counts;
@@ -914,8 +914,7 @@ class SetupAction extends _$SetupAction {
           rethrow;
         }
         globalState.lastConfigMd5 = yamlMd5;
-        globalState.lastConfigCounts =
-            realProfile?.counts ?? configCountsOf(const {});
+        globalState.lastConfigCounts = realProfile.counts;
         _appliedInputs = inputs;
         if (system.isAndroid) {
           await preferences.saveAppliedConfigMd5(yamlMd5);

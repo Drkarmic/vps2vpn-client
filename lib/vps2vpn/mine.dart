@@ -347,16 +347,13 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      () {
-                        try {
-                          return 'vps2vpn  v${globalState.packageInfo.version}';
-                        } catch (_) {
-                          return 'vps2vpn';
-                        }
-                      }(),
-                      style: vpsText(p, size: 15, weight: FontWeight.w700),
-                    ),
+                    Text(() {
+                      try {
+                        return 'vps2vpn  v${globalState.packageInfo.version}';
+                      } catch (_) {
+                        return 'vps2vpn';
+                      }
+                    }(), style: vpsText(p, size: 15, weight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text(
                       tr(context, '你的私有网络客户端', 'Your private network client'),
@@ -765,9 +762,11 @@ String _two(int n) => n.toString().padLeft(2, '0');
 String _ago(BuildContext context, DateTime t) {
   final d = DateTime.now().difference(t);
   if (d.inMinutes < 1) return tr(context, '刚刚', 'just now');
-  if (d.inHours < 1)
+  if (d.inHours < 1) {
     return tr(context, '${d.inMinutes} 分钟前', '${d.inMinutes} min ago');
-  if (d.inDays < 1)
+  }
+  if (d.inDays < 1) {
     return tr(context, '${d.inHours} 小时前', '${d.inHours} h ago');
+  }
   return tr(context, '${d.inDays} 天前', '${d.inDays} d ago');
 }

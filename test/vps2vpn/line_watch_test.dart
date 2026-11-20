@@ -54,7 +54,7 @@ void main() {
           started.complete();
           return answer.future;
         },
-        report: (_, __) async {
+        report: (_, _) async {
           reports++;
           return true;
         },
@@ -79,7 +79,7 @@ void main() {
     VpsLineWatch make() => VpsLineWatch(
       lines: () async => [line],
       probe: (_) async => false,
-      report: (_, __) async {
+      report: (_, _) async {
         reports++;
         return true;
       },
@@ -111,7 +111,7 @@ void main() {
         ),
       ],
       probe: (node) async => healthy && node.name == 'A-other-port',
-      report: (_, __) async {
+      report: (_, _) async {
         reports++;
         return true;
       },

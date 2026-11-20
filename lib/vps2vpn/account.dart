@@ -21,8 +21,9 @@ String _ago(BuildContext context, DateTime at) {
   if (d.inHours < 1) {
     return tr(context, '${d.inMinutes} 分钟前', '${d.inMinutes} min ago');
   }
-  if (d.inDays < 1)
+  if (d.inDays < 1) {
     return tr(context, '${d.inHours} 小时前', '${d.inHours} h ago');
+  }
   return tr(context, '${d.inDays} 天前', '${d.inDays} d ago');
 }
 

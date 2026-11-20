@@ -101,8 +101,8 @@ class System {
       '-e',
       'set p to quoted form of (item 1 of argv)',
       '-e',
-      'do shell script ("chown root:admin " & p & " && chmod 4750 " & p) '
-          'with administrator privileges',
+      ('do shell script ("chown root:admin " & p & " && chmod 4750 " & p) '
+          'with administrator privileges'),
       '-e',
       'end run',
       '--',

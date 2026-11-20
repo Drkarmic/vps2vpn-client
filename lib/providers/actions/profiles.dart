@@ -164,10 +164,7 @@ class ProfilesAction extends _$ProfilesAction {
     }
   }
 
-  Future<void> updateProfile(
-    Profile profile, {
-    bool showLoading = false,
-  }) {
+  Future<void> updateProfile(Profile profile, {bool showLoading = false}) {
     final previous = _profileUpdates[profile.id];
     final completer = Completer<void>();
     _profileUpdates[profile.id] = completer.future;
@@ -232,7 +229,7 @@ class ProfilesAction extends _$ProfilesAction {
         }
       } finally {
         if (identical(_profileUpdates[profile.id], completer.future)) {
-          _profileUpdates.remove(profile.id);
+          unawaited(_profileUpdates.remove(profile.id));
         }
         if (!completer.isCompleted) {
           completer.complete();

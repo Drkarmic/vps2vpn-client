@@ -122,8 +122,7 @@ class VpsClientRelease {
     final raw = json['files'];
     final files = <String, Uri>{
       if (raw is Map)
-        for (final e in raw.entries)
-          if (_web(e.value) case final u?) '${e.key}'.toLowerCase(): u,
+        for (final e in raw.entries) '${e.key}'.toLowerCase(): ?_web(e.value),
     };
     final url = _web(json['url']) ?? files.values.firstOrNull;
     if (version.isEmpty || url == null) return null;
@@ -196,14 +195,13 @@ class VpsMember {
   // Network JSON is untrusted: malformed/non-finite counters are ignored.
   // Keep converted integers in the portable exact-integer range.
   static int _int(Object? v) =>
-      v is num && v.isFinite && v >= 0 && v <= 9007199254740991
-      ? v.toInt()
-      : 0;
+      v is num && v.isFinite && v >= 0 && v <= 9007199254740991 ? v.toInt() : 0;
 
   factory VpsMember.fromJson(Map<String, Object?> json) {
     final expire = _panelTimestamp(json['expire_at']);
     final rawQuotaGb = json['quota_gb'];
-    final unlimited = rawQuotaGb is! num || !rawQuotaGb.isFinite || rawQuotaGb <= 0;
+    final unlimited =
+        rawQuotaGb is! num || !rawQuotaGb.isFinite || rawQuotaGb <= 0;
     final quota = json['quota_eff'] ?? rawQuotaGb;
     return VpsMember(
       name: '${json['name'] ?? ''}',
@@ -574,9 +572,7 @@ String? vpsLineReportHost(Map<String, dynamic> def) {
 /// RFC 5952 text for a 16-byte IPv6 address: lower-case hex, no leading
 /// zeros, and the longest run (two or more) of zero groups shortened to "::".
 String vpsCompressIPv6(List<int> raw) {
-  final groups = [
-    for (var i = 0; i < 16; i += 2) (raw[i] << 8) | raw[i + 1],
-  ];
+  final groups = [for (var i = 0; i < 16; i += 2) (raw[i] << 8) | raw[i + 1]];
   var bestStart = -1, bestLen = 0;
   for (var i = 0; i < 8;) {
     if (groups[i] != 0) {

@@ -265,6 +265,8 @@ final class IpcCoreTransport implements DesktopCoreTransport {
       return Future.error(StateError('IPC transport is closed'));
     }
     final completer = Completer<TransportConnected>();
+    // Cancelled in finish(), which every exit path goes through.
+    // ignore: cancel_subscriptions
     StreamSubscription<DesktopTransportEvent>? subscription;
     Timer? timer;
 
@@ -297,9 +299,7 @@ final class IpcCoreTransport implements DesktopCoreTransport {
       },
       onDone: () {
         finish(
-          () => completer.completeError(
-            StateError('IPC transport is closed'),
-          ),
+          () => completer.completeError(StateError('IPC transport is closed')),
         );
       },
     );

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show Tristate;
 
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
@@ -9,7 +10,6 @@ import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/mine.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -273,8 +273,8 @@ void main() {
     );
     final node = tester.getSemantics(find.byType(MergeSemantics));
     expect(node.label, contains('Take over'));
-    expect(node.hasFlag(SemanticsFlag.hasToggledState), isTrue);
-    expect(node.hasFlag(SemanticsFlag.isToggled), isTrue);
+    expect(node.flagsCollection.isToggled, isNot(Tristate.none));
+    expect(node.flagsCollection.isToggled, Tristate.isTrue);
     // Released inside the test: the framework checks for live handles
     // before tear-downs run.
     semantics.dispose();
