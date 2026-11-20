@@ -319,6 +319,42 @@ func TestShareLinksLeaveOutWhatNoLinkCarries(t *testing.T) {
 	}
 }
 
+// The pinned Mihomo TUIC link decoder cannot carry TLS identity policies.
+// A link that silently removes a cert pin or client certificate is not a
+// faithful representation of the source proxy and must not be exported.
+func TestTuicShareLinksFailClosedForUnrepresentableTLSOptions(t *testing.T) {
+	base := map[string]any{
+		"name": "secure tuic", "type": "tuic", "server": "node.example",
+		"port": 443, "uuid": "user", "password": "pass", "alpn": []string{"h3"},
+	}
+	if got := encodeShareLink(proxyFields(base)); got == "" {
+		t.Fatal("ordinary TUIC link should remain exportable")
+	}
+	cases := []struct {
+		name string
+		key string
+		value any
+	}{
+		{"skip certificate verification", "skip-cert-verify", true},
+		{"pinned certificate fingerprint", "fingerprint", "sha256/pinned-hash"},
+		{"custom certificate name", "name-cert-verify", "vpn.example"},
+		{"mutual TLS certificate", "certificate", "-----BEGIN CERTIFICATE-----"},
+		{"mutual TLS private key", "private-key", "-----BEGIN PRIVATE KEY-----"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			attrs := make(map[string]any, len(base)+1)
+			for key, value := range base {
+				attrs[key] = value
+			}
+			attrs[tc.key] = tc.value
+			if got := encodeShareLink(proxyFields(attrs)); got != "" {
+				t.Fatalf("TUIC %s was exported without its TLS policy: %s", tc.key, got)
+			}
+		})
+	}
+}
+
 func TestDecodeShareLinksAnswersEveryLine(t *testing.T) {
 	results := handleDecodeShareLinks(LinesParams{Lines: []string{
 		"trojan://pw@a.example:443#one",
