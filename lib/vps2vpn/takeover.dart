@@ -92,15 +92,24 @@ class VpsSystemProxy {
   /// Points at our own mixed port on this machine.
   bool isOurs(int port) {
     if (!enabled || (pac != null && pac!.isNotEmpty)) return false;
-    final entries = (server ?? '').split(';');
+    final entries = (server ?? '')
+        .split(';')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (entries.isEmpty) return false;
     final protocols = <String>{};
     for (final entry in entries) {
-      final parts = entry.trim().split('=');
+      final parts = entry.split('=').map((p) => p.trim()).toList();
       if (parts.length > 2 || parts.last.isEmpty) return false;
-      if (parts.length == 2 && !protocols.add(parts.first.toLowerCase())) {
-        return false;
+      if (parts.length == 2) {
+        final scheme = parts.first.toLowerCase();
+        if (scheme.isEmpty || !protocols.add(scheme)) return false;
       }
-      final uri = Uri.tryParse('http://${parts.last}');
+      final hostPort = parts.last;
+      final uri = Uri.tryParse(
+        hostPort.contains('://') ? hostPort : 'http://$hostPort',
+      );
       if (uri == null ||
           uri.userInfo.isNotEmpty ||
           uri.path.isNotEmpty ||
@@ -108,7 +117,11 @@ class VpsSystemProxy {
           uri.hasFragment ||
           !uri.hasPort ||
           uri.port != port ||
-          !const ['127.0.0.1', 'localhost', '::1'].contains(uri.host)) {
+          !const [
+            '127.0.0.1',
+            'localhost',
+            '::1',
+          ].contains(uri.host.toLowerCase())) {
         return false;
       }
     }
@@ -263,6 +276,23 @@ int _takeoverRevision = 0;
 /// the real port and system proxy, whatever the test drives.
 final bool _underTest = Platform.environment.containsKey('FLUTTER_TEST');
 
+/// Cancels any in-flight takeover work and stops the system-proxy guard.
+void vpsCancelTakeover() {
+  _takeoverRevision++;
+  _guard?.cancel();
+  _guard = null;
+}
+
+/// Ensures the system-proxy guard is running while connected (for example,
+/// after a core restart resume that skips [vpsBeforeConnect]).
+void vpsEnsureGuard(Ref ref) {
+  if (!Platform.isWindows || _underTest) return;
+  if (!ref.mounted || !ref.read(isStartProvider)) return;
+  if (_guard == null || !_guard!.isActive) {
+    _startGuard(ref);
+  }
+}
+
 /// Runs before every connect. Safe mode, and takeover switched off, only
 /// report what they see; nothing is closed or changed.
 Future<void> vpsBeforeConnect(Ref ref) async {
@@ -272,9 +302,14 @@ Future<void> vpsBeforeConnect(Ref ref) async {
       ref.mounted &&
       revision == _takeoverRevision &&
       !safeModeBuild &&
+      ref.read(isStartProvider) &&
       ref.read(appSettingProvider).takeover;
   final rivals = await scanRivals();
-  if (!ref.mounted || revision != _takeoverRevision) return;
+  if (!ref.mounted ||
+      revision != _takeoverRevision ||
+      !ref.read(isStartProvider)) {
+    return;
+  }
   final act = canAct();
   final names = rivalNames(rivals);
   var still = const <String>[];
@@ -298,7 +333,11 @@ Future<void> vpsBeforeConnect(Ref ref) async {
       cleared = await clearStaleSystemProxy();
     }
   }
-  if (!ref.mounted || revision != _takeoverRevision) return;
+  if (!ref.mounted ||
+      revision != _takeoverRevision ||
+      !ref.read(isStartProvider)) {
+    return;
+  }
   vpsTakeoverReport.value = VpsTakeoverReport(
     running: act ? const [] : names,
     closed: act ? names.where((n) => !still.contains(n)).toList() : const [],
@@ -329,10 +368,11 @@ Future<void> vpsScanOnly() async {
   if (!Platform.isWindows || _underTest) return;
   final names = rivalNames(await scanRivals());
   final last = vpsTakeoverReport.value;
+  final stillRunning = last.stillRunning.where(names.contains).toList();
   vpsTakeoverReport.value = VpsTakeoverReport(
-    running: names.where((n) => !last.closed.contains(n)).toList(),
-    closed: last.closed,
-    stillRunning: last.stillRunning,
+    running: names.where((n) => !stillRunning.contains(n)).toList(),
+    closed: last.closed.where((n) => !names.contains(n)).toList(),
+    stillRunning: stillRunning,
     portFrom: last.portFrom,
     portTo: last.portTo,
     clearedProxy: last.clearedProxy,
@@ -355,7 +395,9 @@ void _startGuard(Ref ref) {
   if (safeModeBuild || !ref.read(appSettingProvider).takeover) return;
   var reading = false;
   _guard = Timer.periodic(const Duration(seconds: 20), (timer) async {
-    if (!ref.mounted || !ref.read(appSettingProvider).takeover) {
+    if (!ref.mounted ||
+        revision != _takeoverRevision ||
+        !ref.read(appSettingProvider).takeover) {
       timer.cancel();
       return;
     }
@@ -367,10 +409,12 @@ void _startGuard(Ref ref) {
     if (!state.systemProxy || reading) return;
     reading = true;
     try {
-      final proxy = state.pacScript == null ? await readSystemProxy() : null;
-      if (isCurrent() &&
-          (state.pacScript != null ||
-              proxy != null && !proxy.isOurs(state.port))) {
+      final proxy = await readSystemProxy();
+      if (!isCurrent()) return;
+      final needsRefresh = state.pacScript != null
+          ? (proxy == null || !proxy.active || (proxy.pac ?? '').isEmpty)
+          : (proxy != null && !proxy.isOurs(state.port));
+      if (needsRefresh) {
         await systemProxyQueue?.refresh(isCurrent: isCurrent);
       }
     } finally {

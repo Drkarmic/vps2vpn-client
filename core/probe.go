@@ -28,7 +28,7 @@ const (
 	probeTunnelPoll = 50 * time.Millisecond
 
 	probeScanChunk   = 32 * 1024
-	probeScanOverlap = 256
+	probeScanOverlap = 1024
 )
 
 var (

@@ -105,10 +105,12 @@ func ShouldBlockConnection() bool {
 	}
 
 	now := time.Now().UnixNano()
-	if !lastProbeBlocked.Load() {
-		if last := lastProbeAt.Load(); last != 0 && now-last < int64(fdPressureWindow) {
-			return false
-		}
+	last := lastProbeAt.Load()
+	if last != 0 && now-last < int64(fdPressureWindow) {
+		return lastProbeBlocked.Load()
+	}
+	if !lastProbeAt.CompareAndSwap(last, now) {
+		return lastProbeBlocked.Load()
 	}
 
 	blocked := probeFdPressure()
@@ -123,7 +125,6 @@ func ShouldBlockConnection() bool {
 			log.Warnln("[APP] descriptor pressure cleared, accepting new connections")
 		}
 	}
-	lastProbeAt.Store(now)
 	return blocked
 }
 

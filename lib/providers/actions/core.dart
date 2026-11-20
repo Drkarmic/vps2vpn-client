@@ -4,8 +4,13 @@ part of '../action.dart';
 class CoreAction extends _$CoreAction {
   CoreController get _core => ref.read(coreHandlerProvider);
 
+  static final Object _restartWorkerZoneKey = Object();
+
   int _requestedRestartRevision = 0;
+  bool _needsLifecycleRestart = false;
+  bool _restartingLifecycle = false;
   Future<bool>? _restartOperation;
+  Future<void>? _startOperation;
 
   @override
   void build() {}
@@ -22,17 +27,40 @@ class CoreAction extends _$CoreAction {
     }
   }
 
-  Future<void> startCore() async {
-    ref.read(coreStatusProvider.notifier).value = CoreStatus.connecting;
+  Future<void> startCore() {
+    final activeStart = _startOperation;
+    if (activeStart != null) {
+      return activeStart;
+    }
+    final operation = _runStartCore();
+    _startOperation = operation;
+    return operation;
+  }
+
+  Future<void> _runStartCore() async {
     try {
-      final result = await startLifecycle();
-      await _applyLifecycleResult(result);
-    } catch (error) {
-      _markStopped(error);
-      dialogs.showBanner(
-        ref.read(coreStopReasonProvider) ?? '',
-        level: BannerLevel.error,
-      );
+      final activeRestart = _restartOperation;
+      if (activeRestart != null) {
+        try {
+          await activeRestart;
+        } catch (_) {}
+        if (ref.read(coreStatusProvider) == CoreStatus.connected) {
+          return;
+        }
+      }
+      ref.read(coreStatusProvider.notifier).value = CoreStatus.connecting;
+      try {
+        final result = await startLifecycle();
+        await _applyLifecycleResult(result);
+      } catch (error) {
+        _markStopped(error);
+        dialogs.showBanner(
+          ref.read(coreStopReasonProvider) ?? '',
+          level: BannerLevel.error,
+        );
+      }
+    } finally {
+      _startOperation = null;
     }
   }
 
@@ -109,8 +137,17 @@ class CoreAction extends _$CoreAction {
 
   Future<bool> restartCore() {
     _requestedRestartRevision++;
+    if (!_restartingLifecycle) {
+      _needsLifecycleRestart = true;
+    }
     final activeOperation = _restartOperation;
     if (activeOperation != null) {
+      // Re-entrant call (e.g. TUN authorization inside setup triggering a core
+      // restart while _runRestartWorker is awaiting setup): avoid self-deadlock
+      // by letting the active worker loop run the next lifecycle restart.
+      if (identical(Zone.current[_restartWorkerZoneKey], this)) {
+        return Future.value(true);
+      }
       return activeOperation;
     }
 
@@ -119,35 +156,55 @@ class CoreAction extends _$CoreAction {
     return operation;
   }
 
-  Future<bool> _runRestartWorker() async {
-    try {
-      ref.read(coreStatusProvider.notifier).value = CoreStatus.connecting;
-      final result = await restartLifecycle();
-      if (!await _applyLifecycleResult(result, statusFirst: true)) {
-        return false;
-      }
+  Future<bool> _runRestartWorker() {
+    return runZoned(() async {
+      try {
+        var appliedRevision = 0;
+        var applied = true;
+        while (appliedRevision < _requestedRestartRevision ||
+            _needsLifecycleRestart) {
+          final needLifecycle =
+              _needsLifecycleRestart ||
+              ref.read(coreStatusProvider) != CoreStatus.connected;
+          if (needLifecycle) {
+            _needsLifecycleRestart = false;
+            _restartingLifecycle = true;
+            ref.read(coreStatusProvider.notifier).value = CoreStatus.connecting;
+            final CoreLifecycleResult result;
+            try {
+              result = await restartLifecycle();
+            } finally {
+              _restartingLifecycle = false;
+            }
+            if (!await _applyLifecycleResult(result, statusFirst: true)) {
+              return false;
+            }
+            if (_needsLifecycleRestart) {
+              continue;
+            }
+          }
 
-      var appliedRevision = 0;
-      var applied = true;
-      while (appliedRevision < _requestedRestartRevision) {
-        final revision = _requestedRestartRevision;
-        if (ref.read(setupActionProvider.notifier).wantsRunning) {
-          applied = await ref
-              .read(setupActionProvider.notifier)
-              .setRunning(true, initialize: true);
-        } else {
-          applied = await ref
-              .read(setupActionProvider.notifier)
-              .applyProfile(force: true);
+          final revision = _requestedRestartRevision;
+          if (ref.read(setupActionProvider.notifier).wantsRunning) {
+            applied = await ref
+                .read(setupActionProvider.notifier)
+                .setRunning(true, initialize: true);
+          } else {
+            applied = await ref
+                .read(setupActionProvider.notifier)
+                .applyProfile(force: true);
+          }
+          appliedRevision = revision;
         }
-        appliedRevision = revision;
+        return applied;
+      } catch (error) {
+        _markStopped(error);
+        rethrow;
+      } finally {
+        _needsLifecycleRestart = false;
+        _restartingLifecycle = false;
+        _restartOperation = null;
       }
-      return applied;
-    } catch (error) {
-      _markStopped(error);
-      rethrow;
-    } finally {
-      _restartOperation = null;
-    }
+    }, zoneValues: {_restartWorkerZoneKey: this});
   }
 }

@@ -321,6 +321,22 @@ final class DesktopCoreLifecycle implements DesktopCoreLifecycleController {
   /// Gives [lease] up once its process is confirmed gone. Until then it stays
   /// the leftover Core, unless the application is exiting anyway.
   Future<void> _release(CoreProcessLease lease, int revision) async {
+    // On macOS a setuid-root Core cannot be signalled by the unprivileged app
+    // process (EPERM); closing the IPC connection delivers EOF so it exits
+    // cleanly before we wait on its exitCode.
+    if (lease is DirectCoreLease &&
+        transport.connection != null &&
+        transport.state != DesktopTransportState.closed) {
+      try {
+        await transport.reset();
+      } catch (error) {
+        commonPrint.log(
+          'IPC reset before stopping Core ${lease.pid} failed: '
+          '${compactError(error)}',
+          logLevel: LogLevel.warning,
+        );
+      }
+    }
     try {
       final result = await lease.stop(timeouts.disconnection);
       if (!result.exitConfirmed) {

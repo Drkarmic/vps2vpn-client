@@ -131,6 +131,14 @@ Future<String> mergeManifests(List<String> inputs, String output) async {
   final names = <String>{};
   for (final input in inputs) {
     for (final entry in readManifest(input)) {
+      if (entry.name.isEmpty ||
+          entry.name == '.' ||
+          entry.name == '..' ||
+          p.basename(entry.name) != entry.name ||
+          entry.name.contains('/') ||
+          entry.name.contains('\\')) {
+        throw PackageError('Invalid artifact name in manifest: ${entry.name}');
+      }
       if (!names.add(entry.name)) {
         throw PackageError('${entry.name} appears in more than one manifest');
       }

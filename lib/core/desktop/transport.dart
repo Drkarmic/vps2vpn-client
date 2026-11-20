@@ -264,18 +264,55 @@ final class IpcCoreTransport implements DesktopCoreTransport {
     if (_state == DesktopTransportState.closed) {
       return Future.error(StateError('IPC transport is closed'));
     }
-    return events
-        .firstWhere(
-          (event) => event is TransportConnected || event is TransportFailed,
-        )
-        .then<TransportConnected>((event) {
-          if (event case TransportConnected()) {
-            return event;
-          }
-          final failure = event as TransportFailed;
-          Error.throwWithStackTrace(failure.error, failure.stackTrace);
-        })
-        .timeout(timeout);
+    final completer = Completer<TransportConnected>();
+    StreamSubscription<DesktopTransportEvent>? subscription;
+    Timer? timer;
+
+    void finish(void Function() complete) {
+      if (completer.isCompleted) {
+        return;
+      }
+      timer?.cancel();
+      final sub = subscription;
+      subscription = null;
+      if (sub != null) {
+        unawaited(sub.cancel());
+      }
+      complete();
+    }
+
+    subscription = events.listen(
+      (event) {
+        switch (event) {
+          case TransportConnected():
+            finish(() => completer.complete(event));
+          case TransportFailed(:final error, :final stackTrace):
+            finish(() => completer.completeError(error, stackTrace));
+          case TransportReady() || TransportDisconnected():
+            break;
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        finish(() => completer.completeError(error, stackTrace));
+      },
+      onDone: () {
+        finish(
+          () => completer.completeError(
+            StateError('IPC transport is closed'),
+          ),
+        );
+      },
+    );
+
+    timer = Timer(timeout, () {
+      finish(
+        () => completer.completeError(
+          TimeoutException('Timed out waiting for IPC connection', timeout),
+        ),
+      );
+    });
+
+    return completer.future;
   }
 
   @override

@@ -58,12 +58,6 @@ fn service_main(_arguments: Vec<OsString>) {
 }
 
 fn run_windows_service() -> Result<()> {
-    let executable = std::env::current_exe().context("resolve helper executable path")?;
-    let _protected_path = super::path_security::secure_executable(&executable)?;
-    let owner_sid = OWNER_SID
-        .get()
-        .cloned()
-        .context("the helper service has no owner")?;
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
     let status_handle = service_control_handler::register(
         SERVICE_NAME,
@@ -90,48 +84,47 @@ fn run_windows_service() -> Result<()> {
         ))
         .context("report helper service startup")?;
 
-    let runtime = match Runtime::new() {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            let _ = status_handle.set_service_status(service_status(
-                ServiceState::Stopped,
-                ServiceControlAccept::empty(),
-                0,
-                Duration::default(),
-                1,
-            ));
-            return Err(error).context("create helper runtime");
-        }
-    };
+    let service_result = (|| -> Result<()> {
+        let executable = std::env::current_exe().context("resolve helper executable path")?;
+        let _protected_path = super::path_security::secure_executable(&executable)?;
+        let core = crate::service::hub::core_path().context("resolve core executable path")?;
+        let _protected_core = super::path_security::secure_executable(&core)?;
+        let owner_sid = OWNER_SID
+            .get()
+            .cloned()
+            .context("the helper service has no owner")?;
+        let runtime = Runtime::new().context("create helper runtime")?;
 
-    let shutdown_status_handle = status_handle;
-    let running_status_handle = status_handle;
-    let service_result = runtime.block_on(serve_until(
-        owner_sid,
-        async move {
-            if !*shutdown_rx.borrow() {
-                let _ = shutdown_rx.changed().await;
-            }
-            let _ = shutdown_status_handle.set_service_status(service_status(
-                ServiceState::StopPending,
-                ServiceControlAccept::empty(),
-                1,
-                SERVICE_OPERATION_TIMEOUT,
-                0,
-            ));
-        },
-        move || {
-            running_status_handle
-                .set_service_status(service_status(
-                    ServiceState::Running,
-                    ServiceControlAccept::STOP,
+        let shutdown_status_handle = status_handle;
+        let running_status_handle = status_handle;
+        runtime.block_on(serve_until(
+            owner_sid,
+            async move {
+                if !*shutdown_rx.borrow() {
+                    let _ = shutdown_rx.changed().await;
+                }
+                let _ = shutdown_status_handle.set_service_status(service_status(
+                    ServiceState::StopPending,
+                    ServiceControlAccept::empty(),
+                    1,
+                    SERVICE_OPERATION_TIMEOUT,
                     0,
-                    Duration::default(),
-                    0,
-                ))
-                .context("report helper service running")
-        },
-    ));
+                ));
+            },
+            move || {
+                running_status_handle
+                    .set_service_status(service_status(
+                        ServiceState::Running,
+                        ServiceControlAccept::STOP,
+                        0,
+                        Duration::default(),
+                        0,
+                    ))
+                    .context("report helper service running")
+            },
+        ))
+    })();
+
     let exit_code = u32::from(service_result.is_err());
     let status_result = status_handle.set_service_status(service_status(
         ServiceState::Stopped,
@@ -149,6 +142,8 @@ fn run_windows_service() -> Result<()> {
 fn install_service(owner_pid: u32) -> Result<()> {
     let executable_path = std::env::current_exe().context("resolve helper executable path")?;
     let _protected_path = super::path_security::secure_executable(&executable_path)?;
+    let core_path = crate::service::hub::core_path().context("resolve core executable path")?;
+    let _protected_core = super::path_security::secure_executable(&core_path)?;
     let owner_sid = process_sid(owner_pid)
         .with_context(|| format!("read the account of process {owner_pid}"))?;
     let manager = ServiceManager::local_computer(

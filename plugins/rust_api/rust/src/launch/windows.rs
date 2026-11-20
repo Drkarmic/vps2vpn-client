@@ -10,14 +10,14 @@ use windows_sys::Win32::System::Registry::{
 };
 
 use super::entries::{
-    run_value, startup_approved, url_command, url_protocol_key, RUN_KEY, STARTUP_APPROVED_ENABLED,
-    STARTUP_APPROVED_KEY, URL_COMMAND_KEY, URL_PROTOCOL_VALUE,
+    matches_run_value, run_value, startup_approved, url_command, url_protocol_key, RUN_KEY,
+    STARTUP_APPROVED_ENABLED, STARTUP_APPROVED_KEY, URL_COMMAND_KEY, URL_PROTOCOL_VALUE,
 };
 
 pub fn autostart_enabled(id: &str, executable: &str) -> bool {
     let registered = Key::open(HKEY_CURRENT_USER, RUN_KEY)
         .and_then(|key| key.string(id))
-        .is_some_and(|value| value == run_value(executable));
+        .is_some_and(|value| matches_run_value(&value, executable));
     registered
         && startup_approved(
             Key::open(HKEY_CURRENT_USER, STARTUP_APPROVED_KEY)
@@ -28,8 +28,10 @@ pub fn autostart_enabled(id: &str, executable: &str) -> bool {
 
 pub fn set_autostart(id: &str, _display_name: &str, executable: &str, enabled: bool) -> bool {
     if enabled {
-        Key::create(HKEY_CURRENT_USER, RUN_KEY)
-            .is_some_and(|key| key.set_string(id, run_value(executable)))
+        let Some(value) = run_value(executable) else {
+            return false;
+        };
+        Key::create(HKEY_CURRENT_USER, RUN_KEY).is_some_and(|key| key.set_string(id, &value))
             && Key::create(HKEY_CURRENT_USER, STARTUP_APPROVED_KEY)
                 .is_some_and(|key| key.set(id, REG_BINARY, &STARTUP_APPROVED_ENABLED))
     } else {
@@ -41,12 +43,18 @@ pub fn set_autostart(id: &str, _display_name: &str, executable: &str, enabled: b
 }
 
 pub fn register_url_scheme(scheme: &str, executable: &str) -> bool {
-    let Some(protocol) = Key::create(HKEY_CURRENT_USER, &url_protocol_key(scheme)) else {
+    let Some(protocol_key) = url_protocol_key(scheme) else {
+        return false;
+    };
+    let Some(command_value) = url_command(executable) else {
+        return false;
+    };
+    let Some(protocol) = Key::create(HKEY_CURRENT_USER, &protocol_key) else {
         return false;
     };
     protocol.set_string(URL_PROTOCOL_VALUE, "")
         && Key::create(protocol.0, URL_COMMAND_KEY)
-            .is_some_and(|command| command.set_string("", &url_command(executable)))
+            .is_some_and(|command| command.set_string("", &command_value))
 }
 
 pub fn read_local_machine_dword(key: &str, value: &str) -> Option<u32> {

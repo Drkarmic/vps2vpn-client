@@ -8,6 +8,9 @@ name: vps2vpn Windows
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -70,13 +73,25 @@ jobs:
       - name: Package
         run: dart tool/package.dart windows --env stable -v
 
+      - name: Name the installer for the panel
+        shell: pwsh
+        run: |
+          $match = Select-String pubspec.yaml -Pattern '^version:\s*([0-9.]+)' | Select-Object -First 1
+          if (-not $match) { throw 'Failed to parse version from pubspec.yaml' }
+          $ver = $match.Matches[0].Groups[1].Value
+          $src = Get-ChildItem dist -Filter 'vps2vpn-*-windows-amd64-setup.exe' | Select-Object -First 1
+          if (-not $src) { throw 'No Windows amd64 setup installer found in dist/' }
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item $src.FullName "release/vps2vpn-$ver-windows-amd64-setup.exe"
+          Get-ChildItem release
+
       - name: Record build inputs
         shell: pwsh
         run: |
           $modules = @(git submodule status --recursive)
           $trackedChanges = @(git status --porcelain --untracked-files=no)
           $ca = Get-FileHash core/Clash.Meta/component/ca/ca-certificates.crt -Algorithm SHA256
-          $artifacts = @(Get-ChildItem dist -File -Recurse | ForEach-Object {
+          $artifacts = @(Get-ChildItem dist, release -File -Recurse | ForEach-Object {
             @{ path = [IO.Path]::GetRelativePath((Get-Location).Path, $_.FullName); sha256 = (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
           })
           $record = @{
@@ -91,23 +106,14 @@ jobs:
           }
           $record | ConvertTo-Json -Depth 8 | Set-Content dist/build-inputs.json -Encoding utf8
 
-      - name: Name the installer for the panel
-        shell: pwsh
-        run: |
-          $ver = (Select-String pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
-          $src = Get-ChildItem dist -Filter 'vps2vpn-*-windows-amd64-setup.exe' | Select-Object -First 1
-          New-Item -ItemType Directory -Force release | Out-Null
-          Copy-Item $src.FullName "release/vps2vpn-$ver-windows-amd64-setup.exe"
-          Get-ChildItem release
-
       - name: Install and take over (end to end)
         shell: pwsh
         run: |
-          $setup = (Get-ChildItem release -Filter '*.exe' | Select-Object -First 1).FullName
+          $setup = (Get-ChildItem release -Filter '*-windows-amd64-setup.exe' | Select-Object -First 1).FullName
+          if ([string]::IsNullOrWhiteSpace($setup)) { throw 'No Windows amd64 setup installer found in release/' }
           ./.github/scripts/takeover-e2e.ps1 -Setup $setup -Out e2e
 
       - name: Upload installer
-        if: always()
         # The account's artifact storage can be full; results are in the log too.
         continue-on-error: true
         uses: actions/upload-artifact@v4

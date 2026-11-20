@@ -31,6 +31,7 @@ class HomePage extends ConsumerWidget {
         (state) => state.advancedMode || vps2vpnUpstreamUi,
       ),
     );
+    vps2vpnAdvancedMode = advancedMode;
     if (!advancedMode) {
       return const HomeBackScopeContainer(child: VpsShell());
     }
@@ -299,7 +300,7 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
     PageLabel pageLabel, [
     bool ignoreAnimateTo = false,
   ]) async {
-    if (!mounted) {
+    if (!mounted || !_pageController.hasClients) {
       return;
     }
     final index = _indexOf(pageLabel);
@@ -309,9 +310,7 @@ class _HomePageViewState extends ConsumerState<_HomePageView> {
     final tabAnimation = ref.read(appSettingProvider).tabAnimation;
     final isMobile = ref.read(isMobileViewProvider);
     final slide = ++_slide;
-    final page = _pageController.hasClients
-        ? _pageController.page?.round() ?? index
-        : index;
+    final page = _pageController.page?.round() ?? index;
     final current = _order?[page] ?? page;
     if (_order != null) {
       setState(() => _order = null);

@@ -21,18 +21,19 @@ var (
 		regexp.MustCompile(`"countryCode"\s*:\s*"([A-Za-z]{2})"`),
 		regexp.MustCompile(`"country_code"\s*:\s*"([A-Za-z]{2})"`),
 	}
-	tikTokRegionPattern    = regexp.MustCompile(`"webapp\.app-context"\s*:\s*\{[^{}]*?"region"\s*:\s*"([^"]*)"`)
-	primeRegionPattern     = regexp.MustCompile(`"currentTerritory"\s*:\s*"([^"]+)"`)
-	primeRestrictedPattern = regexp.MustCompile(`"isServiceRestricted"\s*:\s*(true|false)`)
-	disneyAssertionPattern = regexp.MustCompile(`"assertion"\s*:\s*"([^"]+)"`)
-	disneyRefreshPattern   = regexp.MustCompile(`"refresh_token"\s*:\s*"([^"]+)"`)
-	disneyCountryPattern   = regexp.MustCompile(`"countryCode"\s*:\s*"([^"]+)"`)
-	disneySupportedPattern = regexp.MustCompile(`"inSupportedLocation"\s*:\s*(false|true)`)
-	spotifyCountryPattern  = regexp.MustCompile(`"countryCode"\s*:\s*"([^"]+)"`)
-	discordCountryPattern  = regexp.MustCompile(`"country_code"\s*:\s*"([^"]+)"`)
-	geminiRegionMarker     = `,2,1,200,"`
-	claudeBlockedRegions   = []string{"AF", "BY", "CN", "CU", "HK", "IR", "KP", "MO", "RU", "SY"}
-	geminiBlockedRegions   = []string{"CHN", "RUS", "BLR", "CUB", "IRN", "PRK", "SYR", "HKG", "MAC"}
+	tikTokRegionPattern         = regexp.MustCompile(`"webapp\.app-context"\s*:\s*\{[^{}]*?"region"\s*:\s*"([^"]*)"`)
+	primeRegionPattern          = regexp.MustCompile(`"currentTerritory"\s*:\s*"([^"]+)"`)
+	primeRestrictedPattern      = regexp.MustCompile(`"isServiceRestricted"\s*:\s*true`)
+	primeRestrictedFieldPattern = regexp.MustCompile(`"isServiceRestricted"\s*:\s*(?:true|false)`)
+	disneyAssertionPattern      = regexp.MustCompile(`"assertion"\s*:\s*"([^"]+)"`)
+	disneyRefreshPattern        = regexp.MustCompile(`"refresh_token"\s*:\s*"([^"]+)"`)
+	disneyCountryPattern        = regexp.MustCompile(`"countryCode"\s*:\s*"([^"]+)"`)
+	disneySupportedPattern      = regexp.MustCompile(`"inSupportedLocation"\s*:\s*(false|true)`)
+	spotifyCountryPattern       = regexp.MustCompile(`"countryCode"\s*:\s*"([^"]+)"`)
+	discordCountryPattern       = regexp.MustCompile(`"country_code"\s*:\s*"([^"]+)"`)
+	geminiRegionMarker          = `,2,1,200,"`
+	claudeBlockedRegions        = []string{"AF", "BY", "CN", "CU", "HK", "IR", "KP", "MO", "RU", "SY"}
+	geminiBlockedRegions        = []string{"CHN", "RUS", "BLR", "CUB", "IRN", "PRK", "SYR", "HKG", "MAC"}
 
 	// A playable episode runs past the small body cap; only its leading code is read.
 	bilibiliCodePattern = regexp.MustCompile(`^\s*\{\s*"code"\s*:\s*(-?\d+)`)
@@ -276,8 +277,18 @@ func checkDiscord(env serviceEnv) ServiceCheckItem {
 }
 
 func checkPrimeVideo(env serviceEnv) ServiceCheckItem {
+	var seenRegion, seenRestrictedField bool
 	result := env.scan("https://www.primevideo.com", func(tail string) bool {
-		return firstSubmatch(primeRestrictedPattern, tail) == "true" || primeRegionPattern.MatchString(tail)
+		if primeRestrictedPattern.MatchString(tail) {
+			return true
+		}
+		if !seenRegion && primeRegionPattern.MatchString(tail) {
+			seenRegion = true
+		}
+		if !seenRestrictedField && primeRestrictedFieldPattern.MatchString(tail) {
+			seenRestrictedField = true
+		}
+		return seenRegion && seenRestrictedField
 	})
 	return primeVideoResult(result)
 }
@@ -287,7 +298,7 @@ func primeVideoResult(result *ProbeResult) ServiceCheckItem {
 	if !answered(item, result) {
 		return item
 	}
-	if firstSubmatch(primeRestrictedPattern, result.Body) == "true" {
+	if primeRestrictedPattern.MatchString(result.Body) {
 		item.Status = serviceUnsupportedRegion
 		return item
 	}
@@ -451,7 +462,10 @@ func checkDisneyPlus(env serviceEnv) ServiceCheckItem {
 		maxBody: serviceSmallMaxBody,
 	})
 	sessionItem := itemFrom(session)
-	if !answered(sessionItem, session) || session.Body == "" || session.StatusCode >= 400 {
+	if !answered(sessionItem, session) {
+		return sessionItem
+	}
+	if session.Body == "" || session.StatusCode >= 400 {
 		item.Status = serviceFailed
 		return item
 	}

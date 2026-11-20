@@ -615,9 +615,16 @@ Future<MigrationData> migrateLegacyConfig({
   final globalRuleIds = [for (final rule in rules) rule.id];
   final List rawProfiles = configMap['profiles'] as List<dynamic>? ?? [];
   final List<Profile> profiles = [];
+  final profilesSourceDir = normalize(join(sourcePath, profilesDirectoryName));
   for (final rawProfile in rawProfiles) {
     final rawId = rawProfile['id'] as String?;
-    if (rawId == null) {
+    if (rawId == null || !_isValidLegacyProfileId(rawId)) {
+      continue;
+    }
+    final sourceFile = File(
+      BackupEntries.resolve(sourcePath, BackupEntries.profile(rawId)),
+    );
+    if (!isWithin(profilesSourceDir, normalize(sourceFile.path))) {
       continue;
     }
     final profileId = idMap.updateCacheValue(rawId, () => snowflake.id);
@@ -660,9 +667,6 @@ Future<MigrationData> migrateLegacyConfig({
     final rawUrl = rawProfile['url'];
     rawProfile['type'] = rawUrl is String && rawUrl.isNotEmpty ? 'url' : 'file';
 
-    final sourceFile = File(
-      BackupEntries.resolve(sourcePath, BackupEntries.profile(rawId)),
-    );
     final targetFilePath = BackupEntries.resolve(
       targetPath,
       BackupEntries.profile(profileId),
@@ -681,4 +685,12 @@ Future<MigrationData> migrateLegacyConfig({
     scripts: scripts,
     disabledRules: disabledRules,
   );
+}
+
+bool _isValidLegacyProfileId(String id) {
+  return id.isNotEmpty &&
+      !id.contains('/') &&
+      !id.contains(r'\') &&
+      !id.contains('..') &&
+      !id.contains('\x00');
 }

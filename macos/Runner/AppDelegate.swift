@@ -5,6 +5,7 @@ import FlutterMacOS
 class AppDelegate: FlutterAppDelegate {
     private var pendingLinks: [String] = []
     private var linksTaken = false
+    private var terminationFallback: DispatchWorkItem?
 
     override func applicationWillFinishLaunching(_ notification: Notification) {
         NSAppleEventManager.shared().setEventHandler(
@@ -42,7 +43,13 @@ class AppDelegate: FlutterAppDelegate {
 
     override func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         NotificationCenter.default.post(name: .flClashApplicationShouldTerminate, object: nil)
-        return .terminateCancel
+        terminationFallback?.cancel()
+        let fallback = DispatchWorkItem {
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        terminationFallback = fallback
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5), execute: fallback)
+        return .terminateLater
     }
 
     override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

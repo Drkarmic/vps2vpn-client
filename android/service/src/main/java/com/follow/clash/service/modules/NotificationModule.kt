@@ -1,6 +1,7 @@
 package com.follow.clash.service.modules
 
 import android.app.Notification.FOREGROUND_SERVICE_IMMEDIATE
+import android.app.NotificationManager
 import android.app.Service
 import android.app.Service.STOP_FOREGROUND_REMOVE
 import android.content.Intent
@@ -50,9 +51,20 @@ internal class NotificationModule(
     private val service: Service,
     private val scope: CoroutineScope,
 ) : ServiceModule {
+    private val lock = Any()
+    private var stopped = false
+    private val notificationManager by lazy {
+        service.getSystemService<NotificationManager>()
+    }
+
     override fun start() {
         service.ensureNotificationChannel()
-        update(ServiceConfig.notificationParams.value.extended)
+        synchronized(lock) {
+            stopped = false
+            service.startForeground(
+                buildNotification(ServiceConfig.notificationParams.value.extended),
+            )
+        }
         scope.launch {
             // Some ROMs, vivo's among them, drop updates posted behind the
             // keyguard, so unlocking restarts the loop to post once more.
@@ -110,26 +122,37 @@ internal class NotificationModule(
 
     private val stopIntent by lazy { QuickAction.STOP.quickIntent.toPendingIntent }
 
+    private fun buildNotification(params: ExtendedNotificationParams) =
+        with(notificationBuilder) {
+            setContentTitle(params.title)
+            setContentText(params.contentText)
+            clearActions()
+            if (params.showStopAction) {
+                addAction(0, params.stopText, stopIntent)
+            }
+            build()
+        }
+
     private fun update(params: ExtendedNotificationParams) {
-        service.startForeground(
-            with(notificationBuilder) {
-                setContentTitle(params.title)
-                setContentText(params.contentText)
-                clearActions()
-                if (params.showStopAction) {
-                    addAction(0, params.stopText, stopIntent)
-                }
-                build()
-            },
-        )
+        synchronized(lock) {
+            if (stopped) return
+            notificationManager?.notify(
+                GlobalState.NOTIFICATION_ID,
+                buildNotification(params),
+            )
+        }
     }
 
     @Suppress("DEPRECATION")
     override fun stop() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            service.stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            service.stopForeground(true)
+        synchronized(lock) {
+            stopped = true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                service.stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                service.stopForeground(true)
+            }
+            notificationManager?.cancel(GlobalState.NOTIFICATION_ID)
         }
     }
 }

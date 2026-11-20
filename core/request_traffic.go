@@ -89,11 +89,15 @@ func (w *requestTrafficWatch) collect(
 	return w.running
 }
 
-func (w *requestTrafficWatch) clear() {
+func (w *requestTrafficWatch) clearIfUnheard() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if hasEventListener() {
+		return false
+	}
 	clear(w.requests)
 	w.running = false
+	return true
 }
 
 func watchRequestTraffic(tracker statistic.Tracker) {
@@ -106,8 +110,7 @@ func runRequestTrafficWatch() {
 	ticker := time.NewTicker(requestTrafficInterval)
 	defer ticker.Stop()
 	for range ticker.C {
-		if !hasEventListener() {
-			currentRequestTraffic.clear()
+		if currentRequestTraffic.clearIfUnheard() {
 			return
 		}
 		watching := currentRequestTraffic.collect(

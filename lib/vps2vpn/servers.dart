@@ -42,12 +42,13 @@ class VpsServersPage extends ConsumerStatefulWidget {
 /// Groups already speed-tested for the current profile, so opening the page
 /// again does not fire another round of probes.
 final _autoTested = <String>{};
-int? _autoTestedProfile;
+(int?, DateTime?)? _autoTestedProfile;
 
 void _syncAutoTestProfile(WidgetRef ref) {
-  final pid = ref.read(currentProfileProvider)?.id;
-  if (_autoTestedProfile != pid) {
-    _autoTestedProfile = pid;
+  final profile = ref.read(currentProfileProvider);
+  final key = (profile?.id, profile?.lastUpdateDate);
+  if (_autoTestedProfile != key) {
+    _autoTestedProfile = key;
     _autoTested.clear();
   }
 }
@@ -83,7 +84,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
   bool _testing = false;
 
   void _autoTest(Group group) {
-    if (group.name.isEmpty || group.all.isEmpty) return;
+    if (group.name.isEmpty || group.all.isEmpty || _testing) return;
     _syncAutoTestProfile(ref);
     if (!_autoTested.add(group.name)) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -205,7 +206,7 @@ class _VpsServersPageState extends ConsumerState<VpsServersPage> {
             ? tr(context, '测速中…', 'Testing…')
             : tr(context, '测速', 'Test speed'),
         icon: VpsIcon.bolt,
-        onTap: () => _test(group),
+        onTap: _testing ? null : () => _test(group),
       ),
       children: [
         Row(

@@ -1,5 +1,6 @@
 // The overview line that says what Connect took over, or what is in its way.
 
+import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/takeover.dart';
@@ -25,18 +26,24 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
   }
 
   Future<void> _quit() async {
+    if (_busy || safeModeBuild) return;
     setState(() => _busy = true);
     try {
       final rivals = await scanRivals();
       final still = await quitRivals(rivals);
       final names = rivalNames(rivals);
       final last = vpsTakeoverReport.value;
+      final closed = {
+        ...last.closed.where((n) => !still.contains(n)),
+        ...names.where((n) => !still.contains(n)),
+      }.toList()..sort();
       vpsTakeoverReport.value = VpsTakeoverReport(
-        closed: names.where((n) => !still.contains(n)).toList(),
+        closed: closed,
         stillRunning: still,
         portFrom: last.portFrom,
         portTo: last.portTo,
         clearedProxy: last.clearedProxy,
+        dryRun: safeModeBuild,
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -94,8 +101,7 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
           en.add('Cleared a stale system proxy left by another app');
         }
         final color = warn ? p.warn : p.good;
-        final canQuit =
-            r.running.isNotEmpty && !r.dryRun && !takeover && !_busy;
+        final canQuit = r.running.isNotEmpty && !r.dryRun && !takeover;
         return Padding(
           padding: const EdgeInsets.only(bottom: 16),
           child: VpsCard(
@@ -141,7 +147,7 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
                 if (canQuit)
                   VpsButton(
                     label: tr(context, '一键退出', 'Quit them'),
-                    onTap: _quit,
+                    onTap: _busy ? null : _quit,
                   )
                 else
                   VpsPressable(

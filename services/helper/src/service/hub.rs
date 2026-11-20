@@ -121,9 +121,19 @@ struct ManagedCore {
 }
 
 impl ManagedCore {
-    fn adopt(session_id: String, child: Child) -> Result<Self, Error> {
+    fn adopt(
+        session_id: String,
+        #[cfg_attr(not(windows), allow(unused_mut))] mut child: Child,
+    ) -> Result<Self, Error> {
         #[cfg(windows)]
-        let job = CoreJob::bind(&child)?;
+        let job = match CoreJob::bind(&child) {
+            Ok(job) => job,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error);
+            }
+        };
         Ok(Self {
             session_id,
             child,
@@ -274,7 +284,7 @@ enum StopDecision {
     SessionMismatch,
 }
 
-fn core_path() -> Result<PathBuf, Error> {
+pub(super) fn core_path() -> Result<PathBuf, Error> {
     let helper_path = std::env::current_exe()?;
     let directory = helper_path
         .parent()
@@ -483,23 +493,7 @@ fn launch(start_params: StartParams) -> warp::reply::Response {
     match core.spawn(&start_params.address) {
         Ok(mut child) => {
             let process_id = child.id();
-            if let Some(stderr) = child.stderr.take() {
-                let reader = io::BufReader::new(stderr);
-                let session_id = start_params.session_id.clone();
-                thread::spawn(move || {
-                    for line in reader.lines() {
-                        match line {
-                            Ok(output) => {
-                                log_message(output);
-                            }
-                            Err(_) => {
-                                break;
-                            }
-                        }
-                    }
-                    reap_exited_core(&session_id);
-                });
-            }
+            let stderr = child.stderr.take();
             *managed = match ManagedCore::adopt(start_params.session_id.clone(), child) {
                 Ok(core) => Some(core),
                 Err(error) => {
@@ -511,6 +505,13 @@ fn launch(start_params: StartParams) -> warp::reply::Response {
                     );
                 }
             };
+            if let Some(stderr) = stderr {
+                let session_id = start_params.session_id.clone();
+                thread::spawn(move || {
+                    read_stderr_lines(stderr, log_message);
+                    reap_exited_core(&session_id);
+                });
+            }
             json_response(
                 &StartResponse {
                     session_id: start_params.session_id,
@@ -522,6 +523,35 @@ fn launch(start_params: StartParams) -> warp::reply::Response {
         Err(e) => {
             log_message(e.to_string());
             launch_failure_response(&e)
+        }
+    }
+}
+
+const MAX_LOG_LINE_BYTES: usize = 8 * 1024;
+
+/// Reads Core stderr in bounded byte chunks using lossy UTF-8 decoding so
+/// non-UTF-8 locale bytes (e.g. GBK) or overlong lines never abort draining
+/// and deadlock the Core on a full pipe buffer.
+fn read_stderr_lines<R: Read>(stderr: R, mut on_line: impl FnMut(String)) {
+    let mut reader = io::BufReader::new(stderr);
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        match (&mut reader)
+            .take(MAX_LOG_LINE_BYTES as u64)
+            .read_until(b'\n', &mut buf)
+        {
+            Ok(0) => break,
+            Ok(_) => {
+                if buf.ends_with(b"\n") {
+                    buf.pop();
+                    if buf.ends_with(b"\r") {
+                        buf.pop();
+                    }
+                }
+                on_line(String::from_utf8_lossy(&buf).into_owned());
+            }
+            Err(_) => break,
         }
     }
 }
@@ -1531,5 +1561,24 @@ mod tests {
         assert!(lock_surviving_poison(&LOGS)
             .iter()
             .any(|entry| entry == "helper still logs after poisoning"));
+    }
+
+    #[test]
+    fn stderr_reader_handles_non_utf8_and_overlong_lines() {
+        let mut input = Vec::new();
+        input.extend_from_slice(b"first\r\n");
+        input.extend_from_slice(b"\xb9\xfa\xbc\xd2\n");
+        input.extend(std::iter::repeat_n(b'a', MAX_LOG_LINE_BYTES + 10));
+        input.extend_from_slice(b"\nlast");
+
+        let mut lines = Vec::new();
+        read_stderr_lines(input.as_slice(), |line| lines.push(line));
+
+        assert_eq!(lines.len(), 5);
+        assert_eq!(lines[0], "first");
+        assert!(lines[1].contains('\u{FFFD}'));
+        assert_eq!(lines[2].len(), MAX_LOG_LINE_BYTES);
+        assert_eq!(lines[3].len(), 10);
+        assert_eq!(lines[4], "last");
     }
 }

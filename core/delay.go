@@ -29,8 +29,11 @@ func setTestURL(url string) {
 	if url == "" {
 		return
 	}
-	constant.DefaultTestURL = url
+	previous := currentTestURL()
 	testURL.Store(&url)
+	if url != previous {
+		constant.DefaultTestURL = url
+	}
 }
 
 func currentTestURL() string {

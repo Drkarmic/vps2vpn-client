@@ -5,7 +5,8 @@ use crate::service::owner::{client_pid, same_sid, TcpConnection};
 
 use std::ffi::c_void;
 use std::future::Future;
-use std::io::{Error, Result as IoResult};
+use std::io::{Error, ErrorKind, Result as IoResult};
+use std::mem::size_of;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::pin::Pin;
 use std::ptr::{null, null_mut};
@@ -19,10 +20,14 @@ use windows_sys::Win32::Foundation::{
     CloseHandle, LocalFree, ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS, HANDLE, NO_ERROR,
 };
 use windows_sys::Win32::NetworkManagement::IpHelper::{
-    GetExtendedTcpTable, MIB_TCPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL,
+    GetExtendedTcpTable, MIB_TCPROW_OWNER_PID, TCP_TABLE_OWNER_PID_ALL,
 };
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
-use windows_sys::Win32::Security::{GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER};
+use windows_sys::Win32::Security::{
+    GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, IsTokenRestricted,
+    IsValidSid, TokenIntegrityLevel, TokenIsAppContainer, TokenUser, TOKEN_MANDATORY_LABEL,
+    TOKEN_QUERY, TOKEN_USER,
+};
 use windows_sys::Win32::System::Registry::{
     RegCloseKey, RegCreateKeyExW, RegDeleteKeyW, RegSetValueExW, HKEY, HKEY_LOCAL_MACHINE,
     KEY_SET_VALUE, REG_DWORD, REG_OPTION_VOLATILE,
@@ -32,6 +37,7 @@ use windows_sys::Win32::System::Threading::{
 };
 
 const AF_INET: u32 = 2;
+const SECURITY_MANDATORY_MEDIUM_RID: u32 = 0x2000;
 /// Hyper-V and WinNAT reserve ranges that can cover any fixed port; only admins
 /// write this volatile key under the service's own, and a reboot clears it.
 const PORT_KEY: &str = r"SYSTEM\CurrentControlSet\Services\vps2vpnHelperService\Runtime";
@@ -68,10 +74,15 @@ pub fn process_sid(pid: u32) -> IoResult<String> {
         }
         let token = Handle(token);
 
+        verify_token_trust(token.0)?;
+
         let mut length = 0u32;
         GetTokenInformation(token.0, TokenUser, null_mut(), 0, &mut length);
         if length == 0 {
             return Err(Error::last_os_error());
+        }
+        if (length as usize) < size_of::<TOKEN_USER>() {
+            return Err(Error::other("truncated TOKEN_USER"));
         }
         let mut buffer = vec![0u64; (length as usize).div_ceil(8)];
         if GetTokenInformation(
@@ -87,6 +98,78 @@ pub fn process_sid(pid: u32) -> IoResult<String> {
         let user = &*(buffer.as_ptr() as *const TOKEN_USER);
         sid_to_string(user.User.Sid)
     }
+}
+
+/// Rejects AppContainer, restricted, and sub-Medium integrity tokens so a
+/// sandboxed process running under the owner's SID cannot drive the SYSTEM Helper.
+unsafe fn verify_token_trust(token: HANDLE) -> IoResult<()> {
+    let mut is_app_container = 0u32;
+    let mut length = size_of::<u32>() as u32;
+    if GetTokenInformation(
+        token,
+        TokenIsAppContainer,
+        (&mut is_app_container as *mut u32).cast::<c_void>(),
+        length,
+        &mut length,
+    ) == 0
+    {
+        return Err(Error::last_os_error());
+    }
+    if is_app_container != 0 {
+        return Err(Error::new(
+            ErrorKind::PermissionDenied,
+            "AppContainer tokens are not authorized",
+        ));
+    }
+    if IsTokenRestricted(token) != 0 {
+        return Err(Error::new(
+            ErrorKind::PermissionDenied,
+            "restricted tokens are not authorized",
+        ));
+    }
+
+    let mut label_length = 0u32;
+    GetTokenInformation(token, TokenIntegrityLevel, null_mut(), 0, &mut label_length);
+    if label_length == 0 {
+        return Err(Error::last_os_error());
+    }
+    if (label_length as usize) < size_of::<TOKEN_MANDATORY_LABEL>() {
+        return Err(Error::other("truncated TOKEN_MANDATORY_LABEL"));
+    }
+    let mut buffer = vec![0u64; (label_length as usize).div_ceil(8)];
+    if GetTokenInformation(
+        token,
+        TokenIntegrityLevel,
+        buffer.as_mut_ptr() as *mut c_void,
+        label_length,
+        &mut label_length,
+    ) == 0
+    {
+        return Err(Error::last_os_error());
+    }
+    let label = &*(buffer.as_ptr() as *const TOKEN_MANDATORY_LABEL);
+    let sid = label.Label.Sid;
+    if sid.is_null() || IsValidSid(sid) == 0 {
+        return Err(Error::new(
+            ErrorKind::PermissionDenied,
+            "invalid integrity level SID",
+        ));
+    }
+    let count = GetSidSubAuthorityCount(sid);
+    if count.is_null() || *count == 0 {
+        return Err(Error::new(
+            ErrorKind::PermissionDenied,
+            "integrity level SID has no subauthorities",
+        ));
+    }
+    let rid = GetSidSubAuthority(sid, u32::from(*count - 1));
+    if rid.is_null() || *rid < SECURITY_MANDATORY_MEDIUM_RID {
+        return Err(Error::new(
+            ErrorKind::PermissionDenied,
+            "process integrity level is below Medium",
+        ));
+    }
+    Ok(())
 }
 
 unsafe fn sid_to_string(sid: *mut c_void) -> IoResult<String> {
@@ -116,7 +199,8 @@ fn tcp_connections() -> IoResult<Vec<TcpConnection>> {
             GetExtendedTcpTable(pointer, &mut size, 0, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0)
         };
         match status {
-            NO_ERROR => return Ok(read_table(&buffer)),
+            NO_ERROR if !buffer.is_empty() => return read_table(&buffer),
+            NO_ERROR => return Err(Error::other("GetExtendedTcpTable returned an empty buffer")),
             ERROR_INSUFFICIENT_BUFFER => continue,
             other => return Err(Error::from_raw_os_error(other as i32)),
         }
@@ -124,19 +208,34 @@ fn tcp_connections() -> IoResult<Vec<TcpConnection>> {
     Err(Error::other("the TCP table kept growing"))
 }
 
-fn read_table(buffer: &[u32]) -> Vec<TcpConnection> {
-    // SAFETY: a successful call left `dwNumEntries` rows in the buffer it was
-    // sized for.
+fn read_table(buffer: &[u32]) -> IoResult<Vec<TcpConnection>> {
+    let Some(&entries) = buffer.first() else {
+        return Err(Error::other("truncated TCP table header"));
+    };
+    let entries = entries as usize;
+    let byte_len = buffer.len() * size_of::<u32>();
+    let required = entries
+        .checked_mul(size_of::<MIB_TCPROW_OWNER_PID>())
+        .and_then(|bytes| size_of::<u32>().checked_add(bytes));
+    if required.is_none_or(|needed| needed > byte_len) {
+        return Err(Error::other("truncated TCP table rows"));
+    }
+    if entries == 0 {
+        return Ok(Vec::new());
+    }
+    // SAFETY: `buffer` is 4-byte aligned (matching `MIB_TCPROW_OWNER_PID`) and
+    // we verified `size_of::<u32>() + entries * size_of::<MIB_TCPROW_OWNER_PID>() <= byte_len`.
     unsafe {
-        let table = &*(buffer.as_ptr() as *const MIB_TCPTABLE_OWNER_PID);
-        std::slice::from_raw_parts(table.table.as_ptr(), table.dwNumEntries as usize)
+        let rows = buffer.as_ptr().add(1) as *const MIB_TCPROW_OWNER_PID;
+        Ok(std::slice::from_raw_parts(rows, entries)
             .iter()
+            .filter(|row| row.dwState != 1 && row.dwState != 2 && row.dwState != 11)
             .map(|row| TcpConnection {
                 local: socket_address(row.dwLocalAddr, row.dwLocalPort),
                 remote: socket_address(row.dwRemoteAddr, row.dwRemotePort),
                 pid: row.dwOwningPid,
             })
-            .collect()
+            .collect())
     }
 }
 

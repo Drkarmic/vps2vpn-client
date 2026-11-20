@@ -229,15 +229,36 @@ class _VpsPressableState extends State<VpsPressable> {
   bool _showFocus = false;
 
   @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_syncPrimaryFocus);
+  }
+
+  @override
+  void didUpdateWidget(covariant VpsPressable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onTap == null && (_down || _hover)) {
+      _down = false;
+      _hover = false;
+    }
+  }
+
+  @override
   void dispose() {
+    _focusNode.removeListener(_syncPrimaryFocus);
     _focusNode.dispose();
     super.dispose();
   }
 
+  void _syncPrimaryFocus() {
+    final primary = _focusNode.hasPrimaryFocus;
+    if (_focused != primary) {
+      setState(() => _focused = primary);
+    }
+  }
+
   void _activate() {
-    if (widget.onTap == null) return;
-    _focusNode.requestFocus();
-    widget.onTap!();
+    widget.onTap?.call();
   }
 
   @override
@@ -260,12 +281,23 @@ class _VpsPressableState extends State<VpsPressable> {
         focusNode: _focusNode,
         includeFocusSemantics: false,
         mouseCursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
-        onFocusChange: (value) => setState(() => _focused = value),
+        onFocusChange: (_) =>
+            setState(() => _focused = _focusNode.hasPrimaryFocus),
         onShowFocusHighlight: (value) => setState(() => _showFocus = value),
         onShowHoverHighlight: (value) => setState(() => _hover = value),
         shortcuts: const {
-          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+          SingleActivator(
+            LogicalKeyboardKey.enter,
+            includeRepeats: false,
+          ): ActivateIntent(),
+          SingleActivator(
+            LogicalKeyboardKey.numpadEnter,
+            includeRepeats: false,
+          ): ActivateIntent(),
+          SingleActivator(
+            LogicalKeyboardKey.space,
+            includeRepeats: false,
+          ): ActivateIntent(),
         },
         actions: {
           ActivateIntent: CallbackAction<ActivateIntent>(
@@ -287,7 +319,7 @@ class _VpsPressableState extends State<VpsPressable> {
             decoration: ShapeDecoration(
               shape: RoundedSuperellipseBorder(
                 borderRadius: AppRadius.sm,
-                side: _showFocus && enabled
+                side: _showFocus && _focused && enabled
                     ? BorderSide(color: VpsPalette.of(context).accent, width: 2)
                     : BorderSide.none,
               ),
@@ -323,13 +355,19 @@ class VpsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
-    final fg = onTap == null ? p.muted : (filled ? p.accentInk : p.text);
+    final disabled = onTap == null;
+    final bg = filled
+        ? (disabled ? p.accent.withValues(alpha: 0.45) : p.accent)
+        : p.card;
+    final fg = disabled
+        ? (filled ? p.accentInk.withValues(alpha: 0.85) : p.muted)
+        : (filled ? p.accentInk : p.text);
     return VpsPressable(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: ShapeDecoration(
-          color: filled ? p.accent : p.card,
+          color: bg,
           shape: RoundedSuperellipseBorder(
             borderRadius: BorderRadius.circular(10),
             side: filled ? BorderSide.none : BorderSide(color: p.line),

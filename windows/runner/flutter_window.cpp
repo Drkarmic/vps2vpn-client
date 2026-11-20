@@ -10,7 +10,9 @@ FlutterWindow::FlutterWindow(const flutter::DartProject& project)
       window_message_(RustApiFunction<WindowMessageFunction>(
           "flclash_window_message")) {}
 
-FlutterWindow::~FlutterWindow() {}
+FlutterWindow::~FlutterWindow() {
+  Destroy();
+}
 
 bool FlutterWindow::OnCreate() {
   if (!Win32Window::OnCreate()) {
@@ -25,6 +27,7 @@ bool FlutterWindow::OnCreate() {
       frame.right - frame.left, frame.bottom - frame.top, project_);
   // Ensure that basic setup of the controller was successful.
   if (!flutter_controller_->engine() || !flutter_controller_->view()) {
+    flutter_controller_.reset();
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
@@ -54,12 +57,21 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Always forward WM_DESTROY to rust_api even when flutter_controller_ is null
+  // or a Flutter delegate handles the message, so rust_api never keeps a
+  // dangling HWND.
+  if (message == WM_DESTROY && window_message_ != nullptr) {
+    LRESULT window_result = 0;
+    window_message_(hwnd, message, wparam, lparam, &window_result);
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     // The engine hides the view only once it is sized to zero, and hiding or
     // minimizing the top-level window never resizes it: rust_api consumes a
     // minimize's WM_SIZE.
-    if (message == WM_SHOWWINDOW || message == WM_SIZE) {
+    if ((message == WM_SHOWWINDOW || message == WM_SIZE) &&
+        flutter_controller_->engine() && flutter_controller_->view()) {
       flutter_controller_->engine()->ProcessExternalWindowMessage(
           flutter_controller_->view()->GetNativeWindow(), message, wparam,
           lparam);
@@ -70,16 +82,17 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     if (result) {
       return *result;
     }
-    LRESULT window_result = 0;
-    if (window_message_ != nullptr &&
-        window_message_(hwnd, message, wparam, lparam, &window_result)) {
-      return window_result;
+    if (message != WM_DESTROY && window_message_ != nullptr) {
+      LRESULT window_result = 0;
+      if (window_message_(hwnd, message, wparam, lparam, &window_result)) {
+        return window_result;
+      }
     }
   }
 
   switch (message) {
     case WM_FONTCHANGE:
-      if (flutter_controller_) {
+      if (flutter_controller_ && flutter_controller_->engine()) {
         flutter_controller_->engine()->ReloadSystemFonts();
       }
       break;

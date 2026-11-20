@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/netip"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/metacubex/mihomo/common/utils"
@@ -42,6 +44,17 @@ func ruleSetCachePath(name string) (string, bool) {
 	return filepath.Join(constant.Path.HomeDir(), "providers", "rules", name), true
 }
 
+func ruleSetClaimKey(source string) string {
+	key := source
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		key = strings.ToLower(key)
+	}
+	for strings.HasSuffix(key, ".mrs") {
+		key = strings.TrimSuffix(key, ".mrs")
+	}
+	return "rule-set:" + key
+}
+
 func handleCompileRuleSet(params CompileRuleSetParams) (*RuleSetInfo, error) {
 	if !isInit.Load() {
 		return nil, errNotInitialized
@@ -50,7 +63,7 @@ func handleCompileRuleSet(params CompileRuleSetParams) (*RuleSetInfo, error) {
 	if !ok {
 		return nil, &MethodError{Code: "invalid_arguments", Message: "invalid rule set name"}
 	}
-	key := "rule-set:" + source
+	key := ruleSetClaimKey(source)
 	if !claimUpdate(key) {
 		return nil, &MethodError{Code: "rule_set_updating", Message: "rule set is already being compiled"}
 	}
@@ -78,6 +91,8 @@ func handleCompileRuleSet(params CompileRuleSetParams) (*RuleSetInfo, error) {
 		if err := writeRuleSetFile(source+".mrs", mrs); err != nil {
 			return nil, err
 		}
+	} else if err := os.Remove(source + ".mrs"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
 	}
 	return info, nil
 }
@@ -115,15 +130,32 @@ func writeRuleSetFile(path string, buf []byte) error {
 	if err != nil {
 		return err
 	}
-	return renameReplacing(temp, path)
+	if err := renameReplacing(temp, path); err != nil {
+		return err
+	}
+	scheduleReclaimOwnership()
+	return nil
+}
+
+func isTransientRenameError(err error) bool {
+	if errors.Is(err, os.ErrPermission) {
+		return true
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		// ERROR_SHARING_VIOLATION (32) and ERROR_LOCK_VIOLATION (33) on Windows.
+		return errno == 32 || errno == 33
+	}
+	return false
 }
 
 // renameReplacing moves temp over path. On Windows a rename onto a file that
 // another writer is replacing at the same moment fails with "Access is
-// denied" for a few milliseconds, so it is retried briefly there.
+// denied" or a sharing violation for a few milliseconds, so transient errors
+// are retried briefly there.
 func renameReplacing(temp, path string) error {
 	err := os.Rename(temp, path)
-	for i := 0; err != nil && runtime.GOOS == "windows" && i < 50; i++ {
+	for i := 0; err != nil && runtime.GOOS == "windows" && isTransientRenameError(err) && i < 50; i++ {
 		time.Sleep(10 * time.Millisecond)
 		err = os.Rename(temp, path)
 	}

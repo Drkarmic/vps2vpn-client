@@ -22,14 +22,19 @@ class SingleInstanceLock {
   static Future<String> Function() resolvePath = () => appPath.lockFilePath;
 
   Future<bool> acquire() async {
+    RandomAccessFile? file;
     try {
       final lockFilePath = await resolvePath();
       final lockFile = File(lockFilePath);
       await lockFile.create();
-      _accessFile = await lockFile.open(mode: FileMode.write);
-      await _accessFile?.lock();
+      file = await lockFile.open(mode: FileMode.write);
+      await file.lock();
+      _accessFile = file;
       return true;
     } catch (e) {
+      try {
+        await file?.close();
+      } catch (_) {}
       commonPrint.log(
         'single instance lock acquire failed ${e.toString()}',
         logLevel: LogLevel.warning,

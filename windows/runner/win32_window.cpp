@@ -18,6 +18,8 @@ namespace {
 
 constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
 
+constexpr UINT kStandardDpi = 96;
+
 /// Registry key for app theme preference.
 ///
 /// A value of 0 indicates apps should use dark mode. A non-zero or missing
@@ -132,7 +134,10 @@ bool Win32Window::Create(const std::wstring& title,
                               static_cast<LONG>(origin.y)};
   HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
-  double scale_factor = dpi / 96.0;
+  if (dpi == 0) {
+    dpi = kStandardDpi;
+  }
+  double scale_factor = static_cast<double>(dpi) / kStandardDpi;
 
   HWND window = CreateWindow(
       window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
@@ -187,6 +192,11 @@ Win32Window::MessageHandler(HWND hwnd,
       }
       return 0;
 
+    case WM_NCDESTROY:
+      SetWindowLongPtr(hwnd, GWLP_USERDATA, 0);
+      window_handle_ = nullptr;
+      break;
+
     case WM_DPICHANGED: {
       auto newRectSize = reinterpret_cast<RECT*>(lparam);
       LONG newWidth = newRectSize->right - newRectSize->left;
@@ -218,7 +228,7 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
   }
 
-  return DefWindowProc(window_handle_, message, wparam, lparam);
+  return DefWindowProc(hwnd, message, wparam, lparam);
 }
 
 void Win32Window::Destroy() {

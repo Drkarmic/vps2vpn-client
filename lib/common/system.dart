@@ -91,6 +91,25 @@ class System {
     return 'chown root:admin $path && chmod 4750 $path';
   }
 
+  /// Passes [corePath] out-of-band via `osascript` argv so AppleScript never
+  /// parses path characters inside a double-quoted string literal.
+  @visibleForTesting
+  static List<String> macOSElevationArguments(String corePath) {
+    return [
+      '-e',
+      'on run argv',
+      '-e',
+      'set p to quoted form of (item 1 of argv)',
+      '-e',
+      'do shell script ("chown root:admin " & p & " && chmod 4750 " & p) '
+          'with administrator privileges',
+      '-e',
+      'end run',
+      '--',
+      corePath,
+    ];
+  }
+
   @visibleForTesting
   static String linuxElevationShell(String corePath) {
     final path = _shellEscape(corePath);
@@ -226,11 +245,7 @@ class System {
         );
         return AuthorizeCode.error;
       }
-      final shell = macOSElevationShell(appPath.corePath);
-      final arguments = [
-        '-e',
-        'do shell script "$shell" with administrator privileges',
-      ];
+      final arguments = macOSElevationArguments(appPath.corePath);
       final result = await runProcess('osascript', arguments);
       if (result.exitCode != 0) {
         return AuthorizeCode.error;

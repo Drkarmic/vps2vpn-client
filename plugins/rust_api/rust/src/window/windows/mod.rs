@@ -398,14 +398,27 @@ fn handle_message(
             state.prevent_close.get().then_some(-1)
         }
         WM_COPYDATA => {
-            let data = unsafe { &*(lparam as *const COPYDATASTRUCT) };
-            if data.dwData != instance::LINK_COPY_DATA || data.lpData.is_null() {
+            const MAX_LINK_COPY_BYTES: u32 = 8192;
+            if lparam == 0 {
                 return None;
             }
-            let units = unsafe {
-                std::slice::from_raw_parts(data.lpData as *const u16, data.cbData as usize / 2)
+            let data = unsafe { &*(lparam as *const COPYDATASTRUCT) };
+            if data.dwData != instance::LINK_COPY_DATA
+                || data.cbData == 0
+                || data.cbData > MAX_LINK_COPY_BYTES
+                || data.cbData % 2 != 0
+                || data.lpData.is_null()
+            {
+                return None;
+            }
+            let bytes = unsafe {
+                std::slice::from_raw_parts(data.lpData as *const u8, data.cbData as usize)
             };
-            super::link::push(String::from_utf16_lossy(units));
+            let units: Vec<u16> = bytes
+                .chunks_exact(2)
+                .map(|pair| u16::from_ne_bytes([pair[0], pair[1]]))
+                .collect();
+            super::link::push(String::from_utf16_lossy(&units));
             Some(instance::HANDLED)
         }
         _ if message == instance::activate_message() => {

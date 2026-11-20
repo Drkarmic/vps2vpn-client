@@ -7,8 +7,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/path.dart';
+import 'package:fl_clash/common/yaml.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -63,7 +68,7 @@ class VpsAiStatus {
     return VpsAiStatus(
       summary: '${json['summary'] ?? ''}',
       place: json['place'] is String ? json['place'] as String : null,
-      at: at is num
+      at: at is num && at > 0
           ? DateTime.fromMillisecondsSinceEpoch(at.toInt() * 1000)
           : null,
       sites: sites is Map
@@ -93,12 +98,14 @@ class VpsClientRelease {
 
   static Uri? _web(Object? v) {
     final u = Uri.tryParse('${v ?? ''}');
-    return u != null && (u.isScheme('http') || u.isScheme('https')) ? u : null;
+    return u != null && u.isScheme('https') ? u : null;
   }
 
   static VpsClientRelease? fromJson(Object? json) {
     if (json is! Map) return null;
-    final version = '${json['version'] ?? ''}'.trim().replaceFirst('v', '');
+    final version = '${json['version'] ?? ''}'
+        .trim()
+        .replaceFirst(RegExp(r'^[vV]+'), '');
     final raw = json['files'];
     final files = <String, Uri>{
       if (raw is Map)
@@ -131,7 +138,8 @@ class VpsClientRelease {
     final a = parse(version);
     final b = parse(current);
     if (a == null || b == null) return false;
-    for (var i = 0; i < 3; i++) {
+    final n = math.max(a.length, b.length);
+    for (var i = 0; i < n; i++) {
       final x = i < a.length ? a[i] : 0;
       final y = i < b.length ? b[i] : 0;
       if (x != y) return x > y;
@@ -148,10 +156,11 @@ class VpsMember {
     this.usedUp = 0,
     this.usedDown = 0,
     this.quotaGb = 0,
+    bool? unlimited,
     this.expireAt,
     this.ai,
     this.client,
-  });
+  }) : unlimited = unlimited ?? (quotaGb <= 0);
 
   final String name;
   final bool enabled;
@@ -161,8 +170,10 @@ class VpsMember {
   final int usedUp;
   final int usedDown;
 
-  /// What applies after sharing; 0 = unlimited.
+  /// Effective quota in GiB after sharing; see [unlimited] for whether the
+  /// member has an unlimited plan (quota_eff can be 0 even on a capped plan).
   final double quotaGb;
+  final bool unlimited;
   final DateTime? expireAt;
   final VpsAiStatus? ai;
   final VpsClientRelease? client;
@@ -173,7 +184,9 @@ class VpsMember {
 
   factory VpsMember.fromJson(Map<String, Object?> json) {
     final expire = _int(json['expire_at']);
-    final quota = json['quota_eff'] ?? json['quota_gb'];
+    final rawQuotaGb = json['quota_gb'];
+    final unlimited = rawQuotaGb is! num || rawQuotaGb <= 0;
+    final quota = json['quota_eff'] ?? rawQuotaGb;
     return VpsMember(
       name: '${json['name'] ?? ''}',
       enabled: json['enabled'] != false,
@@ -184,6 +197,7 @@ class VpsMember {
       usedUp: _int(json['used_up']),
       usedDown: _int(json['used_down']),
       quotaGb: quota is num ? quota.toDouble() : 0,
+      unlimited: unlimited,
       expireAt: expire > 0
           ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
           : null,
@@ -260,20 +274,154 @@ class VpsRequestScope {
 
   void close() {
     _closed = true;
-    for (final client in _clients) {
+    final clients = [..._clients];
+    _clients.clear();
+    for (final client in clients) {
       client.close(force: true);
     }
-    _clients.clear();
   }
 }
 
-HttpClient _client({int? proxyPort}) {
+const _maxPanelResponseBytes = 256 * 1024;
+const _maxPinProfileBytes = 2 << 20;
+final _sha256Hex = RegExp(r'^[0-9a-f]{64}$');
+
+(int, DateTime?, String)? _pinCacheKey;
+Set<String> _pinCacheValue = const {};
+
+String _normHost(String host) {
+  var h = host.trim().toLowerCase();
+  if (h.startsWith('[') && h.endsWith(']') && h.length > 2) {
+    h = h.substring(1, h.length - 1);
+  }
+  return h;
+}
+
+String? _normFingerprint(Object? value) {
+  if (value is! String) return null;
+  final clean = value.trim().replaceAll(':', '').toLowerCase();
+  return _sha256Hex.hasMatch(clean) ? clean : null;
+}
+
+void _collectPin(
+  Map<dynamic, dynamic> def,
+  String targetHost,
+  Set<String> out,
+) {
+  if (_normHost('${def['server'] ?? ''}') != targetHost) return;
+  final fp = _normFingerprint(def['fingerprint']);
+  if (fp != null) out.add(fp);
+}
+
+Future<Set<String>> _pinnedFromProfileFile(
+  int? profileId,
+  DateTime? updatedAt,
+  String host,
+) async {
+  if (profileId == null || Platform.environment.containsKey('FLUTTER_TEST')) {
+    return const {};
+  }
+  final targetHost = _normHost(host);
+  if (targetHost.isEmpty) return const {};
+  final key = (profileId, updatedAt, targetHost);
+  if (_pinCacheKey == key) return _pinCacheValue;
+  final pins = <String>{};
+  try {
+    final path = await appPath.getProfilePath(profileId.toString());
+    final file = File(path);
+    if (await file.exists() && await file.length() <= _maxPinProfileBytes) {
+      final doc = loadPlainYaml(await file.readAsString());
+      if (doc is Map) {
+        final proxies = doc['proxies'];
+        if (proxies is List) {
+          for (final item in proxies) {
+            if (item is Map) _collectPin(item, targetHost, pins);
+          }
+        }
+      }
+    }
+  } catch (_) {}
+  final result = Set<String>.unmodifiable(pins);
+  _pinCacheKey = key;
+  _pinCacheValue = result;
+  return result;
+}
+
+Future<Set<String>> _pinnedFromCore(Ref ref, String host) async {
+  if (ref.read(coreStatusProvider) != CoreStatus.connected) return const {};
+  final targetHost = _normHost(host);
+  if (targetHost.isEmpty) return const {};
+  final core = ref.read(coreHandlerProvider);
+  final groups = ref.read(groupsProvider);
+  final seen = <String>{};
+  final pins = <String>{};
+  for (final group in groups) {
+    for (final proxy in group.all) {
+      if (!seen.add(proxy.name)) continue;
+      try {
+        final def = await core.getProxyDefinition(proxy.name);
+        if (!ref.mounted) return const {};
+        if (def != null) _collectPin(def, targetHost, pins);
+      } catch (_) {}
+    }
+  }
+  return pins;
+}
+
+Future<Set<String>> _pinnedSha256ForProfile(
+  Ref ref,
+  int? profileId,
+  DateTime? updatedAt,
+  String host,
+) async {
+  final pins = await _pinnedFromProfileFile(profileId, updatedAt, host);
+  if (pins.isNotEmpty || !ref.mounted) return pins;
+  return _pinnedFromCore(ref, host);
+}
+
+Future<String> _readBoundedUtf8(
+  Stream<List<int>> stream, {
+  int maxBytes = _maxPanelResponseBytes,
+}) async {
+  final builder = BytesBuilder(copy: false);
+  await for (final chunk in stream) {
+    if (builder.length + chunk.length > maxBytes) {
+      throw const HttpException('Panel response too large');
+    }
+    builder.add(chunk);
+  }
+  return utf8.decode(builder.takeBytes(), allowMalformed: true);
+}
+
+HttpClient _client({
+  int? proxyPort,
+  String? proxyAuth,
+  Uri? base,
+  Set<String> pinnedSha256 = const {},
+}) {
+  final normalizedPins = pinnedSha256.isEmpty
+      ? const <String>{}
+      : {
+          for (final p in pinnedSha256)
+            p.trim().replaceAll(':', '').toLowerCase(),
+        };
   final c = HttpClient()
-    ..badCertificateCallback = ((_, _, _) => false)
+    ..badCertificateCallback = (cert, host, port) {
+      if (normalizedPins.isEmpty || base == null) return false;
+      final expectedPort = base.hasPort ? base.port : 443;
+      if (_normHost(host) != _normHost(base.host) || port != expectedPort) {
+        return false;
+      }
+      final digest = sha256.convert(cert.der).toString().toLowerCase();
+      return normalizedPins.contains(digest);
+    }
     ..connectionTimeout = const Duration(seconds: 6)
     ..idleTimeout = const Duration(seconds: 2);
+  final userInfo = proxyAuth != null && proxyAuth.isNotEmpty
+      ? '$proxyAuth@'
+      : '';
   c.findProxy = (_) =>
-      proxyPort == null ? 'DIRECT' : 'PROXY 127.0.0.1:$proxyPort';
+      proxyPort == null ? 'DIRECT' : 'PROXY ${userInfo}127.0.0.1:$proxyPort';
   return c;
 }
 
@@ -281,14 +429,21 @@ Future<(int, String)> _send(
   Uri url, {
   Map<String, Object?>? body,
   int? proxyPort,
+  String? proxyAuth,
   VpsRequestScope? scope,
+  Set<String> pinnedSha256 = const {},
 }) async {
-  final client = _client(proxyPort: proxyPort);
+  final client = _client(
+    proxyPort: proxyPort,
+    proxyAuth: proxyAuth,
+    base: url,
+    pinnedSha256: pinnedSha256,
+  );
   try {
     scope?.attach(client);
     final req = body == null
-        ? await client.getUrl(url)
-        : await client.postUrl(url);
+        ? await client.getUrl(url).timeout(const Duration(seconds: 10))
+        : await client.postUrl(url).timeout(const Duration(seconds: 10));
     req.followRedirects = false;
     if (body != null) {
       // A fixed length, not chunked: the panel's server cannot read chunks.
@@ -300,10 +455,9 @@ Future<(int, String)> _send(
       req.add(bytes);
     }
     final res = await req.close().timeout(const Duration(seconds: 10));
-    final text = await res
-        .transform(utf8.decoder)
-        .join()
-        .timeout(const Duration(seconds: 10));
+    final text = await _readBoundedUtf8(
+      res,
+    ).timeout(const Duration(seconds: 10));
     return (res.statusCode, text);
   } finally {
     scope?.detach(client);
@@ -316,23 +470,42 @@ Future<(int, String)> _send(
 Future<VpsMemberResult?> fetchMember(
   Uri base, {
   int? proxyPort,
+  String? proxyAuth,
   VpsRequestScope? scope,
+  Set<String> pinnedSha256 = const {},
 }) async {
-  var result = const VpsMemberResult(problem: VpsPanelProblem.unreachable);
+  VpsMemberResult? result;
+  var sawHandshake = false;
+  var sawOtherError = false;
   for (final port in [null, ?proxyPort]) {
     if (scope?.closed == true) return null;
     try {
       final (code, text) = await _send(
         base.resolve('me'),
         proxyPort: port,
+        proxyAuth: port == null ? null : proxyAuth,
         scope: scope,
+        pinnedSha256: pinnedSha256,
       );
       if (scope?.closed == true) return null;
       result = VpsMemberResult.fromResponse(base, code, text);
-      if (result.member != null || result.linkChanged) return result;
-    } catch (_) {}
+      if (result.member != null ||
+          result.linkChanged ||
+          result.problem == VpsPanelProblem.httpsRequired) {
+        return result;
+      }
+    } on HandshakeException {
+      sawHandshake = true;
+    } catch (_) {
+      sawOtherError = true;
+    }
   }
-  return scope?.closed == true ? null : result;
+  if (scope?.closed == true) return null;
+  if (result != null) return result;
+  if (sawHandshake && !sawOtherError) {
+    return const VpsMemberResult(problem: VpsPanelProblem.httpsRequired);
+  }
+  return const VpsMemberResult(problem: VpsPanelProblem.unreachable);
 }
 
 /// Always direct: the line being reported is the one that is down.
@@ -342,12 +515,14 @@ Future<bool> reportLine(
   required bool ok,
   required String host,
   VpsRequestScope? scope,
+  Set<String> pinnedSha256 = const {},
 }) async {
   try {
     final (code, _) = await _send(
       base.resolve('report'),
       body: {'line': line, 'ok': ok, 'host': host},
       scope: scope,
+      pinnedSha256: pinnedSha256,
     );
     return code == HttpStatus.ok;
   } catch (_) {
@@ -370,30 +545,57 @@ String? vpsLineKind(Map<String, dynamic> def) {
 final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
   ref,
 ) async {
-  final (_, url, _) = ref.watch(
+  final (profileId, url, updatedAt) = ref.watch(
     currentProfileProvider.select(
       (p) => (p?.id, p?.url ?? '', p?.lastUpdateDate),
     ),
   );
   final base = vpsApiBase(url);
   if (base == null) return null;
-  if (!ref.watch(appVisibleProvider)) return null;
-  final on = ref.watch(isStartProvider);
+  final on = ref.watch(isStartProvider) && !ref.watch(suspendProvider);
   final port = on
       ? ref.watch(patchClashConfigProvider.select((p) => p.mixedPort))
+      : null;
+  final proxyAuth = on
+      ? () {
+          final auth = ref.watch(
+            networkSettingProvider.select((s) => s.authentication),
+          );
+          if (!auth.enable || auth.username.isEmpty) return null;
+          return '${Uri.encodeComponent(auth.username)}:'
+              '${Uri.encodeComponent(auth.password)}';
+        }()
       : null;
   final scope = VpsRequestScope();
   Timer? timer;
   var listening = true;
+  var visible = ref.read(appVisibleProvider);
   var finished = false;
+  DateTime? fetchedAt;
   var interval = const Duration(minutes: 5);
   void schedule() {
     timer?.cancel();
-    if (listening && finished && ref.mounted) {
-      timer = Timer(interval, ref.invalidateSelf);
+    if (!listening || !visible || !finished || !ref.mounted) return;
+    final elapsed = fetchedAt == null
+        ? Duration.zero
+        : DateTime.now().difference(fetchedAt);
+    final remaining = interval - elapsed;
+    if (remaining <= Duration.zero) {
+      ref.invalidateSelf();
+    } else {
+      timer = Timer(remaining, ref.invalidateSelf);
     }
   }
 
+  ref.listen(appVisibleProvider, (_, next) {
+    if (visible == next) return;
+    visible = next;
+    if (!visible) {
+      timer?.cancel();
+    } else {
+      schedule();
+    }
+  });
   ref.onCancel(() {
     listening = false;
     timer?.cancel();
@@ -406,10 +608,24 @@ final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
     timer?.cancel();
     scope.close();
   });
-  final result = await fetchMember(base, proxyPort: port, scope: scope);
+  final pins = await _pinnedSha256ForProfile(
+    ref,
+    profileId,
+    updatedAt,
+    base.host,
+  );
+  if (!ref.mounted || scope.closed) return null;
+  final result = await fetchMember(
+    base,
+    proxyPort: port,
+    proxyAuth: proxyAuth,
+    scope: scope,
+    pinnedSha256: pins,
+  );
   if (result?.problem == VpsPanelProblem.unreachable) {
     interval = const Duration(seconds: 30);
   }
+  fetchedAt = DateTime.now();
   finished = true;
   schedule();
   return result;
@@ -419,10 +635,11 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
   if (ref.watch(safeModeProvider) ||
       Platform.environment.containsKey('FLUTTER_TEST') ||
       !ref.watch(isStartProvider) ||
+      ref.watch(suspendProvider) ||
       ref.watch(coreStatusProvider) != CoreStatus.connected) {
     return;
   }
-  final (_, url, _) = ref.watch(
+  final (profileId, url, updatedAt) = ref.watch(
     currentProfileProvider.select(
       (p) => (p?.id, p?.url ?? '', p?.lastUpdateDate),
     ),
@@ -431,34 +648,59 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
   if (base == null) return;
   final core = ref.watch(coreHandlerProvider);
   final scope = VpsRequestScope();
+  final targetHost = _normHost(base.host);
+  var pinnedSha256 = const <String>{};
   final watch = VpsLineWatch(
     lines: () async {
       if (!await ref.read(setupActionProvider.notifier).inputsApplied() ||
           !ref.mounted) {
-        return [];
+        return null;
       }
-      final smart = ref
-          .read(groupsProvider)
+      final groups = ref.read(groupsProvider);
+      if (groups.isEmpty) return null;
+      final smart = groups
           .where((g) => g.name == vpsSmartGroupName)
           .firstOrNull;
-      if (smart == null) return [];
+      final fallback =
+          groups
+              .where((g) => g.type == GroupType.Selector && g.hidden != true)
+              .firstOrNull ??
+          groups.first;
+      final candidates = smart != null
+          ? [smart]
+          : [fallback, for (final g in groups) if (g.name != fallback.name) g];
       final lines = <VpsWatchedLine>[];
-      for (final proxy in smart.all) {
-        final def = await core.getProxyDefinition(proxy.name);
-        if (!ref.mounted) return [];
-        if (def == null) continue;
-        final kind = vpsLineKind(def);
-        final host = '${def['server'] ?? ''}';
-        if (kind == null || host.isEmpty) continue;
-        lines.add(
-          VpsWatchedLine(
-            name: proxy.name,
-            kind: kind,
-            host: host,
-            testUrl: smart.testUrl ?? defaultTestUrl,
-          ),
-        );
+      final pins = <String>{
+        ...await _pinnedFromProfileFile(profileId, updatedAt, base.host),
+      };
+      if (!ref.mounted) return null;
+      final seen = <String>{};
+      for (final group in candidates) {
+        final testUrl = group.testUrl ?? defaultTestUrl;
+        for (final proxy in group.all) {
+          if (!seen.add(proxy.name)) continue;
+          final def = await core.getProxyDefinition(proxy.name);
+          if (!ref.mounted) return null;
+          if (def == null) continue;
+          _collectPin(def, targetHost, pins);
+          final kind = vpsLineKind(def);
+          final rawHost = '${def['server'] ?? ''}'.trim();
+          final host = _normHost(rawHost);
+          if (kind == null || host.isEmpty || host.contains(':')) continue;
+          lines.add(
+            VpsWatchedLine(
+              name: proxy.name,
+              kind: kind,
+              host: rawHost,
+              testUrl: testUrl,
+            ),
+          );
+        }
+        // When the smart group or main selector already yielded leaf lines,
+        // stop rather than scanning auxiliary groups.
+        if (smart != null || lines.isNotEmpty) break;
       }
+      pinnedSha256 = Set<String>.unmodifiable(pins);
       return lines;
     },
     probe: (line) async {
@@ -477,6 +719,7 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
       ok: ok,
       host: line.host,
       scope: scope,
+      pinnedSha256: pinnedSha256,
     ),
   );
   ref.onDispose(() {

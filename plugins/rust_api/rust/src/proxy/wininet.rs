@@ -8,8 +8,11 @@ use super::{PAC_PATH, PROXY_HOST};
 pub fn bypass_list(bypass_domain: &[String]) -> String {
     let mut entries: Vec<String> = Vec::new();
     for domain in bypass_domain {
-        let entry = domain.trim().trim_end_matches('/');
-        if entry.is_empty() {
+        let entry = domain.trim().trim_end_matches('/').trim();
+        if entry.is_empty()
+            || entry.contains([';', '\0', '/'])
+            || entry.chars().any(char::is_whitespace)
+        {
             continue;
         }
         let entry = if is_bare_ipv6(entry) {
@@ -81,6 +84,22 @@ mod tests {
         assert_eq!(
             list(&["example.test/", "example.test", "nas//", "/"]),
             "example.test;nas"
+        );
+    }
+
+    #[test]
+    fn trims_after_slashes_and_filters_invalid_delimiters_and_cidr() {
+        assert_eq!(
+            list(&[
+                "example.test /",
+                "10.0.0.0/8",
+                "a;b",
+                "a\0b",
+                "bad host",
+                "bad\thost",
+                "good.test",
+            ]),
+            "example.test;good.test"
         );
     }
 

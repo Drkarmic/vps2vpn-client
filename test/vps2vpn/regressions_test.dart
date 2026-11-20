@@ -261,7 +261,6 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
     await tester.pumpWidget(
       TestApp(
         includeNavigatorKey: false,
@@ -276,5 +275,8 @@ void main() {
     expect(node.label, contains('Take over'));
     expect(node.hasFlag(SemanticsFlag.hasToggledState), isTrue);
     expect(node.hasFlag(SemanticsFlag.isToggled), isTrue);
+    // Released inside the test: the framework checks for live handles
+    // before tear-downs run.
+    semantics.dispose();
   });
 }

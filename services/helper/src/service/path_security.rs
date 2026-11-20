@@ -47,8 +47,8 @@ mod platform {
     };
     use windows_sys::Win32::Storage::FileSystem::{
         GetFinalPathNameByHandleW, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
-        FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE,
-        READ_CONTROL,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_READ_DATA,
+        FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, READ_CONTROL,
     };
 
     pub fn secure_executable(path: &Path) -> Result<Vec<File>> {
@@ -78,9 +78,20 @@ mod platform {
         let mut held = Vec::new();
         for ancestor in ancestors {
             let is_executable = ancestor == path;
+            let (access, share) = if is_executable {
+                (
+                    FILE_READ_DATA | READ_CONTROL | FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ,
+                )
+            } else {
+                (
+                    FILE_LIST_DIRECTORY | READ_CONTROL | FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                )
+            };
             let handle = OpenOptions::new()
-                .access_mode(READ_CONTROL | FILE_READ_ATTRIBUTES)
-                .share_mode(FILE_SHARE_READ | if is_executable { 0 } else { FILE_SHARE_WRITE })
+                .access_mode(access)
+                .share_mode(share)
                 .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS)
                 .open(ancestor)
                 .with_context(|| format!("open protected helper path {}", ancestor.display()))?;

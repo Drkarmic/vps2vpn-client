@@ -65,28 +65,26 @@ class VpnService : SystemVpnService(), ManagedService {
         return uidPackageNameMap.putIfAbsent(uid, packageName) ?: packageName
     }
 
-    private val VpnOptions.tunAddress
-        get(): String = buildString {
-            append(IPV4_ADDRESS)
+    private fun tunAddress(ipv6: Boolean): String = buildString {
+        append(IPV4_ADDRESS)
+        if (ipv6) {
+            append(",")
+            append(IPV6_ADDRESS)
+        }
+    }
+
+    private fun VpnOptions.tunDns(ipv6: Boolean): String {
+        if (dnsHijacking) {
+            return if (ipv6) "$NET_ANY,$NET_ANY6" else NET_ANY
+        }
+        return buildString {
+            append(DNS)
             if (ipv6) {
                 append(",")
-                append(IPV6_ADDRESS)
+                append(DNS6)
             }
         }
-
-    private val VpnOptions.tunDns
-        get(): String {
-            if (dnsHijacking) {
-                return NET_ANY
-            }
-            return buildString {
-                append(DNS)
-                if (ipv6) {
-                    append(",")
-                    append(DNS6)
-                }
-            }
-        }
+    }
 
     override fun onLowMemory() {
         lowCoreMemory()
@@ -123,9 +121,10 @@ class VpnService : SystemVpnService(), ManagedService {
     }
 
     private fun handleStart(options: VpnOptions) {
+        var ipv6Ready = false
         val fd = with(Builder()) {
-            addAddressAndRoutes(options)
-            addDnsServers(options)
+            ipv6Ready = addAddressAndRoutes(options)
+            addDnsServers(ipv6Ready)
             setMtu(options.tunMtu)
             configureAccessControl(options)
             setSession(getString(CommonR.string.app_name))
@@ -136,7 +135,10 @@ class VpnService : SystemVpnService(), ManagedService {
             if (options.allowBypass) {
                 allowBypass()
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && options.systemProxy) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                options.systemProxy &&
+                options.port in 1..65535
+            ) {
                 GlobalState.log("Enable VPN HTTP proxy")
                 setHttpProxy(
                     ProxyInfo.buildDirectProxy(
@@ -164,8 +166,8 @@ class VpnService : SystemVpnService(), ManagedService {
                         resolveUid = this::resolveUid,
                         resolvePackage = this::resolvePackage,
                         stack = options.stack,
-                        address = options.tunAddress,
-                        dns = options.tunDns,
+                        address = tunAddress(ipv6Ready),
+                        dns = options.tunDns(ipv6Ready),
                         options = options.tunOptions,
                     ),
                 ) { "Core rejected the tun file descriptor" }
@@ -176,7 +178,7 @@ class VpnService : SystemVpnService(), ManagedService {
         }
     }
 
-    private fun Builder.addAddressAndRoutes(options: VpnOptions) {
+    private fun Builder.addAddressAndRoutes(options: VpnOptions): Boolean {
         val ipv4Address = IPV4_ADDRESS.toCIDR()
         addAddress(ipv4Address.address, ipv4Address.prefixLength)
         addRoutes(
@@ -185,19 +187,24 @@ class VpnService : SystemVpnService(), ManagedService {
             routeAll = options.routeAddress.isEmpty(),
         )
 
+        var ipv6Ready = false
         if (options.ipv6) {
             try {
                 val ipv6Address = IPV6_ADDRESS.toCIDR()
                 addAddress(ipv6Address.address, ipv6Address.prefixLength)
+                ipv6Ready = true
             } catch (_: Exception) {
                 GlobalState.log("IPv6 VPN address is not supported")
             }
-            addRoutes(
-                routes = options::getIpv6RouteAddress,
-                fallbackAddress = NET_ANY6,
-                routeAll = options.routeAddress.isEmpty(),
-            )
+            if (ipv6Ready) {
+                addRoutes(
+                    routes = options::getIpv6RouteAddress,
+                    fallbackAddress = NET_ANY6,
+                    routeAll = options.routeAddress.isEmpty(),
+                )
+            }
         }
+        return ipv6Ready
     }
 
     // Flutter lists every family it routes, so a family missing from a
@@ -221,9 +228,9 @@ class VpnService : SystemVpnService(), ManagedService {
         }
     }
 
-    private fun Builder.addDnsServers(options: VpnOptions) {
+    private fun Builder.addDnsServers(ipv6: Boolean) {
         addDnsServer(DNS)
-        if (options.ipv6) {
+        if (ipv6) {
             addDnsServer(DNS6)
         }
     }

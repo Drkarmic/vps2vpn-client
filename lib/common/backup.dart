@@ -227,6 +227,9 @@ Future<MigrationData> readBackupArchive({
   }
 }
 
+const _maxBackupEntries = 2000;
+const _maxBackupUncompressedBytes = 256 * 1024 * 1024;
+
 Future<void> _extract(String archivePath, String stagingDirPath) async {
   await Directory(stagingDirPath).create(recursive: true);
   final input = InputFileStream(archivePath);
@@ -237,13 +240,24 @@ Future<void> _extract(String archivePath, String stagingDirPath) async {
     } on Exception {
       throw const BackupException(BackupFailure.invalid);
     }
+    if (archive.files.length > _maxBackupEntries) {
+      throw const BackupException(BackupFailure.invalid);
+    }
+    var totalBytes = 0;
     for (final file in archive.files) {
+      if (file.isSymbolicLink) {
+        throw const BackupException(BackupFailure.invalid);
+      }
       if (!file.isFile) {
         continue;
       }
       final outPath = _stagedEntryPath(stagingDirPath, file.name);
       if (outPath == null) {
-        continue;
+        throw const BackupException(BackupFailure.invalid);
+      }
+      if (file.size < 0 ||
+          file.size > _maxBackupUncompressedBytes - totalBytes) {
+        throw const BackupException(BackupFailure.invalid);
       }
       await Directory(dirname(outPath)).create(recursive: true);
       final output = OutputFileStream(outPath);
@@ -252,6 +266,11 @@ Future<void> _extract(String archivePath, String stagingDirPath) async {
       } finally {
         await output.close();
       }
+      final written = await File(outPath).length();
+      if (written > _maxBackupUncompressedBytes - totalBytes) {
+        throw const BackupException(BackupFailure.invalid);
+      }
+      totalBytes += written;
     }
   } finally {
     await input.close();
@@ -262,8 +281,12 @@ Future<void> _extract(String archivePath, String stagingDirPath) async {
 /// normalizes to itself and an absolute one stays absolute, so either would
 /// write wherever the archive asks. A backup file is untrusted input.
 String? _stagedEntryPath(String stagingDirPath, String name) {
+  if (name.contains('\x00')) {
+    return null;
+  }
   final normalized = posix.normalize(name.replaceAll('\\', '/'));
   if (normalized.isEmpty ||
+      normalized == '.' ||
       posix.isAbsolute(normalized) ||
       normalized == '..' ||
       normalized.startsWith('../')) {

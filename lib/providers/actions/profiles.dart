@@ -2,6 +2,8 @@ part of '../action.dart';
 
 @Riverpod(keepAlive: true)
 class ProfilesAction extends _$ProfilesAction {
+  final Map<int, Future<void>> _profileUpdates = {};
+
   CoreController get _core => ref.read(coreHandlerProvider);
 
   @override
@@ -38,19 +40,28 @@ class ProfilesAction extends _$ProfilesAction {
   }
 
   Future<void> deleteProfile(int id) async {
-    await ref.read(profilesProvider.notifier).del(id);
-    await clearEffect(id);
     final currentProfileId = ref.read(currentProfileIdProvider);
     if (currentProfileId == id) {
-      final profiles = ref.read(profilesProvider);
-      if (profiles.isNotEmpty) {
-        final updateId = profiles.first.id;
-        ref.read(currentProfileIdProvider.notifier).value = updateId;
+      final remaining = [
+        for (final profile in ref.read(profilesProvider))
+          if (profile.id != id) profile,
+      ];
+      if (remaining.isNotEmpty) {
+        ref.read(currentProfileIdProvider.notifier).value = remaining.first.id;
       } else {
         ref.read(currentProfileIdProvider.notifier).value = null;
-        unawaited(ref.read(setupActionProvider.notifier).setRunning(false));
+        try {
+          await ref.read(setupActionProvider.notifier).setRunning(false);
+        } catch (error) {
+          commonPrint.log(
+            'deleteProfile($id) stop failed: $error',
+            logLevel: coreFailureLogLevel(error),
+          );
+        }
       }
     }
+    await ref.read(profilesProvider.notifier).del(id);
+    await clearEffect(id);
   }
 
   Future<String?> validateConfigWithData(List<int> data) async {
@@ -77,9 +88,9 @@ class ProfilesAction extends _$ProfilesAction {
     }
   }
 
-  void putProfile(Profile profile) {
+  void putProfile(Profile profile, {bool select = false}) {
     ref.read(profilesProvider.notifier).put(profile);
-    if (ref.read(currentProfileIdProvider) != null) return;
+    if (!select && ref.read(currentProfileIdProvider) != null) return;
     ref.read(currentProfileIdProvider.notifier).value = profile.id;
   }
 
@@ -156,51 +167,83 @@ class ProfilesAction extends _$ProfilesAction {
   Future<void> updateProfile(
     Profile profile, {
     bool showLoading = false,
-  }) async {
+  }) {
+    final previous = _profileUpdates[profile.id];
+    final completer = Completer<void>();
+    _profileUpdates[profile.id] = completer.future;
     final operation = showLoading
         ? ref.read(updatingKeysProvider.notifier).start(profile.updatingKey)
         : null;
-    try {
-      ref.read(profilesProvider.notifier).put(profile);
-      final updated = await profile.update(
-        validate: (path, key) => _core.validateProfile(path, key),
-      );
-      // The download can take minutes; edits and deletes made meanwhile win.
-      final latest = ref.read(profilesProvider).getProfile(profile.id);
-      if (latest == null) {
-        await clearEffect(profile.id);
-        return;
-      }
-      final newProfile = latest.copyWith(
-        label: latest.label.takeFirstValid([updated.label]),
-        subscriptionInfo: updated.subscriptionInfo,
-        lastUpdateDate: updated.lastUpdateDate,
-      );
-      ref.read(profilesProvider.notifier).put(newProfile);
-      if (profile.id == ref.read(currentProfileIdProvider)) {
-        ref
-            .read(setupActionProvider.notifier)
-            .applyProfileDebounce(silence: true);
-      } else {
-        final label = ref
-            .read(profilesProvider.notifier)
-            .labeled(newProfile)
-            .realLabel;
-        unawaited(
-          ref.read(clashProvidersActionProvider.notifier).applyIfReferenced(
-            ProviderKind.proxy,
-            {label},
-            force: true,
-          ),
+    return () async {
+      try {
+        if (previous != null) {
+          await previous.catchError((Object _) {});
+        }
+        final existing = ref.read(profilesProvider).getProfile(profile.id);
+        if (existing == null) {
+          return;
+        }
+        final sourceChanged =
+            existing.url != profile.url ||
+            existing.ageSecretKey != profile.ageSecretKey;
+        final target = sourceChanged ? profile : existing;
+        if (sourceChanged) {
+          ref.read(profilesProvider.notifier).put(profile);
+        }
+        final updated = await target.update(
+          validate: (path, key) => _core.validateProfile(path, key),
         );
+        // The download can take minutes; edits and deletes made meanwhile win.
+        final latest = ref.read(profilesProvider).getProfile(target.id);
+        if (latest == null) {
+          await clearEffect(target.id);
+          return;
+        }
+        if (latest.url != target.url ||
+            latest.ageSecretKey != target.ageSecretKey) {
+          return;
+        }
+        final newProfile = latest.copyWith(
+          label: latest.label.takeFirstValid([updated.label]),
+          subscriptionInfo: updated.subscriptionInfo,
+          lastUpdateDate: updated.lastUpdateDate,
+          autoUpdateDuration:
+              latest.autoUpdateDuration != target.autoUpdateDuration
+              ? latest.autoUpdateDuration
+              : updated.autoUpdateDuration,
+        );
+        ref.read(profilesProvider.notifier).put(newProfile);
+        if (target.id == ref.read(currentProfileIdProvider)) {
+          ref
+              .read(setupActionProvider.notifier)
+              .applyProfileDebounce(silence: true);
+        } else {
+          final label = ref
+              .read(profilesProvider.notifier)
+              .labeled(newProfile)
+              .realLabel;
+          unawaited(
+            ref.read(clashProvidersActionProvider.notifier).applyIfReferenced(
+              ProviderKind.proxy,
+              {label},
+              force: true,
+            ),
+          );
+        }
+      } finally {
+        if (identical(_profileUpdates[profile.id], completer.future)) {
+          _profileUpdates.remove(profile.id);
+        }
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+        if (operation != null) {
+          ref
+              .read(updatingKeysProvider.notifier)
+              .stop(profile.updatingKey, operation);
+        }
       }
-    } finally {
-      if (operation != null) {
-        ref
-            .read(updatingKeysProvider.notifier)
-            .stop(profile.updatingKey, operation);
-      }
-    }
+    }();
   }
 
   Future<void> addProfileFormFile() async {
@@ -387,7 +430,7 @@ class ProfilesAction extends _$ProfilesAction {
       title: currentAppLocalizations.addProfile,
     );
     if (profile != null) {
-      putProfile(profile);
+      putProfile(profile, select: true);
     }
   }
 
@@ -490,6 +533,17 @@ class ProfilesAction extends _$ProfilesAction {
         'clearEffect($profileId) failed: $error',
         logLevel: coreFailureLogLevel(error),
       );
+      try {
+        final providersRoot = await appPath.getProvidersRootPath();
+        await Directory(
+          join(providersRoot, profileId.toString()),
+        ).safeDelete(recursive: true);
+      } catch (fallbackError) {
+        commonPrint.log(
+          'clearEffect($profileId) local cleanup failed: $fallbackError',
+          logLevel: LogLevel.warning,
+        );
+      }
     }
   }
 }

@@ -504,7 +504,7 @@ void main() {
       firstApplyCompleter.complete();
       await Future.wait([first, second]);
 
-      expect(coreAction.lifecycleRestartCount, 1);
+      expect(coreAction.lifecycleRestartCount, 2);
       expect(setupAction.applyProfileCount, 2);
     });
 

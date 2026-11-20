@@ -11,6 +11,9 @@ on:
         required: true
         default: v1.0.1
 
+permissions:
+  contents: read
+
 jobs:
   e2e:
     runs-on: windows-2022
@@ -25,14 +28,17 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
         run: |
-          gh release download '${{ inputs.tag }}' -R '${{ github.repository }}' -p '*-setup.exe' -D installer
+          gh release download -R $env:REPO -p '*-windows-amd64-setup.exe' -D installer -- $env:TAG
           Get-ChildItem installer
 
       - name: Install and take over (end to end)
         shell: pwsh
         run: |
-          $setup = (Get-ChildItem installer -Filter '*.exe' | Select-Object -First 1).FullName
+          $setup = (Get-ChildItem installer -Filter '*-windows-amd64-setup.exe' | Select-Object -First 1).FullName
+          if ([string]::IsNullOrWhiteSpace($setup)) { throw 'No Windows amd64 setup installer found in installer/' }
           ./.github/scripts/takeover-e2e.ps1 -Setup $setup -Out e2e
 
       - name: Upload results

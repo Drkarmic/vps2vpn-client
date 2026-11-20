@@ -29,10 +29,6 @@ String? _joined(List<String> values) {
   return values.isEmpty ? null : '${values.join(';')};';
 }
 
-String? _plainJoined(List<String> values) {
-  return values.isEmpty ? null : values.join(';');
-}
-
 Map<String, String> debFiles(
   PackageContext context,
   Map<String, dynamic> config,
@@ -69,6 +65,7 @@ Map<String, String> debFiles(
     }),
     'DEBIAN/postinst': [
       '#!/usr/bin/env sh',
+      'rm -f /usr/bin/$binary',
       'ln -s /opt/$binary/$binary /usr/bin/$binary',
       'chmod +x /usr/bin/$binary',
       ...stringList(config['postinstall_scripts']),
@@ -76,7 +73,9 @@ Map<String, String> debFiles(
     ].join('\n'),
     'DEBIAN/postrm': [
       '#!/usr/bin/env sh',
+      'case "\${1:-}" in remove|purge)',
       'rm -f /usr/bin/$binary',
+      ';; esac',
       ...stringList(config['postuninstall_scripts']),
       'exit 0',
     ].join('\n'),
@@ -155,7 +154,7 @@ String rpmSpec(PackageContext context, Map<String, dynamic> config) {
       (config['packagerEmail'] ?? config['packager_email']) as String?;
   final preamble = <String, Object?>{
     'Name': config['package_name'] ?? binary,
-    'Version': context.pubspecVersion,
+    'Version': context.buildName,
     'Release': '${context.buildNumber}%{?dist}',
     'Summary': config['summary'] ?? context.description,
     'Group': config['group'],
@@ -187,10 +186,11 @@ String rpmSpec(PackageContext context, Map<String, dynamic> config) {
       ...stringList(config['postuninstall_scripts']),
     ].join('\n'),
     '%files': [
+      '%defattr(-,root,root,-)',
       '%{_bindir}/%{name}',
       '%{_datadir}/%{name}',
       '%{_datadir}/applications/%{name}.desktop',
-      '%{_datadir}/metainfo',
+      '%attr(0644, root, root) %{_datadir}/pixmaps/%{name}.png',
     ].join('\n'),
   };
   final macros = stringList(config['spec_macros']);
@@ -204,10 +204,6 @@ String rpmSpec(PackageContext context, Map<String, dynamic> config) {
     [
       for (final MapEntry(:key, :value) in body.entries) '$key\n$value\n',
     ].join('\n'),
-    '\n\n',
-    '%defattr(-,root,root)\n',
-    '\n',
-    '%attr(4755, root, root) %{_datadir}/pixmaps/%{name}.png\n',
   ].join();
 }
 
@@ -348,9 +344,13 @@ const appImageSystemLibraries = {
 Set<String> bundledLibraries(String lddOutput) {
   return {
     for (final line in lddOutput.split('\n'))
-      if (line.contains('=>') && line.trim().startsWith('lib'))
+      if (line.contains(' => ') && line.trim().startsWith('lib'))
         line.split(' => ')[1].trim().split(' ').first.trim(),
-  }..removeWhere((path) => appImageSystemLibraries.contains(p.basename(path)));
+  }..removeWhere(
+    (path) =>
+        !path.startsWith('/') ||
+        appImageSystemLibraries.contains(p.basename(path)),
+  );
 }
 
 String appImageDesktopEntry(
@@ -358,7 +358,18 @@ String appImageDesktopEntry(
   Map<String, dynamic> config,
 ) {
   final binary = context.linuxBinaryName;
-  return '${_desktopEntry({'Name': config['display_name'], 'GenericName': config['generic_name'] ?? 'A Flutter Application', 'Exec': '$binary %u', 'Icon': binary, 'Type': 'Application', 'StartupNotify': config['startup_notify'] == true ? 'true' : 'false', 'StartupWMClass': context.linuxApplicationId, 'MimeType': _joined(stringList(config['supported_mime_type'])), 'Categories': _plainJoined(stringList(config['categories'])), 'Keywords': _plainJoined(stringList(config['keywords']))})}\n\n';
+  return '${_desktopEntry({
+    'Name': config['display_name'],
+    'GenericName': config['generic_name'] ?? 'A Flutter Application',
+    'Exec': '$binary %u',
+    'Icon': binary,
+    'Type': 'Application',
+    'StartupNotify': config['startup_notify'] == true ? 'true' : 'false',
+    'StartupWMClass': context.linuxApplicationId,
+    'MimeType': _joined(stringList(config['supported_mime_type'])),
+    'Categories': _joined(stringList(config['categories'])),
+    'Keywords': _joined(stringList(config['keywords'])),
+  })}\n\n';
 }
 
 String appImageAppRun(String binary) {

@@ -28,8 +28,16 @@ class Request {
     _read = read;
   }
 
+  static const _requestTimeout = Duration(seconds: 15);
+
   Request() {
-    dio = Dio(BaseOptions(headers: {'User-Agent': browserUa}));
+    dio = Dio(
+      BaseOptions(
+        headers: {'User-Agent': browserUa},
+        connectTimeout: _requestTimeout,
+        receiveTimeout: _requestTimeout,
+      ),
+    );
     _clashDio = Dio();
     _clashDio.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () {
@@ -41,7 +49,13 @@ class Request {
         return client;
       },
     );
-    releaseDio = Dio(BaseOptions(headers: {'User-Agent': browserUa}));
+    releaseDio = Dio(
+      BaseOptions(
+        headers: {'User-Agent': browserUa},
+        connectTimeout: _requestTimeout,
+        receiveTimeout: _requestTimeout,
+      ),
+    );
     releaseDio.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () {
         return HttpClient()
@@ -117,7 +131,7 @@ class Request {
   /// The release page redirect still answers once the hourly API quota is spent.
   Future<Map<String, dynamic>> latestRelease() async {
     try {
-      final response = await dio.get<Map<String, dynamic>>(
+      final response = await releaseDio.get<Map<String, dynamic>>(
         'https://api.github.com/repos/$repository/releases/latest',
         options: Options(responseType: ResponseType.json),
       );
@@ -128,7 +142,7 @@ class Request {
         logLevel: LogLevel.warning,
       );
     }
-    final response = await dio.get<void>(
+    final response = await releaseDio.get<void>(
       'https://github.com/$repository/releases/latest',
       options: Options(
         followRedirects: false,
@@ -179,6 +193,9 @@ class Request {
       );
     }
     if (await fileSha256(path) != expected) {
+      try {
+        await File(path).safeDelete();
+      } catch (_) {}
       throw ReleaseNotVerifiedException(name);
     }
     return path;
@@ -232,22 +249,26 @@ String _decodeUserInfo(String value) {
 
 String? getFileNameForDisposition(String? disposition) {
   if (disposition == null) return null;
-  final parseValue = HeaderValue.parse(disposition);
-  final parameters = parseValue.parameters;
-  final fileNamePointKey = parameters.keys.firstWhere(
-    (key) => key == 'filename*',
-    orElse: () => '',
-  );
-  if (fileNamePointKey.isNotEmpty) {
-    final res = parameters[fileNamePointKey]?.split("''") ?? [];
-    if (res.length >= 2) {
-      return Uri.decodeComponent(res[1]);
+  try {
+    final parseValue = HeaderValue.parse(disposition);
+    final parameters = parseValue.parameters;
+    final fileNamePointKey = parameters.keys.firstWhere(
+      (key) => key == 'filename*',
+      orElse: () => '',
+    );
+    if (fileNamePointKey.isNotEmpty) {
+      final res = parameters[fileNamePointKey]?.split("''") ?? [];
+      if (res.length >= 2) {
+        return Uri.decodeComponent(res[1]);
+      }
     }
+    final fileNameKey = parameters.keys.firstWhere(
+      (key) => key == 'filename',
+      orElse: () => '',
+    );
+    if (fileNameKey.isEmpty) return null;
+    return parameters[fileNameKey];
+  } catch (_) {
+    return null;
   }
-  final fileNameKey = parameters.keys.firstWhere(
-    (key) => key == 'filename',
-    orElse: () => '',
-  );
-  if (fileNameKey.isEmpty) return null;
-  return parameters[fileNameKey];
 }

@@ -55,28 +55,87 @@ func readRawConfig(path string) (*config.RawConfig, error) {
 	return unmarshalRawConfig(buf)
 }
 
+type proxyDefinitionCache struct {
+	path      string
+	proxies   map[string]map[string]any
+	providers map[string]map[string]any
+}
+
+var (
+	proxyDefsMu    sync.RWMutex
+	proxyDefsCache *proxyDefinitionCache
+)
+
+func setProxyDefinitionCache(path string, raw *config.RawConfig) {
+	if raw == nil {
+		clearProxyDefinitionCache()
+		return
+	}
+	proxies := make(map[string]map[string]any, len(raw.Proxy))
+	for _, mapping := range raw.Proxy {
+		if name, ok := mapping["name"].(string); ok && name != "" {
+			if _, exists := proxies[name]; !exists {
+				proxies[name] = mapping
+			}
+		}
+	}
+	providers := make(map[string]map[string]any, len(raw.ProxyProvider))
+	for name, mapping := range raw.ProxyProvider {
+		providers[name] = mapping
+	}
+	proxyDefsMu.Lock()
+	proxyDefsCache = &proxyDefinitionCache{
+		path:      path,
+		proxies:   proxies,
+		providers: providers,
+	}
+	proxyDefsMu.Unlock()
+}
+
+func clearProxyDefinitionCache() {
+	proxyDefsMu.Lock()
+	proxyDefsCache = nil
+	proxyDefsMu.Unlock()
+}
+
 func handleGetProxyDefinition(params NameParams) (map[string]any, error) {
 	name := params.Name
-	raw, err := readRawConfig(runningConfigPath())
-	if err != nil {
-		return nil, err
+	path := runningConfigPath()
+	proxyDefsMu.RLock()
+	cache := proxyDefsCache
+	proxyDefsMu.RUnlock()
+
+	var proxies map[string]map[string]any
+	var providers map[string]map[string]any
+	if cache != nil && cache.path == path {
+		proxies = cache.proxies
+		providers = cache.providers
+	} else {
+		raw, err := readRawConfig(path)
+		if err != nil {
+			return nil, err
+		}
+		proxies = make(map[string]map[string]any, len(raw.Proxy))
+		for _, mapping := range raw.Proxy {
+			if proxyName, ok := mapping["name"].(string); ok && proxyName != "" {
+				if _, exists := proxies[proxyName]; !exists {
+					proxies[proxyName] = mapping
+				}
+			}
+		}
+		providers = raw.ProxyProvider
 	}
 	if proxy := lookupProxy(name); proxy != nil {
 		if pdName := proxy.ProxyInfo().ProviderName; pdName != "" {
 			pd, running := tunnel.ProvidersSnapshot()[pdName]
-			mapping, declared := raw.ProxyProvider[pdName]
+			mapping, declared := providers[pdName]
 			if !running || !declared {
 				return nil, nil
 			}
 			return provider.ProxyMapping(pd, mapping, name)
 		}
 	}
-	for _, mapping := range raw.Proxy {
-		if mapping["name"] == name {
-			return mapping, nil
-		}
-	}
-	return nil, nil
+	return proxies[name], nil
 }
 
 func handleValidateConfig(params PathParams) *string {
@@ -104,21 +163,26 @@ func handleDecryptConfig(params DecryptConfigParams) (string, error) {
 var systemTimeWritable = runtime.GOOS != "android"
 
 func loadConfig(path string) (*config.Config, error) {
+	cfg, _, err := loadConfigRaw(path)
+	return cfg, err
+}
+
+func loadConfigRaw(path string) (*config.Config, *config.RawConfig, error) {
 	buf, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	raw, err := config.UnmarshalRawConfig(buf)
+	raw, err := unmarshalRawConfig(buf)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Custom and scripted profiles: the user wrote the rules, so no AI rules.
 	vps2vpnEnhance(raw, -1)
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return withPlatformLimits(cfg), nil
+	return withPlatformLimits(cfg), raw, nil
 }
 
 func withPlatformLimits(cfg *config.Config) *config.Config {
@@ -134,11 +198,16 @@ func runningConfigPath() string {
 }
 
 func loadSetupConfig(params *SetupParams) (*config.Config, error) {
+	cfg, _, err := loadSetupConfigWithRaw(params)
+	return cfg, err
+}
+
+func loadSetupConfigWithRaw(params *SetupParams) (*config.Config, *config.RawConfig, error) {
 	path := runningConfigPath()
 	if params.Base != nil {
-		return loadConfigWithBase(params.Base, path)
+		return loadConfigWithBaseRaw(params.Base, path)
 	}
-	return loadConfig(path)
+	return loadConfigRaw(path)
 }
 
 func applyConfig(params *SetupParams) error {
@@ -147,7 +216,7 @@ func applyConfig(params *SetupParams) error {
 	defer configMu.Unlock()
 
 	applyOptions(params.Options)
-	cfg, err := loadSetupConfig(params)
+	cfg, raw, err := loadSetupConfigWithRaw(params)
 	if err != nil {
 		// The fallback is what keeps the listeners serving while the host
 		// reports the error, but it applies a config with no proxies in it.
@@ -158,14 +227,17 @@ func applyConfig(params *SetupParams) error {
 			"config apply failed, falling back to the built-in default - no proxies will be available: %v",
 			err,
 		)
-		fallback, fallbackErr := config.ParseRawConfig(config.DefaultRawConfig())
+		defaultRaw := config.DefaultRawConfig()
+		fallback, fallbackErr := config.ParseRawConfig(defaultRaw)
 		if fallbackErr != nil {
 			return err
 		}
 		cfg = fallback
+		raw = defaultRaw
 	}
 
 	currentConfig = cfg
+	setProxyDefinitionCache(runningConfigPath(), raw)
 	hub.ApplyConfig(cfg)
 	patchSelectGroup(params.SelectedMap)
 	updateListeners(cfg)
@@ -224,9 +296,9 @@ func updateConfig(params *UpdateParams) error {
 	if params.IPv6 != nil {
 		if general.IPv6 != *params.IPv6 {
 			routeChange = routeReset
+			general.IPv6 = *params.IPv6
+			resolver.DisableIPv6 = !general.IPv6
 		}
-		general.IPv6 = *params.IPv6
-		resolver.DisableIPv6 = !general.IPv6
 	}
 	if params.Tun != nil {
 		patchTun(&general.Tun, params.Tun)

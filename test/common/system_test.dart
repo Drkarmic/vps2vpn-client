@@ -345,7 +345,9 @@ void main() {
       processes.stub('id', 'alice staff admin');
 
       expect(await system.authorizeCore(), AuthorizeCode.success);
-      expect(processes.argumentsFor('osascript').last, contains('chmod 4750'));
+      final args = processes.argumentsFor('osascript');
+      expect(args.any((arg) => arg.contains('chmod 4750')), isTrue);
+      expect(args.contains('--'), isTrue);
     });
   }, skip: system.isMacOS ? false : 'macOS only');
 

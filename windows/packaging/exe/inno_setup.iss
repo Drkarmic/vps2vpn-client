@@ -3,6 +3,7 @@ AppId={{APP_ID}}
 AppVersion={{APP_VERSION}}
 AppName={{DISPLAY_NAME}}
 AppPublisher={{PUBLISHER_NAME}}
+AppPublisherURL={{PUBLISHER_URL}}
 DefaultDirName={{INSTALL_DIR_NAME}}
 DisableProgramGroupPage=yes
 OutputDir=.
@@ -25,6 +26,8 @@ function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWORD): DWORD;
   external 'WaitForSingleObject@kernel32.dll stdcall';
 function CloseHandle(hObject: THandle): BOOL;
   external 'CloseHandle@kernel32.dll stdcall';
+function SetEnvironmentVariable(lpName, lpValue: String): BOOL;
+  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
 
 // The app passes /updatefrom=<pid> (windowsUpdateArguments in lib/common)
 // and exits on its own, stopping the Core and clearing the system proxy.
@@ -57,25 +60,45 @@ end;
 procedure KillProcesses;
 var
   AppDir: String;
+  PowerShellPath: String;
   ResultCode: Integer;
 begin
   AppDir := AddBackslash(ExpandConstant('{app}'));
-  StringChangeEx(AppDir, '''', '''''', True);
-  Exec('powershell.exe',
-    '-NoProfile -NonInteractive -Command "Get-Process -Name vps2vpn,vps2vpnCore,vps2vpnHelperService -ErrorAction SilentlyContinue | ' +
-    'Where-Object { $_.Path -and $_.Path.StartsWith(''' + AppDir + ''', [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force"',
-    '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if AppDir = '' then
+    Exit;
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+  if SetEnvironmentVariable('VPS2VPN_APP_DIR', AppDir) then
+  begin
+    try
+      Exec(PowerShellPath,
+        '-NoProfile -NonInteractive -Command "Get-Process -Name vps2vpn,vps2vpnCore,vps2vpnHelperService -ErrorAction SilentlyContinue | ' +
+        'Where-Object { $_.Path -and $_.Path.StartsWith($env:VPS2VPN_APP_DIR, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue"',
+        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    finally
+      SetEnvironmentVariable('VPS2VPN_APP_DIR', '');
+    end;
+  end;
 end;
 
 procedure UnregisterHelperService;
 var
   HelperPath: String;
+  ScPath: String;
   ResultCode: Integer;
+  Unregistered: Boolean;
 begin
-  HelperPath := ExpandConstant('{app}\\vps2vpnHelperService.exe');
+  HelperPath := ExpandConstant('{app}\vps2vpnHelperService.exe');
+  Unregistered := False;
   if FileExists(HelperPath) then
   begin
-    Exec(HelperPath, 'uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if Exec(HelperPath, 'uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0) then
+      Unregistered := True;
+  end;
+  if not Unregistered then
+  begin
+    ScPath := ExpandConstant('{sys}\sc.exe');
+    Exec(ScPath, 'stop vps2vpnHelperService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ScPath, 'delete vps2vpnHelperService', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
 
@@ -84,7 +107,7 @@ var
   AppPath: String;
   ResultCode: Integer;
 begin
-  AppPath := ExpandConstant('{app}\\{{EXECUTABLE_NAME}}');
+  AppPath := ExpandConstant('{app}\{{EXECUTABLE_NAME}}');
   if FileExists(AppPath) then
   begin
     Exec(AppPath, '--clear-stale-proxy', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -128,22 +151,6 @@ begin
   Result := '';
 end;
 
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-  begin
-    ClearStaleProxy;
-  end;
-end;
-
-function InitializeUninstall(): Boolean;
-begin
-  UnregisterHelperService;
-  KillProcesses;
-  ClearStaleProxy;
-  Result := True;
-end;
-
 // path_provider names these folders after CompanyName and ProductName in
 // windows/runner/Runner.rc.
 procedure RemoveUserData;
@@ -158,7 +165,13 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if CurUninstallStep = usPostUninstall then
+  if CurUninstallStep = usUninstall then
+  begin
+    UnregisterHelperService;
+    KillProcesses;
+    ClearStaleProxy;
+  end
+  else if CurUninstallStep = usPostUninstall then
   begin
     RemoveUserRegistrations;
     if not UninstallSilent and (MsgBox(CustomMessage('RemoveUserData'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
@@ -174,16 +187,18 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
 english.RemoveUserData=Also delete your profiles and settings?
+chineseSimplified.RemoveUserData=同时删除配置和设置？
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 [Files]
-Source: "{{SOURCE_DIR}}\\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{{SOURCE_DIR}}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
-Name: "{autoprograms}\\{{DISPLAY_NAME}}"; Filename: "{app}\\{{EXECUTABLE_NAME}}"
-Name: "{autodesktop}\\{{DISPLAY_NAME}}"; Filename: "{app}\\{{EXECUTABLE_NAME}}"; Tasks: desktopicon
+Name: "{autoprograms}\{{DISPLAY_NAME}}"; Filename: "{app}\{{EXECUTABLE_NAME}}"
+Name: "{autodesktop}\{{DISPLAY_NAME}}"; Filename: "{app}\{{EXECUTABLE_NAME}}"; Tasks: desktopicon
 [Run]
-Filename: "{app}\\{{EXECUTABLE_NAME}}"; Description: "{cm:LaunchProgram,{{DISPLAY_NAME}}}"; Flags: runasoriginaluser nowait postinstall skipifsilent
-Filename: "{app}\\{{EXECUTABLE_NAME}}"; Flags: runasoriginaluser nowait; Check: IsAppUpdate
+Filename: "{app}\{{EXECUTABLE_NAME}}"; Parameters: "--clear-stale-proxy"; Flags: runasoriginaluser runhidden waituntilterminated
+Filename: "{app}\{{EXECUTABLE_NAME}}"; Description: "{cm:LaunchProgram,{{DISPLAY_NAME}}}"; Flags: runasoriginaluser nowait postinstall skipifsilent; Check: not IsAppUpdate
+Filename: "{app}\{{EXECUTABLE_NAME}}"; Flags: runasoriginaluser nowait; Check: IsAppUpdate

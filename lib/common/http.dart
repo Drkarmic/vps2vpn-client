@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
-import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/config.dart';
 import 'package:fl_clash/providers/state.dart';
 import 'package:flutter/services.dart';
@@ -36,8 +35,10 @@ class FlClashHttpOverrides extends HttpOverrides {
     return findProxyForReader(container.read, url);
   }
 
+  static const _loopbackHosts = {'127.0.0.1', 'localhost', '::1'};
+
   static String findProxyForReader(ProviderReader read, Uri url) {
-    if ([localhost].contains(url.host)) {
+    if (_loopbackHosts.contains(url.host.toLowerCase())) {
       return 'DIRECT';
     }
     final isStart = read(isStartProvider);
@@ -49,9 +50,11 @@ class FlClashHttpOverrides extends HttpOverrides {
     final authentication = read(
       networkSettingProvider.select((state) => state.authentication),
     );
-    final credentials = authentication.credentials;
-    final userInfo = credentials.isNotEmpty ? '${credentials.first}@' : '';
-    return 'PROXY ${userInfo}localhost:$mixedPort';
+    final userInfo = authentication.enable && authentication.username.isNotEmpty
+        ? '${Uri.encodeComponent(authentication.username)}:'
+              '${Uri.encodeComponent(authentication.password)}@'
+        : '';
+    return 'PROXY ${userInfo}127.0.0.1:$mixedPort';
   }
 
   static bool allowBadCertificate(

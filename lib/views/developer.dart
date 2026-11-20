@@ -60,10 +60,11 @@ class DeveloperView extends ConsumerWidget {
               unawaited(coreAction.crash());
             },
           ),
-        if (selfUpdateAsset != null)
+        if (!vps2vpnUpdatesDisabled && selfUpdateAsset != null)
           ListItem(
             title: Text(appLocalizations.updateDownloadTest),
             onTap: () {
+              if (vps2vpnUpdatesDisabled) return;
               if (ref.read(loadingProvider(LoadingTag.checkUpdate))) return;
               unawaited(
                 ref.read(commonActionProvider.notifier).testUpdateDownload(),

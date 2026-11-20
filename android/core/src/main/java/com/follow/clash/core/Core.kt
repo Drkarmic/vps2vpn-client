@@ -5,7 +5,6 @@ import com.follow.clash.core.mobile.ResultHandler
 import com.follow.clash.core.mobile.TunHandler
 import java.net.InetAddress
 import java.net.InetSocketAddress
-import java.net.URI
 
 object Core {
     /** Loads the Go library and runs its package init, which the first call otherwise pays for. */
@@ -22,10 +21,30 @@ object Core {
     fun resetNetwork() = Mobile.resetNetwork()
 
     private fun parseInetSocketAddress(address: String): InetSocketAddress {
-        val uri = URI("tcp://$address")
-        val host = requireNotNull(uri.host) { "Missing host in address: $address" }
-        require(uri.port >= 0) { "Missing port in address: $address" }
-        return InetSocketAddress(InetAddress.getByName(host), uri.port)
+        val rawHost: String
+        val portText: String
+        if (address.startsWith("[")) {
+            val closeBracket = address.indexOf(']')
+            require(
+                closeBracket > 1 &&
+                    closeBracket + 1 < address.length &&
+                    address[closeBracket + 1] == ':',
+            ) { "Invalid IPv6 socket address: $address" }
+            rawHost = address.substring(1, closeBracket)
+            portText = address.substring(closeBracket + 2)
+        } else {
+            val colon = address.lastIndexOf(':')
+            require(colon > 0 && address.indexOf(':') == colon) {
+                "Invalid socket address: $address"
+            }
+            rawHost = address.substring(0, colon)
+            portText = address.substring(colon + 1)
+        }
+        val host = rawHost.substringBefore('%')
+        require(host.isNotEmpty()) { "Missing host in address: $address" }
+        val port = portText.toIntOrNull()
+        require(port != null && port in 0..65535) { "Invalid port in address: $address" }
+        return InetSocketAddress(InetAddress.getByName(host), port)
     }
 
     fun startTun(

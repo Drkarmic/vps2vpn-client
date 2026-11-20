@@ -1,6 +1,7 @@
 // vps2vpn "Me": your subscriptions, look and language, and the door to
 // advanced mode.
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:fl_clash/common/common.dart';
@@ -9,6 +10,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
+import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +28,7 @@ class VpsMePage extends ConsumerStatefulWidget {
 class _VpsMePageState extends ConsumerState<VpsMePage> {
   String? _note;
   bool _updating = false;
+  bool _pasting = false;
 
   Future<void> _updateProfiles(List<Profile> profiles) async {
     if (_updating) return;
@@ -35,8 +38,10 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
       await globalState.batchRun(
         profiles.where((p) => p.type == ProfileType.url).toList(),
         (profile) async {
-          if (!mounted) return;
-          final current = ref.read(profilesProvider).getProfile(profile.id);
+          final list = mounted
+              ? ref.read(profilesProvider)
+              : globalState.container.read(profilesProvider);
+          final current = list.getProfile(profile.id);
           if (current == null || current.type != ProfileType.url) return;
           await action.updateProfile(current, showLoading: true);
         },
@@ -50,35 +55,42 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
   }
 
   Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    // A plain URL, a share link, or a clash://install-config?url=… wrapper
-    // (what many panels hand out) all come down to one subscription link.
-    final link = profileUrlFromQrCodes([data?.text]);
-    if (link == null) {
-      setState(
-        () => _note = tr(
-          context,
-          '剪贴板中没有检测到订阅链接，请先在部署工具中复制。',
-          'No subscription link on the clipboard. Copy it from the deploy tool first.',
-        ),
-      );
-      return;
-    }
-    setState(() => _note = null);
-    final before = ref.read(profilesProvider).length;
-    await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
-    if (!mounted) return;
-    if (ref.read(profilesProvider).length > before) {
-      // Added: the next step is connecting, which lives on Home.
-      vpsTab.value = vpsTabHome;
-    } else {
-      setState(
-        () => _note = tr(
-          context,
-          '导入失败：请确认链接完整且服务器在线后重试。',
-          'Not added. Check the link is complete and the server is running.',
-        ),
-      );
+    if (_pasting) return;
+    setState(() => _pasting = true);
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      if (!mounted) return;
+      // A plain URL, a share link, or a clash://install-config?url=… wrapper
+      // (what many panels hand out) all come down to one subscription link.
+      final link = profileUrlFromQrCodes([data?.text]);
+      if (link == null) {
+        setState(
+          () => _note = tr(
+            context,
+            '剪贴板中没有检测到订阅链接，请先在部署工具中复制。',
+            'No subscription link on the clipboard. Copy it from the deploy tool first.',
+          ),
+        );
+        return;
+      }
+      setState(() => _note = null);
+      final before = ref.read(profilesProvider).length;
+      await ref.read(profilesActionProvider.notifier).addProfileFromLink(link);
+      if (!mounted) return;
+      if (ref.read(profilesProvider).length > before) {
+        // Added: the next step is connecting, which lives on Home.
+        vpsTab.value = vpsTabHome;
+      } else {
+        setState(
+          () => _note = tr(
+            context,
+            '导入失败：请确认链接完整且服务器在线后重试。',
+            'Not added. Check the link is complete and the server is running.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pasting = false);
     }
   }
 
@@ -86,6 +98,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
     final profiles = ref.watch(profilesProvider);
+    final hasRemoteProfiles = profiles.any((p) => p.type == ProfileType.url);
     final currentId = ref.watch(currentProfileIdProvider);
     final themeMode = ref.watch(
       themeSettingProvider.select((s) => s.themeMode),
@@ -109,7 +122,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
       children: [
         VpsSectionTitle(
           tr(context, '订阅', 'Subscriptions'),
-          trailing: profiles.isEmpty
+          trailing: !hasRemoteProfiles
               ? null
               : VpsPressable(
                   onTap: _updating ? null : () => _updateProfiles(profiles),
@@ -175,7 +188,7 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                     label: tr(context, '从剪贴板导入', 'From clipboard'),
                     icon: VpsIcon.paste,
                     filled: true,
-                    onTap: _paste,
+                    onTap: _pasting ? null : _paste,
                   ),
                   VpsButton(
                     label: tr(context, '本地文件', 'Local file'),
@@ -310,9 +323,12 @@ class _VpsMePageState extends ConsumerState<VpsMePage> {
                 ),
                 trailing: VpsSwitch(
                   value: advanced,
-                  onChanged: (v) => ref
-                      .read(appSettingProvider.notifier)
-                      .update((s) => s.copyWith(advancedMode: v)),
+                  onChanged: (v) {
+                    vps2vpnAdvancedMode = v;
+                    ref
+                        .read(appSettingProvider.notifier)
+                        .update((s) => s.copyWith(advancedMode: v));
+                  },
                 ),
               ),
             ],
@@ -419,13 +435,22 @@ class _ShareTools extends ConsumerStatefulWidget {
 
 class _ShareToolsState extends ConsumerState<_ShareTools> {
   String? _copied;
+  Timer? _copiedTimer;
+
+  @override
+  void dispose() {
+    _copiedTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _copy(String key, String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
+    _copiedTimer?.cancel();
     setState(() => _copied = key);
-    await Future<void>.delayed(const Duration(seconds: 2));
-    if (mounted && _copied == key) setState(() => _copied = null);
+    _copiedTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted && _copied == key) setState(() => _copied = null);
+    });
   }
 
   @override

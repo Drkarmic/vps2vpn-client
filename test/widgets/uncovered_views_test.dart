@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:fl_clash/common/app_localizations.dart';
+import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/exception.dart';
 import 'package:fl_clash/common/l10n_labels.dart';
 import 'package:fl_clash/common/request.dart';
@@ -254,7 +255,10 @@ void main() {
     await tester.pump();
 
     expect(find.byType(AboutView), findsOneWidget);
-    expect(find.text('Telegram'), findsOneWidget);
+    expect(
+      find.text('Telegram'),
+      vps2vpnUpdatesDisabled ? findsNothing : findsOneWidget,
+    );
     final hero = find.byWidgetPredicate(
       (widget) => widget.runtimeType.toString() == '_AboutHero',
     );
@@ -278,10 +282,10 @@ void main() {
     tester,
   ) async {
     final container = _containerFor(tester);
-    final originalAdapter = request.dio.httpClientAdapter;
-    addTearDown(() => request.dio.httpClientAdapter = originalAdapter);
+    final originalAdapter = request.releaseDio.httpClientAdapter;
+    addTearDown(() => request.releaseDio.httpClientAdapter = originalAdapter);
     final adapter = _PendingAdapter();
-    request.dio.httpClientAdapter = adapter;
+    request.releaseDio.httpClientAdapter = adapter;
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -291,6 +295,10 @@ void main() {
     );
     await tester.pump();
     expect(tester.widget<LoadingBar>(find.byType(LoadingBar)).active, isFalse);
+    if (vps2vpnUpdatesDisabled) {
+      expect(find.text('Check for updates'), findsNothing);
+      return;
+    }
 
     await tester.tap(find.text('Check for updates'));
     await tester.pump();

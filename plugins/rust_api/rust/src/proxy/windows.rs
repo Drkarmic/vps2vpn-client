@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::mem::{size_of, zeroed};
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, Once};
@@ -8,7 +9,8 @@ use std::time::Duration;
 
 use windows_sys::core::PWSTR;
 use windows_sys::Win32::Foundation::{
-    GlobalFree, ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS, HWND, LPARAM, LRESULT, NO_ERROR, WPARAM,
+    GlobalFree, ERROR_INSUFFICIENT_BUFFER, ERROR_NOT_SUPPORTED, ERROR_NO_DATA, ERROR_SUCCESS, HWND,
+    LPARAM, LRESULT, NO_ERROR, WPARAM,
 };
 use windows_sys::Win32::NetworkManagement::IpHelper::{
     GetExtendedTcpTable, MIB_TCP6ROW_OWNER_PID, MIB_TCPROW_OWNER_PID, TCP_TABLE_OWNER_PID_LISTENER,
@@ -112,7 +114,11 @@ fn lock_settings() -> MutexGuard<'static, ()> {
 }
 
 fn wide(value: &str) -> Vec<u16> {
-    value.encode_utf16().chain(std::iter::once(0)).collect()
+    value
+        .encode_utf16()
+        .filter(|&unit| unit != 0)
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 fn flags_option(flags: u32) -> INTERNET_PER_CONN_OPTIONW {
@@ -205,30 +211,40 @@ fn notify_settings_changed() -> bool {
 /// its own proxy configuration.
 fn for_each_connection(mut visit: impl FnMut(PWSTR) -> bool) -> bool {
     let mut success = visit(null_mut());
+    let entry_size = size_of::<RASENTRYNAMEW>();
+    let mut entries: Vec<RASENTRYNAMEW> = Vec::new();
     let mut size = 0u32;
     let mut count = 0u32;
-    let ret = unsafe { RasEnumEntriesW(null(), null(), null_mut(), &mut size, &mut count) };
-    if ret == ERROR_BUFFER_TOO_SMALL && count > 0 {
-        let entry_size = size_of::<RASENTRYNAMEW>();
-        let len = (count as usize).max((size as usize).div_ceil(entry_size));
-        let mut entries = vec![
+    let mut ret = ERROR_BUFFER_TOO_SMALL;
+    for _ in 0..3 {
+        let ptr = if entries.is_empty() {
+            null_mut()
+        } else {
+            entries.as_mut_ptr()
+        };
+        ret = unsafe { RasEnumEntriesW(null(), null(), ptr, &mut size, &mut count) };
+        if ret != ERROR_BUFFER_TOO_SMALL || size == 0 {
+            break;
+        }
+        let len = (count as usize)
+            .max((size as usize).div_ceil(entry_size))
+            .max(1);
+        entries.clear();
+        entries.resize(
+            len,
             RASENTRYNAMEW {
                 dwSize: entry_size as u32,
                 ..Default::default()
-            };
-            len
-        ];
+            },
+        );
         size = (len * entry_size) as u32;
-        let ret =
-            unsafe { RasEnumEntriesW(null(), null(), entries.as_mut_ptr(), &mut size, &mut count) };
-        if ret == ERROR_SUCCESS {
-            for entry in entries.iter_mut().take(count as usize) {
-                success = visit(entry.szEntryName.as_mut_ptr()) && success;
-            }
-        } else {
-            success = false;
+    }
+    if ret == ERROR_SUCCESS {
+        let valid_count = (count as usize).min(entries.len());
+        for entry in entries.iter_mut().take(valid_count) {
+            success = visit(entry.szEntryName.as_mut_ptr()) && success;
         }
-    } else if ret != ERROR_SUCCESS {
+    } else {
         success = false;
     }
     success
@@ -255,6 +271,13 @@ fn clear_stale_for_connection(
         ) != 0
     };
     if !queried {
+        unsafe {
+            for option in &options[1..] {
+                if !option.Value.pszValue.is_null() {
+                    GlobalFree(option.Value.pszValue.cast());
+                }
+            }
+        }
         return false;
     }
     let flags = unsafe { options[0].Value.dwValue };
@@ -341,22 +364,59 @@ fn has_listener(family: u32, port: u16) -> Option<bool> {
             GetExtendedTcpTable(table, &mut size, 0, family, TCP_TABLE_OWNER_PID_LISTENER, 0)
         };
     }
+    if result == NO_ERROR && size == 0 {
+        return Some(false);
+    }
+    if family == u32::from(AF_INET6)
+        && (result == ERROR_NOT_SUPPORTED || result == ERROR_NO_DATA)
+    {
+        return Some(false);
+    }
     if result != NO_ERROR || buffer.is_empty() {
         return None;
     }
     let found = unsafe {
         if family == u32::from(AF_INET) {
-            rows::<MIB_TCPROW_OWNER_PID>(&buffer).any(|row| local_port(row.dwLocalPort) == port)
+            rows::<MIB_TCPROW_OWNER_PID>(&buffer)?.any(|row| {
+                local_port(row.dwLocalPort) == port && is_local_v4(row.dwLocalAddr)
+            })
         } else {
-            rows::<MIB_TCP6ROW_OWNER_PID>(&buffer).any(|row| local_port(row.dwLocalPort) == port)
+            rows::<MIB_TCP6ROW_OWNER_PID>(&buffer)?.any(|row| {
+                local_port(row.dwLocalPort) == port && is_local_v6(row.ucLocalAddr)
+            })
         }
     };
     Some(found)
 }
 
-unsafe fn rows<Row>(table: &[u32]) -> std::slice::Iter<'_, Row> {
-    let count = table[0] as usize;
-    std::slice::from_raw_parts(table.as_ptr().add(1).cast::<Row>(), count).iter()
+unsafe fn rows<Row>(table: &[u32]) -> Option<std::slice::Iter<'_, Row>> {
+    let &count = table.first()?;
+    let count = count as usize;
+    let byte_len = table.len() * size_of::<u32>();
+    let required = count
+        .checked_mul(size_of::<Row>())
+        .and_then(|bytes| size_of::<u32>().checked_add(bytes))?;
+    if required > byte_len {
+        return None;
+    }
+    if count == 0 {
+        return Some([].iter());
+    }
+    let ptr = table.as_ptr().add(1).cast::<Row>();
+    if !ptr.is_aligned() {
+        return None;
+    }
+    Some(std::slice::from_raw_parts(ptr, count).iter())
+}
+
+fn is_local_v4(address: u32) -> bool {
+    let addr = Ipv4Addr::from(address.to_ne_bytes());
+    addr == Ipv4Addr::LOCALHOST || addr == Ipv4Addr::UNSPECIFIED
+}
+
+fn is_local_v6(address: [u8; 16]) -> bool {
+    let addr = Ipv6Addr::from(address);
+    addr == Ipv6Addr::LOCALHOST || addr == Ipv6Addr::UNSPECIFIED
 }
 
 fn local_port(value: u32) -> u16 {

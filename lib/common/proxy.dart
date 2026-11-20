@@ -38,6 +38,7 @@ final systemProxyQueue = system.isDesktop && !safeModeBuild
 class SystemProxyQueue {
   final SystemProxy _proxy;
   Future<void> _tail = Future.value();
+  int _pending = 0;
   bool _closed = false;
   bool _applied = false;
   ProxyState? _desired;
@@ -47,18 +48,11 @@ class SystemProxyQueue {
   Future<void> apply(ProxyState state) {
     _desired = state;
     return _enqueue(() async {
-      if (_closed) {
+      if (_closed || !identical(state, _desired)) {
         return;
       }
       if (state.isStart && state.systemProxy) {
-        _applied = true;
-        if (!await _proxy.start(
-          state.port,
-          state.bassDomain,
-          state.pacScript,
-        )) {
-          _logFailure();
-        }
+        await _start(state);
       } else {
         await _stop();
       }
@@ -75,16 +69,26 @@ class SystemProxyQueue {
           !state.systemProxy) {
         return;
       }
-      _applied = true;
-      if (!await _proxy.start(state.port, state.bassDomain, state.pacScript)) {
-        _logFailure();
-      }
+      await _start(state);
     });
   }
 
   Future<void> close() {
     _closed = true;
     return _enqueue(_stop);
+  }
+
+  Future<void> _start(ProxyState state) async {
+    try {
+      if (await _proxy.start(state.port, state.bassDomain, state.pacScript)) {
+        _applied = true;
+      } else {
+        _logFailure();
+      }
+    } catch (_) {
+      _applied = true;
+      rethrow;
+    }
   }
 
   Future<void> _stop() async {
@@ -103,12 +107,19 @@ class SystemProxyQueue {
   }
 
   Future<void> _enqueue(Future<void> Function() task) {
-    return _tail = _tail.then((_) => task()).catchError((Object error) {
-      commonPrint.log(
-        'update system proxy failed: $error',
-        logLevel: LogLevel.warning,
-      );
-    });
+    final runNow = _pending == 0;
+    _pending++;
+    final next = runNow ? Future.sync(task) : _tail.then((_) => task());
+    return _tail = next
+        .catchError((Object error) {
+          commonPrint.log(
+            'update system proxy failed: $error',
+            logLevel: LogLevel.warning,
+          );
+        })
+        .whenComplete(() {
+          _pending--;
+        });
   }
 }
 

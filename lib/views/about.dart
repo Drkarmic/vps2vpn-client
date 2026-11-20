@@ -26,6 +26,7 @@ class AboutView extends ConsumerWidget {
   ];
 
   Future<void> _checkUpdate(BuildContext context, WidgetRef ref) async {
+    if (vps2vpnUpdatesDisabled) return;
     if (ref.read(loadingProvider(LoadingTag.checkUpdate))) return;
     final commonAction = ref.read(commonActionProvider.notifier);
     final result = await globalState.loadingRun(
@@ -71,9 +72,11 @@ class AboutView extends ConsumerWidget {
         children: [
           _AboutHero(
             isCheckingUpdate: isLoading,
-            onCheckUpdate: () {
-              _checkUpdate(context, ref);
-            },
+            onCheckUpdate: vps2vpnUpdatesDisabled
+                ? null
+                : () {
+                    _checkUpdate(context, ref);
+                  },
             onEnterDeveloperMode: () {
               ref
                   .read(appSettingProvider.notifier)
@@ -90,7 +93,9 @@ class AboutView extends ConsumerWidget {
             items: [
               _buildLinkItem(
                 glyph: AppGlyphs.code,
-                title: appLocalizations.project,
+                title: vps2vpnUpdatesDisabled
+                    ? 'FlClash (Upstream)'
+                    : appLocalizations.project,
                 url: 'https://github.com/$repository',
                 label: 'github.com/$repository',
               ),
@@ -100,12 +105,13 @@ class AboutView extends ConsumerWidget {
                 url: 'https://github.com/chen08209/Clash.Meta/tree/FlClash',
                 label: 'github.com/chen08209/Clash.Meta',
               ),
-              _buildLinkItem(
-                glyph: AppGlyphs.send,
-                title: 'Telegram',
-                url: 'https://t.me/FlClash',
-                label: 't.me/FlClash',
-              ),
+              if (!vps2vpnUpdatesDisabled)
+                _buildLinkItem(
+                  glyph: AppGlyphs.send,
+                  title: 'Telegram',
+                  url: 'https://t.me/FlClash',
+                  label: 't.me/FlClash',
+                ),
             ],
           ),
           generateSection(
@@ -141,7 +147,7 @@ class AboutView extends ConsumerWidget {
 
 class _AboutHero extends StatelessWidget {
   final bool isCheckingUpdate;
-  final VoidCallback onCheckUpdate;
+  final VoidCallback? onCheckUpdate;
   final VoidCallback onEnterDeveloperMode;
 
   const _AboutHero({
@@ -212,13 +218,15 @@ class _AboutHero extends StatelessWidget {
                   .copyWith(color: colorScheme.onSurfaceVariant, height: 1.5),
             ),
           ),
-          const SizedBox(height: 20),
-          TonalButton(
-            size: TonalButtonSize.bar,
-            glyph: AppGlyphs.sync,
-            label: appLocalizations.checkUpdate,
-            onPressed: isCheckingUpdate ? null : onCheckUpdate,
-          ),
+          if (onCheckUpdate != null) ...[
+            const SizedBox(height: 20),
+            TonalButton(
+              size: TonalButtonSize.bar,
+              glyph: AppGlyphs.sync,
+              label: appLocalizations.checkUpdate,
+              onPressed: isCheckingUpdate ? null : onCheckUpdate,
+            ),
+          ],
         ],
       ),
     );

@@ -186,7 +186,9 @@ class _SideStatus extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = VpsPalette.of(context);
-    final on = ref.watch(isStartProvider);
+    final isStart = ref.watch(isStartProvider);
+    final suspended = isStart && ref.watch(suspendProvider);
+    final on = isStart && !suspended;
     final hasProfile = ref.watch(profilesProvider.select((s) => s.isNotEmpty));
     final group = mainGroup(ref.watch(currentGroupsStateProvider).value);
     final line = group == null
@@ -197,9 +199,18 @@ class _SideStatus extends ConsumerWidget {
         : const Traffic();
     final title = !hasProfile
         ? tr(context, '未导入订阅', 'No subscription')
+        : suspended
+        ? tr(context, '已暂停', 'Paused')
         : on
         ? tr(context, '已连接', 'Connected')
         : tr(context, '未连接', 'Not connected');
+    final dotColor = !hasProfile
+        ? p.muted
+        : suspended
+        ? p.warn
+        : on
+        ? p.good
+        : p.muted;
     final small = vpsText(p, size: 11.5, color: p.soft, tabular: true);
     return VpsPressable(
       onTap: () => vpsTab.value = vpsTabHome,
@@ -224,7 +235,7 @@ class _SideStatus extends ConsumerWidget {
                   height: 8,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: on ? p.good : p.muted,
+                    color: dotColor,
                     boxShadow: on
                         ? [
                             BoxShadow(

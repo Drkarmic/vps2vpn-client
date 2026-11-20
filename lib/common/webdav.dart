@@ -37,7 +37,7 @@ class DAVTransport {
     required this.user,
     required this.password,
     Dio? dio,
-  }) : _base = Uri.parse(uri.trim()),
+  }) : _base = Uri.tryParse(uri.trim()),
        _dio = dio ?? Dio() {
     _dio.options
       ..connectTimeout = const Duration(seconds: 8)
@@ -49,21 +49,38 @@ class DAVTransport {
 
   final String user;
   final String password;
-  final Uri _base;
+  final Uri? _base;
   final Dio _dio;
 
   _DigestChallenge? _digest;
   int _digestNonceCount = 0;
 
   Uri resolve(String path, {bool collection = false}) {
-    final segments = [
-      ..._base.pathSegments.where((segment) => segment.isNotEmpty),
-      ...path.split('/').where((segment) => segment.isNotEmpty),
-    ];
+    final base = _base;
+    if (base == null ||
+        (base.scheme != 'http' && base.scheme != 'https') ||
+        base.host.isEmpty) {
+      throw const FormatException('Invalid WebDAV URI');
+    }
+    if (path.contains('\\')) {
+      throw ArgumentError.value(path, 'path', 'Backslash is not allowed');
+    }
+    final baseSegments = base.pathSegments
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    final pathSegments = path
+        .split('/')
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    if (baseSegments.any((segment) => segment == '..') ||
+        pathSegments.any((segment) => segment == '..' || segment == '.')) {
+      throw ArgumentError.value(path, 'path', 'Path traversal is not allowed');
+    }
+    final segments = [...baseSegments, ...pathSegments];
     return Uri(
-      scheme: _base.scheme,
-      host: _base.host,
-      port: _base.hasPort ? _base.port : null,
+      scheme: base.scheme,
+      host: base.host,
+      port: base.hasPort ? base.port : null,
       pathSegments: collection ? [...segments, ''] : segments,
     );
   }
@@ -126,9 +143,12 @@ class DAVTransport {
     if (match == null) {
       return false;
     }
-    final start = int.parse(match[1]!);
-    final end = int.parse(match[2]!);
-    final total = int.parse(match[3]!);
+    final start = int.tryParse(match[1]!);
+    final end = int.tryParse(match[2]!);
+    final total = int.tryParse(match[3]!);
+    if (start == null || end == null || total == null) {
+      return false;
+    }
     return start == 0 && end == total - 1 && total == length;
   }
 
@@ -163,8 +183,16 @@ class DAVTransport {
       }
       final location = _redirectTarget(response);
       if (location != null && redirects < _maxRedirects) {
-        uri = uri.resolveUri(location);
-        continue;
+        final next = uri.resolveUri(location);
+        if (_isAllowedRedirect(
+          method,
+          current: uri,
+          origin: origin,
+          next: next,
+        )) {
+          uri = next;
+          continue;
+        }
       }
       throw DAVException(
         method: method,
@@ -173,6 +201,25 @@ class DAVTransport {
         reasonPhrase: response.statusMessage,
       );
     }
+  }
+
+  static bool _isAllowedRedirect(
+    String method, {
+    required Uri current,
+    required Uri origin,
+    required Uri next,
+  }) {
+    if (next.scheme != 'http' && next.scheme != 'https') {
+      return false;
+    }
+    if ((origin.scheme == 'https' || current.scheme == 'https') &&
+        next.scheme != 'https') {
+      return false;
+    }
+    if ((method == 'PUT' || method == 'GET') && !_sameOrigin(next, origin)) {
+      return false;
+    }
+    return true;
   }
 
   Future<Response<dynamic>> _request(
@@ -277,6 +324,17 @@ class _DigestChallenge {
   final String? opaque;
   final String? algorithm;
 
+  static bool _hasLineBreak(String? value) =>
+      value != null && (value.contains('\r') || value.contains('\n'));
+
+  static String _quoteHeaderValue(String value) {
+    if (_hasLineBreak(value)) {
+      throw const FormatException('Invalid header value');
+    }
+    final escaped = value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+    return '"$escaped"';
+  }
+
   static _DigestChallenge? parse(String? header) {
     if (header == null) return null;
     final start = header.toLowerCase().indexOf('digest');
@@ -288,6 +346,11 @@ class _DigestChallenge {
     }
     final nonce = values['nonce'];
     if (nonce == null) return null;
+    final realm = values['realm'] ?? '';
+    final opaque = values['opaque'];
+    if (_hasLineBreak(realm) || _hasLineBreak(nonce) || _hasLineBreak(opaque)) {
+      return null;
+    }
     final algorithm = values['algorithm'];
     // Only MD5 is implemented; anything else would produce a wrong response
     // hash, and Basic at least has a chance of being accepted.
@@ -295,10 +358,10 @@ class _DigestChallenge {
       return null;
     }
     return _DigestChallenge(
-      realm: values['realm'] ?? '',
+      realm: realm,
       nonce: nonce,
       qop: _pickQop(values['qop']),
-      opaque: values['opaque'],
+      opaque: opaque,
       algorithm: algorithm,
     );
   }
@@ -325,13 +388,13 @@ class _DigestChallenge {
         ? '$ha1:$nonce:$ha2'.toMd5()
         : '$ha1:$nonce:$count:$cnonce:$qop:$ha2'.toMd5();
     final parts = [
-      'username="$user"',
-      'realm="$realm"',
-      'nonce="$nonce"',
-      'uri="$path"',
+      'username=${_quoteHeaderValue(user)}',
+      'realm=${_quoteHeaderValue(realm)}',
+      'nonce=${_quoteHeaderValue(nonce)}',
+      'uri=${_quoteHeaderValue(path)}',
       'response="$response"',
       if (algorithm != null) 'algorithm=$algorithm',
-      if (opaque != null) 'opaque="$opaque"',
+      if (opaque != null) 'opaque=${_quoteHeaderValue(opaque!)}',
       if (qop != null) 'qop=$qop',
       if (qop != null) 'nc=$count',
       if (qop != null) 'cnonce="$cnonce"',

@@ -81,7 +81,7 @@ class VpsLineWatch {
     DateTime Function()? now,
   }) : now = now ?? DateTime.now;
 
-  final Future<List<VpsWatchedLine>> Function() lines;
+  final Future<List<VpsWatchedLine>?> Function() lines;
   final Future<bool> Function(VpsWatchedLine) probe;
   final Future<bool> Function(VpsWatchedLine, bool) report;
   final Duration interval;
@@ -113,7 +113,7 @@ class VpsLineWatch {
   Future<void> _check() async {
     try {
       final current = await lines();
-      if (_closed) return;
+      if (_closed || current == null) return;
       _health.retain({for (final line in current) line.key});
       final endpoints = <String, List<VpsWatchedLine>>{};
       for (final line in current) {

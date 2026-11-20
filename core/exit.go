@@ -6,23 +6,30 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
 
 const exitCleanupTimeout = 3 * time.Second // sing-tun's Linux policy routes outlive the process; only a shutdown removes them
 
+var (
+	exitCleanupOnce sync.Once
+	exitCleanupDone = make(chan struct{})
+)
+
 func releaseOnExit() {
 	if !isInit.Load() {
 		return
 	}
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		handleShutdown()
-	}()
+	exitCleanupOnce.Do(func() {
+		go func() {
+			defer close(exitCleanupDone)
+			handleShutdown()
+		}()
+	})
 	select {
-	case <-done:
+	case <-exitCleanupDone:
 	case <-time.After(exitCleanupTimeout):
 		fmt.Fprintln(os.Stderr, "[ERROR] core cleanup did not finish before exit")
 	}

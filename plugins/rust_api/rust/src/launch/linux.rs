@@ -1,26 +1,49 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::io::Write;
+use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub fn autostart_enabled(id: &str, _executable: &str) -> bool {
-    home().is_some_and(|home| desktop_file(&home, id).exists())
+    home()
+        .and_then(|home| desktop_file(&home, id))
+        .is_some_and(|file| file.exists())
 }
 
 pub fn set_autostart(id: &str, display_name: &str, executable: &str, enabled: bool) -> bool {
     home().is_some_and(|home| write_autostart(&home, id, display_name, executable, enabled))
 }
 
+fn is_valid_id(id: &str) -> bool {
+    if id.is_empty() || id.contains(['/', '\\', '\0']) || id.contains("..") {
+        return false;
+    }
+    let mut components = Path::new(id).components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
+}
+
 /// `$HOME/.config/autostart`, not `$XDG_CONFIG_HOME`: the path the
 /// `launch_at_startup` builds wrote to, so their entry stays ours.
-fn desktop_file(home: &Path, id: &str) -> PathBuf {
-    home.join(".config/autostart").join(format!("{id}.desktop"))
+fn desktop_file(home: &Path, id: &str) -> Option<PathBuf> {
+    is_valid_id(id).then(|| home.join(".config/autostart").join(format!("{id}.desktop")))
 }
 
 fn desktop_string(value: &str) -> String {
-    value
+    let escaped = value
         .replace('\\', "\\\\")
         .replace('\n', "\\n")
         .replace('\r', "\\r")
-        .replace('\t', "\\t")
+        .replace('\t', "\\t");
+    let leading_spaces = escaped.bytes().take_while(|&b| b == b' ').count();
+    if leading_spaces > 0 {
+        let mut out = String::with_capacity(escaped.len() + leading_spaces);
+        for _ in 0..leading_spaces {
+            out.push_str("\\s");
+        }
+        out.push_str(&escaped[leading_spaces..]);
+        out
+    } else {
+        escaped
+    }
 }
 
 fn executable_value(executable: &str) -> Option<String> {
@@ -41,6 +64,9 @@ fn executable_value(executable: &str) -> Option<String> {
 }
 
 fn desktop_entry(display_name: &str, executable: &str) -> Option<String> {
+    if display_name.contains('\0') {
+        return None;
+    }
     let display_name = desktop_string(display_name);
     let executable = executable_value(executable)?;
     Some(format!(
@@ -54,6 +80,37 @@ fn desktop_entry(display_name: &str, executable: &str) -> Option<String> {
     ))
 }
 
+fn write_atomically(dir: &Path, target: &Path, contents: &[u8]) -> std::io::Result<()> {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let pid = std::process::id();
+    let (temp_path, mut temp_file) = loop {
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let candidate = dir.join(format!(".autostart.{pid}.{n}.tmp"));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => break (candidate, file),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    };
+    let write_result = temp_file
+        .write_all(contents)
+        .and_then(|()| temp_file.flush());
+    drop(temp_file);
+    if let Err(error) = write_result {
+        let _ = fs::remove_file(&temp_path);
+        return Err(error);
+    }
+    if let Err(error) = fs::rename(&temp_path, target) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(error);
+    }
+    Ok(())
+}
+
 fn write_autostart(
     home: &Path,
     id: &str,
@@ -61,14 +118,17 @@ fn write_autostart(
     executable: &str,
     enabled: bool,
 ) -> bool {
-    let file = desktop_file(home, id);
+    let Some(file) = desktop_file(home, id) else {
+        return false;
+    };
     if enabled {
         let Some(entry) = desktop_entry(display_name, executable) else {
             return false;
         };
-        file.parent()
-            .is_some_and(|dir| fs::create_dir_all(dir).is_ok())
-            && fs::write(&file, entry).is_ok()
+        let Some(dir) = file.parent() else {
+            return false;
+        };
+        fs::create_dir_all(dir).is_ok() && write_atomically(dir, &file, entry.as_bytes()).is_ok()
     } else {
         match fs::remove_file(&file) {
             Ok(()) => true,
@@ -108,7 +168,7 @@ mod tests {
              Comment=FlClash startup script\nExec=\"/opt/FlClash/FlClash\"\n\
              StartupNotify=false\nTerminal=false\n",
         );
-        assert!(desktop_file(&home, "FlClash").exists());
+        assert!(desktop_file(&home, "FlClash").unwrap().exists());
 
         assert!(write(false));
         assert!(!file.exists());
@@ -148,17 +208,23 @@ mod tests {
     }
 
     #[test]
-    fn escapes_line_breaks_without_inserting_desktop_keys() {
-        let entry = desktop_entry("App\nHidden=true", "/tmp/a\nb\tapp").unwrap();
-        assert!(entry.contains("\nName=App\\nHidden=true\n"));
+    fn escapes_line_breaks_and_leading_spaces_without_inserting_desktop_keys() {
+        let entry = desktop_entry(" App\nHidden=true", "/tmp/a\nb\tapp").unwrap();
+        assert!(entry.contains("\nName=\\sApp\\nHidden=true\n"));
         assert!(entry.contains("\nExec=\"/tmp/a\\nb\\tapp\"\n"));
         assert_eq!(entry.lines().count(), 7);
     }
 
     #[test]
-    fn refuses_an_invalid_executable_without_a_desktop_entry() {
+    fn refuses_an_invalid_executable_display_name_or_id() {
         for executable in ["", "/tmp/a=b", "/tmp/a\0b"] {
             assert!(desktop_entry("App", executable).is_none());
+        }
+        assert!(desktop_entry("Bad\0Name", "/opt/app").is_none());
+        let home = temp_home("invalid_id");
+        for id in ["", ".", "..", "../escape", "a/b", r"a\b", "a\0b", "a..b"] {
+            assert!(desktop_file(&home, id).is_none(), "expected invalid id {id:?}");
+            assert!(!write_autostart(&home, id, "App", "/opt/app", true));
         }
     }
 }

@@ -2,6 +2,7 @@
 // Settings page and the server's own AI check on the Check page. Both stay
 // hidden for subscriptions that are not vps2vpn links.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
@@ -11,6 +12,7 @@ import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/prism_ui.dart' show BannerLevel;
 import 'package:url_launcher/url_launcher.dart';
 
 String _ago(BuildContext context, DateTime at) {
@@ -135,13 +137,11 @@ class VpsAccountCard extends ConsumerWidget {
         color: p.warn,
         title: l10n.account,
         status: l10n.serviceUnavailable,
-        lines: [
-          switch (problem) {
-            VpsPanelProblem.unavailable => l10n.serviceUnavailable,
-            VpsPanelProblem.httpsRequired => l10n.networkTlsError,
-            VpsPanelProblem.unreachable => l10n.networkConnectionError,
-          },
-        ],
+        lines: switch (problem) {
+          VpsPanelProblem.unavailable => const [],
+          VpsPanelProblem.httpsRequired => [l10n.networkTlsError],
+          VpsPanelProblem.unreachable => [l10n.networkConnectionError],
+        },
         action: refresh,
       );
     }
@@ -163,23 +163,29 @@ class VpsAccountCard extends ConsumerWidget {
     final m = result.member;
     if (m == null) return const SizedBox.shrink();
     final quota = m.quotaGb > 0 ? (m.quotaGb * 1024 * 1024 * 1024).round() : 0;
-    final usage = quota > 0
+    final usage = m.unlimited
         ? tr(
-            context,
-            '已用 ${m.used.traffic.show} / ${quota.traffic.show}',
-            'Used ${m.used.traffic.show} of ${quota.traffic.show}',
-          )
-        : tr(
             context,
             '已用 ${m.used.traffic.show} · 不限量',
             'Used ${m.used.traffic.show} · unlimited',
+          )
+        : tr(
+            context,
+            '已用 ${m.used.traffic.show} / ${quota.traffic.show}',
+            'Used ${m.used.traffic.show} of ${quota.traffic.show}',
           );
     String? expiry;
     if (m.expireAt != null) {
       final diff = m.expireAt!.difference(DateTime.now());
       expiry = diff.isNegative
           ? tr(context, '已到期', 'Expired')
-          : tr(context, '还剩 ${diff.inDays} 天到期', 'Expires in ${diff.inDays} days');
+          : diff.inDays == 0
+          ? tr(context, '今天到期', 'Expires today')
+          : tr(
+              context,
+              '还剩 ${diff.inDays} 天到期',
+              'Expires in ${diff.inDays} days',
+            );
     }
     final off = !m.enabled;
     final reason = switch (m.disabledReason) {
@@ -198,7 +204,9 @@ class VpsAccountCard extends ConsumerWidget {
       title: m.name.isEmpty ? tr(context, '我的账户', 'My account') : m.name,
       status: off ? reason : tr(context, '正常', 'Active'),
       lines: [usage, ?expiry],
-      progress: quota > 0 ? (m.used / quota).clamp(0.0, 1.0) : null,
+      progress: m.unlimited
+          ? null
+          : (quota > 0 ? (m.used / quota).clamp(0.0, 1.0) : 1.0),
       action: VpsButton(
         label: state.isLoading ? l10n.loading : l10n.update,
         icon: VpsIcon.refresh,
@@ -338,14 +346,38 @@ class VpsUpdateCard extends ConsumerWidget {
             VpsButton(
               label: tr(context, '下载', 'Download'),
               filled: true,
-              onTap: () => launchUrl(
-                release.downloadFor(Platform.operatingSystem),
-                mode: LaunchMode.externalApplication,
+              onTap: () => unawaited(
+                _openDownload(
+                  context,
+                  release.downloadFor(Platform.operatingSystem),
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _openDownload(BuildContext context, Uri url) async {
+    try {
+      final opened = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened && context.mounted) {
+        dialogs.showBanner(
+          tr(context, '无法打开下载链接，请手动在浏览器中访问', 'Could not open the download link'),
+          level: BannerLevel.warning,
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        dialogs.showBanner(
+          tr(context, '无法打开下载链接，请手动在浏览器中访问', 'Could not open the download link'),
+          level: BannerLevel.warning,
+        );
+      }
+    }
   }
 }

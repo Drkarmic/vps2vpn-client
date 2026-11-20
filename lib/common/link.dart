@@ -47,6 +47,7 @@ const _linkChannel = MethodChannel('$packageName/link');
 Stream<Uri> androidLinks([MethodChannel channel = _linkChannel]) {
   late final StreamController<Uri> controller;
   void add(Object? link) {
+    if (controller.isClosed) return;
     final uri = link is String ? Uri.tryParse(link) : null;
     if (uri != null) {
       controller.add(uri);

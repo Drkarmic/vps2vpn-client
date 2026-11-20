@@ -35,10 +35,12 @@
 
     <application
         android:name=".FlClashApplication"
+        android:allowBackup="false"
         android:banner="@mipmap/ic_banner"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name">
+        android:label="@string/app_name"
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -70,6 +72,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
+                <data android:scheme="vps2vpn" />
                 <data android:scheme="clash" />
                 <data android:scheme="clashmeta" />
                 <data android:scheme="flclash" />
@@ -114,7 +117,7 @@
         <receiver
             android:name=".ServiceBroadcastReceiver"
             android:enabled="true"
-            android:exported="true"
+            android:exported="false"
             android:permission="${applicationId}.permission.RECEIVE_BROADCASTS">
             <intent-filter>
                 <action android:name="${applicationId}.intent.action.VPN_START_REQUESTED" />

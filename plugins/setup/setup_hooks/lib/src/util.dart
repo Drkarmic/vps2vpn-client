@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,6 +9,23 @@ import 'package:path/path.dart' as p;
 import 'error.dart';
 
 final _log = Logger('util');
+
+const _maxCapturedLines = 200;
+const _maxCapturedChars = 64 * 1024;
+
+void _appendTail(ListQueue<String> buffer, String line) {
+  final clipped = line.length > _maxCapturedChars
+      ? line.substring(line.length - _maxCapturedChars)
+      : line;
+  if (buffer.length >= _maxCapturedLines) {
+    buffer.removeFirst();
+  }
+  buffer.addLast(clipped);
+  var total = buffer.fold<int>(0, (sum, entry) => sum + entry.length);
+  while (buffer.length > 1 && total > _maxCapturedChars) {
+    total -= buffer.removeFirst().length;
+  }
+}
 
 /// Recovers the toolchains that Xcode's and Gradle's stripped PATH would hide.
 final String? _toolSearchPath = _resolveToolSearchPath();
@@ -89,25 +107,45 @@ Future<void> runCommandStream(
     includeParentEnvironment: true,
     runInShell: Platform.isWindows,
   );
-  process.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen(
-    (line) {
-      if (line.isNotEmpty) _log.info(line);
-    },
-  );
-  process.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen(
-    (line) {
-      if (line.isNotEmpty) _log.warning(line);
-    },
-  );
-  final exitCode = await process.exitCode;
-  if (exitCode != 0) {
-    throw CommandFailedException(
-      executable: executable,
-      arguments: arguments,
-      exitCode: exitCode,
-      stdout: '',
-      stderr: '',
-    );
+  final stdoutTail = ListQueue<String>();
+  final stderrTail = ListQueue<String>();
+  final stdoutSub = process.stdout
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .transform(const LineSplitter())
+      .listen((line) {
+        if (line.isNotEmpty) {
+          _log.info(line);
+          _appendTail(stdoutTail, line);
+        }
+      });
+  final stderrSub = process.stderr
+      .transform(const Utf8Decoder(allowMalformed: true))
+      .transform(const LineSplitter())
+      .listen((line) {
+        if (line.isNotEmpty) {
+          _log.warning(line);
+          _appendTail(stderrTail, line);
+        }
+      });
+  try {
+    final results = await Future.wait<Object?>([
+      stdoutSub.asFuture<void>(),
+      stderrSub.asFuture<void>(),
+      process.exitCode,
+    ]);
+    final exitCode = results[2] as int;
+    if (exitCode != 0) {
+      throw CommandFailedException(
+        executable: executable,
+        arguments: arguments,
+        exitCode: exitCode,
+        stdout: stdoutTail.join('\n'),
+        stderr: stderrTail.join('\n'),
+      );
+    }
+  } finally {
+    await stdoutSub.cancel();
+    await stderrSub.cancel();
   }
 }
 
@@ -151,8 +189,19 @@ void copyFile(String source, String destination) {
   final dest = File(destination);
   ensureDir(dest.parent.path);
   final partial = File('$destination.$pid.tmp');
-  src.copySync(partial.path);
-  _renameOver(partial, dest);
+  try {
+    src.copySync(partial.path);
+    _renameOver(partial, dest);
+  } catch (_) {
+    if (partial.existsSync()) {
+      try {
+        partial.deleteSync();
+      } on FileSystemException {
+        // Best-effort cleanup of the partial temp file.
+      }
+    }
+    rethrow;
+  }
   _log.fine('Copied $source -> $destination');
 }
 

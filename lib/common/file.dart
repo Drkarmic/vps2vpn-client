@@ -9,7 +9,6 @@ const _ageArmorHeader = '-----BEGIN AGE ENCRYPTED FILE-----';
 extension FileExt on File {
   Future<void> safeCopy(String newPath) async {
     if (!await exists()) {
-      await create(recursive: true);
       return;
     }
     final targetFile = File(newPath);

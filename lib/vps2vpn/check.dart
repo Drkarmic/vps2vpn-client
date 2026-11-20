@@ -99,9 +99,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
   void _recheck() {
     _ip.refresh([routedOutbound]);
     _services.refresh(_all);
-    if (!ref.read(vpsMemberProvider).isLoading) {
-      ref.invalidate(vpsMemberProvider);
-    }
+    ref.invalidate(vpsMemberProvider);
   }
 
   @override

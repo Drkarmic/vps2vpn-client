@@ -115,10 +115,15 @@ static void forward_links(MyApplication* self, gchar** arguments) {
 // Implements GApplication::command_line.
 static gint my_application_command_line(GApplication* application, GApplicationCommandLine* command_line) {
   MyApplication* self = MY_APPLICATION(application);
-  gchar** arguments = g_application_command_line_get_arguments(command_line, nullptr);
+  gint argc = 0;
+  gchar** arguments = g_application_command_line_get_arguments(command_line, &argc);
   if (self->dart_entrypoint_arguments == nullptr) {
-    self->dart_entrypoint_arguments = g_strdupv(arguments + 1);
-  } else {
+    if (argc > 1) {
+      self->dart_entrypoint_arguments = g_strdupv(arguments + 1);
+    } else {
+      self->dart_entrypoint_arguments = g_new0(gchar*, 1);
+    }
+  } else if (argc > 1) {
     forward_links(self, arguments + 1);
   }
   g_strfreev(arguments);
@@ -141,10 +146,12 @@ static void my_application_before_emit(GApplication* application, GVariant* plat
 static void my_application_after_emit(GApplication* application, GVariant* platform_data) {
   MyApplication* self = MY_APPLICATION(application);
   // rust_api's window module adds this action once Dart listens to the window.
-  if (self->had_window_before_emit &&
-      g_action_group_has_action(G_ACTION_GROUP(application), "activate-window")) {
-    g_action_group_activate_action(G_ACTION_GROUP(application), "activate-window",
-                                   nullptr);
+  if (self->had_window_before_emit) {
+    self->had_window_before_emit = FALSE;
+    if (g_action_group_has_action(G_ACTION_GROUP(application), "activate-window")) {
+      g_action_group_activate_action(G_ACTION_GROUP(application), "activate-window",
+                                     nullptr);
+    }
   }
   G_APPLICATION_CLASS(my_application_parent_class)->after_emit(application, platform_data);
 }

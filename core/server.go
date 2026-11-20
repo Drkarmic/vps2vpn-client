@@ -26,8 +26,9 @@ var (
 )
 
 const (
-	maxIPCFrameSize = 64 * 1024 * 1024
-	ipcWriteTimeout = 10 * time.Second
+	maxIPCFrameSize  = 64 * 1024 * 1024
+	ipcWriteTimeout  = 10 * time.Second
+	maxIPCWriteStall = 60 * time.Second
 )
 
 var deliveryFailureReported atomic.Bool
@@ -66,8 +67,9 @@ func writeFrame(w io.Writer, data []byte) (int, error) {
 }
 
 type resumingWriter struct {
-	conn    ipcConn
-	written int
+	conn       ipcConn
+	written    int
+	stallStart time.Time
 }
 
 func (writer *resumingWriter) Write(data []byte) (int, error) {
@@ -76,6 +78,9 @@ func (writer *resumingWriter) Write(data []byte) (int, error) {
 		n, err := writer.conn.Write(data[accepted:])
 		accepted += n
 		writer.written += n
+		if n > 0 {
+			writer.stallStart = time.Time{}
+		}
 		if err == nil {
 			return accepted, nil
 		}
@@ -88,9 +93,15 @@ func (writer *resumingWriter) Write(data []byte) (int, error) {
 // A half-written frame is only in sync while this process keeps writing it,
 // and a host the OS has suspended (Windows Modern Standby freezes the app but
 // not a service's child) drains again whenever it wakes, so a stall is waited
-// out for as long as it lasts. A dead host surfaces as a hard error instead.
+// out up to maxIPCWriteStall before failing and closing the connection. A dead
+// host surfaces as a hard error instead.
 func (writer *resumingWriter) resume(err error) bool {
 	if writer.written == 0 || !isWriteTimeout(err) {
+		return false
+	}
+	if writer.stallStart.IsZero() {
+		writer.stallStart = time.Now()
+	} else if time.Since(writer.stallStart) >= maxIPCWriteStall {
 		return false
 	}
 	return writer.conn.SetWriteDeadline(time.Now().Add(ipcWriteTimeout)) == nil
@@ -136,6 +147,14 @@ func readFrame(r io.Reader) ([]byte, error) {
 }
 
 func send(data []byte) {
+	sendFrame(data, false)
+}
+
+func sendReply(data []byte) {
+	sendFrame(data, true)
+}
+
+func sendFrame(data []byte, closeOnZeroWrite bool) {
 	writeMu.Lock()
 	defer writeMu.Unlock()
 
@@ -155,7 +174,7 @@ func send(data []byte) {
 		deliveryFailureReported.Store(false)
 		return
 	}
-	if written == 0 {
+	if written == 0 && !closeOnZeroWrite {
 		logDeliveryError("server write error, dropped one frame: %v", err)
 		return
 	}
@@ -208,6 +227,6 @@ func serve(dialed ipcConn) {
 			continue
 		}
 
-		dispatchMethodCall(call, send)
+		dispatchMethodCall(call, sendReply)
 	}
 }

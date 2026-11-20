@@ -74,7 +74,7 @@ void main() {
 
     expect(
       FlClashHttpOverrides.findProxyFor(container, remote),
-      'PROXY localhost:7891',
+      'PROXY 127.0.0.1:7891',
     );
   });
 
@@ -91,7 +91,7 @@ void main() {
 
     expect(
       FlClashHttpOverrides.findProxyFor(container, remote),
-      'PROXY user:pass@localhost:7890',
+      'PROXY user:pass@127.0.0.1:7890',
     );
 
     container.read(networkSettingProvider.notifier).value = const NetworkProps()
@@ -103,7 +103,7 @@ void main() {
         );
     expect(
       FlClashHttpOverrides.findProxyFor(container, remote),
-      'PROXY localhost:7890',
+      'PROXY 127.0.0.1:7890',
     );
   });
 
@@ -130,7 +130,7 @@ void main() {
 
     expect(
       FlClashHttpOverrides.findProxyFor(container, remote),
-      'PROXY localhost:7890',
+      'PROXY 127.0.0.1:7890',
     );
   });
 

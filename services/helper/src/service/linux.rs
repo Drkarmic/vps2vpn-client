@@ -133,9 +133,15 @@ fn invoking_gid(uid: u32) -> Result<String> {
 
 /// systemd splits `ExecStart=` on whitespace and expands `%` specifiers, so the
 /// path travels double-quoted with its quotes, backslashes and `%` escaped.
-fn quoted_unit_argument(path: &Path) -> String {
+fn quoted_unit_argument(path: &Path) -> Result<String> {
+    let text = path
+        .to_str()
+        .context("helper executable path is not valid UTF-8")?;
+    if text.chars().any(|character| matches!(character, '\n' | '\r' | '\0')) {
+        bail!("helper executable path contains forbidden control characters");
+    }
     let mut quoted = String::from("\"");
-    for character in path.to_string_lossy().chars() {
+    for character in text.chars() {
         match character {
             '"' | '\\' => {
                 quoted.push('\\');
@@ -146,11 +152,11 @@ fn quoted_unit_argument(path: &Path) -> String {
         }
     }
     quoted.push('"');
-    quoted
+    Ok(quoted)
 }
 
-fn unit_contents(executable: &Path, owner: Owner) -> String {
-    format!(
+fn unit_contents(executable: &Path, owner: Owner) -> Result<String> {
+    Ok(format!(
         "[Unit]\n\
          Description=FlClash Helper starts the FlClash Core with the privileges TUN mode needs.\n\
          After=nftables.service iptables.service\n\
@@ -170,10 +176,10 @@ fn unit_contents(executable: &Path, owner: Owner) -> String {
          \n\
          [Install]\n\
          WantedBy=multi-user.target\n",
-        executable = quoted_unit_argument(executable),
+        executable = quoted_unit_argument(executable)?,
         uid = owner.uid,
         gid = owner.gid,
-    )
+    ))
 }
 
 /// The unit runs this binary as root at every boot, so one the invoking user
@@ -231,11 +237,13 @@ fn ensure_unit_is_free_for(owner: Owner) -> Result<()> {
 fn install_service() -> Result<()> {
     let executable = std::env::current_exe().context("resolve helper executable path")?;
     ensure_root_owned(&executable)?;
+    let core = crate::service::hub::core_path().context("resolve core executable path")?;
+    ensure_root_owned(&core)?;
     let owner = invoking_owner()?;
     ensure_unit_is_free_for(owner)?;
 
-    fs::write(UNIT_PATH, unit_contents(&executable, owner))
-        .with_context(|| format!("write {UNIT_PATH}"))?;
+    let contents = unit_contents(&executable, owner)?;
+    fs::write(UNIT_PATH, contents).with_context(|| format!("write {UNIT_PATH}"))?;
     fs::set_permissions(UNIT_PATH, fs::Permissions::from_mode(0o644))
         .with_context(|| format!("secure {UNIT_PATH}"))?;
 
@@ -254,10 +262,20 @@ fn uninstall_service() -> Result<()> {
     run_systemctl(&["daemon-reload"])
 }
 
+fn systemctl_bin() -> &'static str {
+    if Path::new("/usr/bin/systemctl").exists() {
+        "/usr/bin/systemctl"
+    } else if Path::new("/bin/systemctl").exists() {
+        "/bin/systemctl"
+    } else {
+        "systemctl"
+    }
+}
+
 /// A package removal runs this twice, so the second `disable` reporting a unit
 /// that is already gone is expected rather than something to print.
 fn silence_systemctl(arguments: &[&str]) {
-    let _ = Command::new("systemctl")
+    let _ = Command::new(systemctl_bin())
         .args(arguments)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -265,7 +283,7 @@ fn silence_systemctl(arguments: &[&str]) {
 }
 
 fn run_systemctl(arguments: &[&str]) -> Result<()> {
-    let status = Command::new("systemctl")
+    let status = Command::new(systemctl_bin())
         .args(arguments)
         .status()
         .with_context(|| format!("run systemctl {}", arguments.join(" ")))?;
@@ -277,6 +295,10 @@ fn run_systemctl(arguments: &[&str]) -> Result<()> {
 
 fn run_service() -> Result<()> {
     ensure_core_sha256_configured()?;
+    let executable = std::env::current_exe().context("resolve helper executable path")?;
+    ensure_root_owned(&executable)?;
+    let core = crate::service::hub::core_path().context("resolve core executable path")?;
+    ensure_root_owned(&core)?;
     let owner = owner_from_env()?;
     let runtime = Runtime::new().context("create helper runtime")?;
     runtime.block_on(async move {
@@ -308,11 +330,19 @@ struct AuthorizedIncoming {
 
 impl AuthorizedIncoming {
     fn bind(owner: Owner) -> Result<Self> {
-        if Path::new(SOCKET_PATH).exists() {
-            fs::remove_file(SOCKET_PATH).with_context(|| format!("remove stale {SOCKET_PATH}"))?;
+        match fs::remove_file(SOCKET_PATH) {
+            Ok(()) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).with_context(|| format!("remove stale {SOCKET_PATH}"))
+            }
         }
-        let listener =
-            UnixListener::bind(SOCKET_PATH).with_context(|| format!("bind {SOCKET_PATH}"))?;
+        // Create the socket with restrictive permissions from the start so there
+        // is no world-accessible window before `set_permissions`.
+        let previous_umask = unsafe { libc::umask(0o117) };
+        let bind_result = UnixListener::bind(SOCKET_PATH);
+        unsafe { libc::umask(previous_umask) };
+        let listener = bind_result.with_context(|| format!("bind {SOCKET_PATH}"))?;
         fs::set_permissions(SOCKET_PATH, fs::Permissions::from_mode(SOCKET_MODE))
             .with_context(|| format!("secure {SOCKET_PATH}"))?;
         Ok(Self {
@@ -407,7 +437,8 @@ mod tests {
                 uid: 1000,
                 gid: 1001,
             },
-        );
+        )
+        .unwrap();
 
         assert!(unit.contains("ExecStart=\"/opt/FlClash/FlClashHelperService\"\n"));
         assert!(unit.contains("Group=1001\n"));
@@ -422,9 +453,16 @@ mod tests {
     #[test]
     fn unit_argument_survives_whitespace_and_specifiers() {
         assert_eq!(
-            quoted_unit_argument(Path::new("/home/u/My Apps/100%/a\"b\\c")),
+            quoted_unit_argument(Path::new("/home/u/My Apps/100%/a\"b\\c")).unwrap(),
             r#""/home/u/My Apps/100%%/a\"b\\c""#
         );
+    }
+
+    #[test]
+    fn unit_argument_rejects_control_characters() {
+        assert!(quoted_unit_argument(Path::new("/opt/app\nExecStart=/bin/sh")).is_err());
+        assert!(quoted_unit_argument(Path::new("/opt/app\rbad")).is_err());
+        assert!(quoted_unit_argument(Path::new("/opt/app\0bad")).is_err());
     }
 
     #[test]
@@ -435,7 +473,8 @@ mod tests {
                 uid: 1000,
                 gid: 1001,
             },
-        );
+        )
+        .unwrap();
 
         assert_eq!(installed_owner_uid(&unit), Some(1000));
         assert_eq!(installed_owner_uid("[Unit]\n"), None);

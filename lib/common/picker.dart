@@ -26,17 +26,23 @@ class Picker {
 
   Future<Uri?> saveFileWithPath(String fileName, String localPath) async {
     final localFile = File(localPath);
-    if (!await localFile.exists()) {
-      await localFile.create(recursive: true);
+    try {
+      if (!await localFile.exists()) {
+        await localFile.create(recursive: true);
+      }
+      final bytes = await localFile.readAsBytes();
+      final uri = await FilePicker.saveFile(
+        fileName: fileName,
+        initialDirectory: await appPath.downloadDirPath,
+        bytes: bytes,
+      );
+      if (!system.isAndroid && uri != null && uri.scheme == 'file') {
+        await localFile.safeCopy(uri.toFilePath());
+      }
+      return uri;
+    } finally {
+      await localFile.safeDelete();
     }
-    final bytes = await localFile.readAsBytes();
-    final uri = await FilePicker.saveFile(
-      fileName: fileName,
-      initialDirectory: await appPath.downloadDirPath,
-      bytes: bytes,
-    );
-    await localFile.safeDelete();
-    return uri;
   }
 
   Future<String?> pickerConfigQRCode() async {

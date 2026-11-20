@@ -93,7 +93,7 @@ void main() {
 
   group('latestRelease', () {
     Request requestAnswering(Map<String, ResponseBody Function()> byHost) {
-      return Request()..dio.httpClientAdapter = _HostAdapter(byHost);
+      return Request()..releaseDio.httpClientAdapter = _HostAdapter(byHost);
     }
 
     test('reads the release from the API', () async {

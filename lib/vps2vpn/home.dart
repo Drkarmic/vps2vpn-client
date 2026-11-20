@@ -266,6 +266,8 @@ class _HeroState extends ConsumerState<_Hero> {
     // Connected, the headline is where you are; otherwise what to do next.
     final title = !hasProfile
         ? tr(context, '导入订阅以开始', 'Import a subscription')
+        : suspended
+        ? tr(context, '已暂停', 'Paused')
         : on && info != null
         ? countryName(context, info.countryCode)
         : on
@@ -276,6 +278,12 @@ class _HeroState extends ConsumerState<_Hero> {
             context,
             '粘贴部署工具生成的订阅链接，即可使用你的私有线路',
             'Paste the link from the deploy tool to use your private line',
+          )
+        : suspended
+        ? tr(
+            context,
+            '连接已暂停，恢复后自动继续，也可点击"断开"停止',
+            'Connection paused; resumes automatically or tap Stop',
           )
         : on
         ? tr(
@@ -298,7 +306,9 @@ class _HeroState extends ConsumerState<_Hero> {
           size: wide ? 148 : 132,
           label: !hasProfile
               ? tr(context, '导入', 'Import')
-              : (on ? tr(context, '断开', 'Stop') : tr(context, '连接', 'Connect')),
+              : (isStart
+                    ? tr(context, '断开', 'Stop')
+                    : tr(context, '连接', 'Connect')),
           onTap: hasProfile
               ? () => ref.read(commonActionProvider.notifier).toggleRunning()
               : () => vpsTab.value = vpsTabMe,

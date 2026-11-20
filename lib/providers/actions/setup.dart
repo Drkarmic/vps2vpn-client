@@ -164,6 +164,7 @@ class SetupAction extends _$SetupAction {
 
   /// The lost session gets no stop; work begun for the old run stops counting.
   void onCoreLost() {
+    vpsCancelTakeover();
     if (_startTime == null) {
       return;
     }
@@ -207,8 +208,14 @@ class SetupAction extends _$SetupAction {
   Future<bool> _start(_RunRequest request) async {
     // vps2vpn: close other proxy apps, move off a taken port, clear a stale
     // system proxy. A resume after a core restart is our own run continuing.
+    final portBefore = ref.read(patchClashConfigProvider).mixedPort;
     if (!request.resume) {
       await globalState.safeRun(() => vpsBeforeConnect(ref), silence: true);
+      if (!_isCurrent(request)) {
+        return false;
+      }
+    } else {
+      vpsEnsureGuard(ref);
     }
     if (request.initialize) {
       var applied = false;
@@ -229,6 +236,13 @@ class SetupAction extends _$SetupAction {
         await globalState.safeRun(() => setRunning(false));
       }
       return applied;
+    }
+
+    if (ref.read(patchClashConfigProvider).mixedPort != portBefore) {
+      await updateConfig();
+      if (!_isCurrent(request)) {
+        return false;
+      }
     }
 
     try {
@@ -255,6 +269,7 @@ class SetupAction extends _$SetupAction {
   }
 
   Future<bool> _stop(_RunRequest request) async {
+    vpsCancelTakeover();
     (Object, StackTrace)? unanswered;
     try {
       await _setCoreRunning(request);
@@ -735,7 +750,13 @@ class SetupAction extends _$SetupAction {
     );
     authorizationNotifier.value = TunAuthorizationState.unauthorized;
 
-    final code = await authorizeCore();
+    final AuthorizeCode code;
+    try {
+      code = await authorizeCore();
+    } catch (_) {
+      authorizationNotifier.value = TunAuthorizationState.none;
+      rethrow;
+    }
 
     switch (code) {
       case AuthorizeCode.success:

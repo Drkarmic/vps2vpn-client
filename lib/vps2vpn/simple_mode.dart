@@ -70,9 +70,13 @@ class AdvancedModeItem extends ConsumerWidget {
       subtitle: Text(context.appLocalizations.vAdvancedModeDesc),
       value: advancedMode,
       onChanged: (value) {
+        vps2vpnAdvancedMode = value;
         ref
             .read(appSettingProvider.notifier)
             .update((state) => state.copyWith(advancedMode: value));
+        if (!value && ref.read(patchClashConfigProvider).mode == Mode.direct) {
+          ref.read(setupActionProvider.notifier).changeMode(Mode.rule);
+        }
       },
     );
   }

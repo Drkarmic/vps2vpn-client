@@ -722,14 +722,14 @@ void main() {
     });
 
     test(
-      'an entry that climbs out of the staging directory is dropped',
+      'an entry that climbs out of the staging directory is rejected',
       () async {
         final archivePath = await zipOf({
           configJsonName: utf8.encode(json.encode({'version': 1})),
           '../escaped.txt': utf8.encode('outside'),
         });
 
-        await restore(archivePath);
+        await expectLater(restore(archivePath), failsWith(BackupFailure.invalid));
 
         expect(
           File(join(staging.parent.path, 'escaped.txt')).existsSync(),

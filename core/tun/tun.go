@@ -4,7 +4,6 @@ package tun
 
 import (
 	"encoding/json"
-	"net"
 	"net/netip"
 	"strings"
 	"syscall"
@@ -60,18 +59,43 @@ func Start(fd int, stack, address, dns, rawOptions string) *sing_tun.Listener {
 	}
 
 	var dnsHijack []string
+	seenHijack := map[string]struct{}{}
+	addHijack := func(addr string) {
+		for _, entry := range []string{addr, "tcp://" + addr} {
+			if _, ok := seenHijack[entry]; !ok {
+				seenHijack[entry] = struct{}{}
+				dnsHijack = append(dnsHijack, entry)
+			}
+		}
+	}
 	for _, d := range strings.Split(dns, ",") {
 		d = strings.TrimSpace(d)
 		if len(d) == 0 {
 			continue
 		}
-		hijack := net.JoinHostPort(d, "53")
-		if _, err := netip.ParseAddrPort(hijack); err != nil {
-			log.Errorln("TUN: %v", err)
-			_ = syscall.Close(fd)
-			return nil
+		if strings.EqualFold(d, "any") || strings.EqualFold(d, "any:53") {
+			addHijack("0.0.0.0:53")
+			addHijack("[::]:53")
+			continue
 		}
-		dnsHijack = append(dnsHijack, hijack)
+		ap, err := netip.ParseAddrPort(d)
+		if err != nil {
+			host := d
+			if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+				host = host[1 : len(host)-1]
+			}
+			addr, parseErr := netip.ParseAddr(host)
+			if parseErr != nil {
+				log.Errorln("TUN: %v", parseErr)
+				_ = syscall.Close(fd)
+				return nil
+			}
+			ap = netip.AddrPortFrom(addr, 53)
+		}
+		addHijack(ap.String())
+		if ap.Addr() == netip.IPv4Unspecified() && len(prefix6) > 0 {
+			addHijack(netip.AddrPortFrom(netip.IPv6Unspecified(), ap.Port()).String())
+		}
 	}
 
 	dupFd, err := syscall.Dup(fd)

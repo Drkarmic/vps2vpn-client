@@ -19,7 +19,6 @@ enum RulePreset {
     'IP-CIDR,0.0.0.0/32,REJECT,no-resolve',
     'IP-CIDR6,::1/128,REJECT,no-resolve',
     'IP-CIDR6,::/128,REJECT,no-resolve',
-    'AND,((IN-TYPE,TUN),(DST-PORT,853)),REJECT',
   ]),
   lanDirect(AppGlyphs.wifi, [
     'GEOSITE,private,DIRECT',

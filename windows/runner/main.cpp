@@ -8,6 +8,26 @@
 #include "rust_api.h"
 #include "utils.h"
 
+namespace {
+
+class ScopedComInitializer {
+ public:
+  explicit ScopedComInitializer(HRESULT hr) : initialized_(SUCCEEDED(hr)) {}
+  ~ScopedComInitializer() {
+    if (initialized_) {
+      ::CoUninitialize();
+    }
+  }
+
+  ScopedComInitializer(const ScopedComInitializer&) = delete;
+  ScopedComInitializer& operator=(const ScopedComInitializer&) = delete;
+
+ private:
+  bool initialized_;
+};
+
+}  // namespace
+
 // The installer and the uninstaller run this after killing the app, whose exit
 // path is what normally turns the system proxy off.
 constexpr char kClearStaleProxyArgument[] = "--clear-stale-proxy";
@@ -18,9 +38,12 @@ bool ClearStaleProxy() {
   if (clear_stale_proxy == nullptr) return false;
   const int count = clear_stale_proxy();
   const std::string output = std::to_string(count) + "\n";
-  DWORD written = 0;
-  ::WriteFile(::GetStdHandle(STD_OUTPUT_HANDLE), output.data(),
-              static_cast<DWORD>(output.size()), &written, nullptr);
+  HANDLE out = ::GetStdHandle(STD_OUTPUT_HANDLE);
+  if (out != nullptr && out != INVALID_HANDLE_VALUE) {
+    DWORD written = 0;
+    ::WriteFile(out, output.data(), static_cast<DWORD>(output.size()),
+                &written, nullptr);
+  }
   return count >= 0;
 }
 
@@ -67,7 +90,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
-  ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  const HRESULT com = ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  ScopedComInitializer com_guard(com);
 
   flutter::DartProject project(L"data");
 
@@ -82,11 +106,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   window.SetQuitOnClose(true);
 
   ::MSG msg;
-  while (::GetMessage(&msg, nullptr, 0, 0)) {
+  BOOL get_message_result = 0;
+  while ((get_message_result = ::GetMessage(&msg, nullptr, 0, 0)) > 0) {
     ::TranslateMessage(&msg);
     ::DispatchMessage(&msg);
   }
 
-  ::CoUninitialize();
-  return EXIT_SUCCESS;
+  return get_message_result == -1 ? EXIT_FAILURE : EXIT_SUCCESS;
 }

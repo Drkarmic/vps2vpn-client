@@ -188,12 +188,18 @@ extension ProfileExtension on Profile {
     final response = await request.getFileResponseForUrl(url);
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
+    final updateInterval = int.tryParse(
+      response.headers.value('profile-update-interval')?.trim() ?? '',
+    );
     return copyWith(
       label: label.takeFirstValid([
         getFileNameForDisposition(disposition),
         defaultLabel,
       ]),
       subscriptionInfo: SubscriptionInfo.formHString(userinfo),
+      autoUpdateDuration: updateInterval != null
+          ? Duration(hours: updateInterval.clamp(1, 168))
+          : autoUpdateDuration,
     ).saveFile(
       decompressUnlabeled(response.data ?? Uint8List(0)),
       validate: validate,
@@ -204,18 +210,33 @@ extension ProfileExtension on Profile {
     Uint8List bytes, {
     required ValidateConfig validate,
   }) async {
-    final path = await appPath.tempFilePath;
-    final tempFile = File(path);
+    final mFile = await _getFile(false);
+    final tempFile = File('${mFile.path}.$pid.$uniqueId.tmp');
     try {
-      await tempFile.safeWriteAsBytes(bytes);
-      if (await validate(path, ageSecretKey) case final issue?) {
+      await tempFile.parent.create(recursive: true);
+      await tempFile.writeAsBytes(bytes, flush: true);
+      if (await validate(tempFile.path, ageSecretKey) case final issue?) {
         throw MessageException(issue);
       }
-      final mFile = await file;
-      await tempFile.copy(mFile.path);
+      await _renameProfileFileRetrying(tempFile, mFile.path);
       return copyWith(lastUpdateDate: DateTime.now());
     } finally {
       await tempFile.safeDelete().then((_) {}, onError: (Object _) {});
+    }
+  }
+}
+
+const _profileReplaceAttempts = 10;
+const _profileReplaceRetryDelay = Duration(milliseconds: 50);
+
+Future<void> _renameProfileFileRetrying(File source, String target) async {
+  for (var attempt = 1; ; attempt++) {
+    try {
+      await source.rename(target);
+      return;
+    } on FileSystemException {
+      if (attempt == _profileReplaceAttempts) rethrow;
+      await Future<void>.delayed(_profileReplaceRetryDelay);
     }
   }
 }

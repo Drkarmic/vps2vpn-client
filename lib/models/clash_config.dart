@@ -55,7 +55,7 @@ const congestionControllers = [
   'bbr',
   'bbr3',
 ];
-const defaultDnsHijack = ['any:53'];
+const defaultDnsHijack = ['any:53', 'tcp://any:53'];
 const defaultTunUdpTimeout = 300;
 
 const privateRouteAddress = [

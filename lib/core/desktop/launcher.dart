@@ -94,13 +94,35 @@ final class DirectCoreLease implements CoreProcessLease {
     return nextOperation;
   }
 
+  static const _gracefulTimeout = Duration(milliseconds: 3500);
+  static const _forceKillTimeout = Duration(milliseconds: 1500);
+
   Future<CoreProcessStopResult> _stop(Duration timeout) async {
-    final stopped = _process.kill();
+    var stopped = _process.kill(ProcessSignal.sigterm);
+    final graceful = timeout <= Duration.zero
+        ? Duration.zero
+        : timeout >= _gracefulTimeout + _forceKillTimeout
+        ? _gracefulTimeout
+        : Duration(microseconds: timeout.inMicroseconds * 7 ~/ 10);
     try {
-      await _process.exitCode.timeout(timeout);
+      await _process.exitCode.timeout(graceful);
       return CoreProcessStopResult(stopped: stopped, exitConfirmed: true);
     } on TimeoutException {
-      return CoreProcessStopResult(stopped: stopped, exitConfirmed: false);
+      final remaining = timeout - graceful;
+      if (remaining <= Duration.zero) {
+        return CoreProcessStopResult(stopped: stopped, exitConfirmed: false);
+      }
+      final killed = _process.kill(ProcessSignal.sigkill);
+      stopped = stopped || killed;
+      final forceTimeout = remaining < _forceKillTimeout
+          ? remaining
+          : _forceKillTimeout;
+      try {
+        await _process.exitCode.timeout(forceTimeout);
+        return CoreProcessStopResult(stopped: stopped, exitConfirmed: true);
+      } on TimeoutException {
+        return CoreProcessStopResult(stopped: stopped, exitConfirmed: false);
+      }
     }
   }
 }

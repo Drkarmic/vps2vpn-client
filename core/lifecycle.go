@@ -32,6 +32,7 @@ func handleInit(params *InitParams) error {
 	constant.SetHomeDir(params.HomeDir)
 	initOwnership(params.HomeDir)
 	clearSpilledResponses()
+	clearProxyDefinitionCache()
 	isInit.Store(true)
 	return nil
 }
@@ -100,6 +101,7 @@ func handleShutdown() {
 	updater.StopGeoUpdater()
 	executor.Shutdown()
 	currentConfig = nil
+	clearProxyDefinitionCache()
 	isInit.Store(false)
 	configMu.Unlock()
 

@@ -99,13 +99,18 @@ func isMatchRule(rule string) bool {
 }
 
 func loadConfigWithBase(base *SetupBase, configPath string) (*config.Config, error) {
+	cfg, _, err := loadConfigWithBaseRaw(base, configPath)
+	return cfg, err
+}
+
+func loadConfigWithBaseRaw(base *SetupBase, configPath string) (*config.Config, *config.RawConfig, error) {
 	document, err := mergeProfileBase(base)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	raw := config.DefaultRawConfig()
 	if err := document.Decode(raw); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// The overlay's rules (the user's own, first) stay ahead of the AI rules.
 	var overlay struct {
@@ -113,16 +118,23 @@ func loadConfigWithBase(base *SetupBase, configPath string) (*config.Config, err
 	}
 	_ = yaml.Unmarshal([]byte(base.Overlay), &overlay)
 	if err := enhanceProfileDocument(document, raw, len(overlay.Rules)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := writeConfigDocument(configPath, document); err != nil {
-		return nil, err
+	tmpPath, err := writeDocumentFile(filepath.Dir(configPath), ".config-*.yaml", document)
+	if err != nil {
+		return nil, nil, err
 	}
 	cfg, err := config.ParseRawConfig(raw)
 	if err != nil {
-		return nil, err
+		_ = os.Remove(tmpPath)
+		return nil, nil, err
 	}
-	return withPlatformLimits(cfg), nil
+	if err := renameReplacing(tmpPath, configPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return nil, nil, err
+	}
+	scheduleReclaimOwnership()
+	return withPlatformLimits(cfg), raw, nil
 }
 
 func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
@@ -133,7 +145,7 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 	if buf, err = age.DecryptBytes(buf); err != nil {
 		return nil, fmt.Errorf("decrypt config error: %w", err)
 	}
-	retag := bytes.Contains(buf, []byte("short-id"))
+	retag := bytes.Contains(buf, []byte("short-id")) || strings.Contains(base.Overlay, "short-id")
 	var profileDocument, overlayDocument yaml.Node
 	if err := yaml.Unmarshal(buf, &profileDocument); err != nil {
 		return nil, err
@@ -172,41 +184,64 @@ func mergeProfileBase(base *SetupBase) (*yaml.Node, error) {
 	return &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}, nil
 }
 
+func cloneYamlNode(node *yaml.Node) *yaml.Node {
+	cloned := *node
+	cloned.Anchor = ""
+	if len(node.Content) > 0 {
+		cloned.Content = append([]*yaml.Node(nil), node.Content...)
+	}
+	return &cloned
+}
+
 func enhanceProfileDocument(document *yaml.Node, raw *config.RawConfig, userRules int) error {
 	if !vpsSmartEnabled.Load() {
 		return nil
 	}
 	groupCount, ruleCount := len(raw.ProxyGroup), len(raw.Rule)
-	vps2vpnEnhance(raw, userRules)
+	res := vps2vpnEnhanceResult(raw, userRules)
+	if len(res.fingerprinted) == 0 && res.addedGroups == 0 && res.addedRules == 0 {
+		return nil
+	}
 	root, err := documentMapping(document)
 	if err != nil {
 		return err
 	}
-	if proxies := resolveAlias(mappingValue(root, "proxies")); proxies != nil && proxies.Kind == yaml.SequenceNode {
-		for i, proxy := range raw.Proxy {
-			if vpsLineRank(proxy) != 1 || proxy["client-fingerprint"] != "chrome" {
-				continue
+	if len(res.fingerprinted) > 0 {
+		if proxies := resolveAlias(mappingValue(root, "proxies")); proxies != nil && proxies.Kind == yaml.SequenceNode {
+			proxies = cloneYamlNode(proxies)
+			setMappingValue(root, "proxies", proxies)
+			for _, i := range res.fingerprinted {
+				if i < 0 || i >= len(proxies.Content) {
+					continue
+				}
+				node := resolveAlias(proxies.Content[i])
+				if node == nil || node.Kind != yaml.MappingNode {
+					continue
+				}
+				cloned := cloneYamlNode(node)
+				setMappingValue(cloned, "client-fingerprint", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "chrome"})
+				proxies.Content[i] = cloned
 			}
-			node := resolveAlias(proxies.Content[i])
-			setMappingValue(node, "client-fingerprint", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "chrome"})
 		}
 	}
-	if len(raw.ProxyGroup) > groupCount {
+	if res.addedGroups > 0 {
 		groups := resolveAlias(mappingValue(root, "proxy-groups"))
-		if groups == nil || isNull(groups) {
+		if groups == nil || isNull(groups) || groups.Kind != yaml.SequenceNode {
 			groups = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-			setMappingValue(root, "proxy-groups", groups)
+		} else {
+			groups = cloneYamlNode(groups)
 		}
-		for i, group := range raw.ProxyGroup[:groupCount] {
-			if !strings.EqualFold(fmt.Sprint(group["type"]), "select") {
-				continue
+		setMappingValue(root, "proxy-groups", groups)
+		if res.selectIndex >= 0 && res.selectIndex < len(groups.Content) && res.selectIndex < groupCount {
+			if groupNode := resolveAlias(groups.Content[res.selectIndex]); groupNode != nil && groupNode.Kind == yaml.MappingNode {
+				var members yaml.Node
+				if err := members.Encode(raw.ProxyGroup[res.selectIndex]["proxies"]); err != nil {
+					return err
+				}
+				cloned := cloneYamlNode(groupNode)
+				setMappingValue(cloned, "proxies", &members)
+				groups.Content[res.selectIndex] = cloned
 			}
-			var members yaml.Node
-			if err := members.Encode(group["proxies"]); err != nil {
-				return err
-			}
-			setMappingValue(resolveAlias(groups.Content[i]), "proxies", &members)
-			break
 		}
 		for _, group := range raw.ProxyGroup[groupCount:] {
 			var node yaml.Node
@@ -216,16 +251,19 @@ func enhanceProfileDocument(document *yaml.Node, raw *config.RawConfig, userRule
 			groups.Content = append(groups.Content, &node)
 		}
 	}
-	if added := len(raw.Rule) - ruleCount; added > 0 {
+	if res.addedRules > 0 {
 		rules := resolveAlias(mappingValue(root, "rules"))
-		if rules == nil || isNull(rules) {
+		if rules == nil || isNull(rules) || rules.Kind != yaml.SequenceNode {
 			rules = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-			setMappingValue(root, "rules", rules)
+		} else {
+			rules = cloneYamlNode(rules)
 		}
-		at := min(userRules, ruleCount)
-		content := make([]*yaml.Node, 0, len(raw.Rule))
+		setMappingValue(root, "rules", rules)
+		at := max(0, min(userRules, len(rules.Content)))
+		rawAt := max(0, min(userRules, ruleCount))
+		content := make([]*yaml.Node, 0, len(rules.Content)+res.addedRules)
 		content = append(content, rules.Content[:at]...)
-		for _, rule := range raw.Rule[at : at+added] {
+		for _, rule := range raw.Rule[rawAt : rawAt+res.addedRules] {
 			content = append(content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: rule})
 		}
 		rules.Content = append(content, rules.Content[at:]...)
@@ -233,34 +271,54 @@ func enhanceProfileDocument(document *yaml.Node, raw *config.RawConfig, userRule
 	return nil
 }
 
+const maxExpandedYamlNodes = 2_000_000
+
 func validateYamlAliases(root *yaml.Node) error {
+	const (
+		visiting uint8 = 1
+		visited  uint8 = 2
+	)
 	states := map[*yaml.Node]uint8{}
-	var visit func(*yaml.Node) error
-	visit = func(node *yaml.Node) error {
+	sizes := map[*yaml.Node]int{}
+	var visit func(*yaml.Node) (int, error)
+	visit = func(node *yaml.Node) (int, error) {
 		if node == nil {
-			return nil
+			return 0, nil
 		}
 		if node.Kind == yaml.AliasNode {
+			if node.Alias == nil {
+				return 1, nil
+			}
 			return visit(node.Alias)
 		}
 		if node.Anchor != "" {
 			switch states[node] {
-			case 1:
-				return fmt.Errorf("line %d: cyclic YAML alias %q", node.Line, node.Anchor)
-			case 2:
-				return nil
+			case visiting:
+				return 0, fmt.Errorf("line %d: cyclic YAML alias %q", node.Line, node.Anchor)
+			case visited:
+				return sizes[node], nil
 			}
-			states[node] = 1
-			defer func() { states[node] = 2 }()
+			states[node] = visiting
 		}
+		total := 1
 		for _, child := range node.Content {
-			if err := visit(child); err != nil {
-				return err
+			n, err := visit(child)
+			if err != nil {
+				return 0, err
 			}
+			if n > maxExpandedYamlNodes-total {
+				return 0, fmt.Errorf("line %d: YAML alias expansion exceeds %d nodes", node.Line, maxExpandedYamlNodes)
+			}
+			total += n
 		}
-		return nil
+		if node.Anchor != "" {
+			states[node] = visited
+			sizes[node] = total
+		}
+		return total, nil
 	}
-	return visit(root)
+	_, err := visit(root)
+	return err
 }
 
 func documentMapping(document *yaml.Node) (*yaml.Node, error) {
@@ -360,7 +418,7 @@ func writeConfigDocument(path string, document *yaml.Node) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Rename(temporary, path); err != nil {
+	if err := renameReplacing(temporary, path); err != nil {
 		_ = os.Remove(temporary)
 		return err
 	}
@@ -378,8 +436,8 @@ func writeDocumentFile(dir, pattern string, document *yaml.Node) (string, error)
 	err = errors.Join(
 		encodeConfigMapping(writer, document.Content[0]),
 		writer.Flush(),
+		file.Chmod(0o644),
 		file.Close(),
-		os.Chmod(file.Name(), 0o644),
 	)
 	if err != nil {
 		_ = os.Remove(file.Name())
@@ -405,7 +463,10 @@ func encodeConfigMapping(w io.Writer, mapping *yaml.Node) error {
 			}
 			continue
 		}
-		if err := encodeYamlPiece(w, key, []byte(":\n")); err != nil {
+		plainKey := *key
+		plainKey.LineComment = ""
+		plainKey.FootComment = ""
+		if err := encodeYamlPiece(w, &plainKey, []byte(":\n")); err != nil {
 			return err
 		}
 		for start := 0; start < len(value.Content); start += encodeSliceLength {
