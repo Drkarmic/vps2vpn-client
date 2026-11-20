@@ -38,15 +38,17 @@ class FlClashHttpOverrides extends HttpOverrides {
   /// Local helper and diagnostics traffic must never be sent back into the
   /// proxy. 127.0.0.0/8 is *all* loopback, not just 127.0.0.1.
   static bool _isLoopbackHost(String host) {
-    final lower = host.toLowerCase();
-    final name = lower.endsWith('.')
-        ? lower.substring(0, lower.length - 1)
-        : lower;
+    var name = host.toLowerCase();
+    // A terminal dot is legal FQDN spelling for a loopback hostname or
+    // numeric IPv4 address, and must not cause the request to proxy itself.
+    while (name.endsWith('.')) {
+      name = name.substring(0, name.length - 1);
+    }
     if (name == 'localhost' || name.endsWith('.localhost')) {
       return true;
     }
     // Numeric parsing is synchronous and never performs DNS resolution.
-    return InternetAddress.tryParse(lower)?.isLoopback ?? false;
+    return InternetAddress.tryParse(name)?.isLoopback ?? false;
   }
 
   static String findProxyForReader(ProviderReader read, Uri url) {

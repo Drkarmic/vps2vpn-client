@@ -74,7 +74,11 @@ void main() {
     for (final host in [
       '127.0.0.2',
       '127.255.255.254',
+      '127.0.0.1.',
+      '127.0.0.2.',
       'localhost.',
+      'LOCALHOST..',
+      'api.localhost..',
       'api.localhost',
       'api.localhost.',
       '[::1]',
