@@ -1,27 +1,22 @@
-// vps2vpn: the simple-mode home page ("status center").
-//
-// A coral hero card with one big connect button and plain words, then speed,
-// routing, connect switches, subscription and connectivity. Reuses FlClash's
-// dashboard cards below the hero so they keep their behaviour.
+// vps2vpn home: one big connect button, where you exit, live speed,
+// plan usage, how you go online, and whether the AI sites open.
 
 import 'dart:math' as math;
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/common/service_probe.dart';
 import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/outbound_ip.dart';
 import 'package:fl_clash/providers/providers.dart';
-import 'package:fl_clash/views/dashboard/layout.dart';
-import 'package:fl_clash/views/dashboard/widgets/widgets.dart';
-import 'package:fl_clash/widgets/widgets.dart';
+import 'package:fl_clash/providers/routed_probe.dart';
+import 'package:fl_clash/providers/service_status.dart';
+import 'package:fl_clash/vps2vpn/kit.dart';
+import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-const vpsCoral = Color(0xFFFF6F61);
-const vpsCoralDeep = Color(0xFFE63E5C);
-const vpsCoralSoft = Color(0xFFFF9A7B);
-
-const _countryNames = {
+const _countryZh = {
   'SG': '新加坡', 'US': '美国', 'JP': '日本', 'HK': '香港', 'TW': '台湾',
   'KR': '韩国', 'DE': '德国', 'GB': '英国', 'FR': '法国', 'NL': '荷兰',
   'AU': '澳大利亚', 'CA': '加拿大', 'IN': '印度', 'MY': '马来西亚',
@@ -29,137 +24,125 @@ const _countryNames = {
   'RU': '俄罗斯', 'CN': '中国', 'MO': '澳门', 'TR': '土耳其',
 };
 
-bool _zh(BuildContext context) =>
-    Localizations.localeOf(context).languageCode == 'zh';
-
-String _countryLabel(BuildContext context, String code) {
-  final upper = code.toUpperCase();
-  if (_zh(context)) return _countryNames[upper] ?? upper;
-  return upper;
+String countryName(BuildContext context, String code) {
+  final c = code.toUpperCase();
+  return vpsZh(context) ? (_countryZh[c] ?? c) : c;
 }
 
-class VpsHomeView extends ConsumerWidget {
-  const VpsHomeView({super.key});
+/// The first selectable group: what "the server you use" means here.
+Group? mainGroup(List<Group> groups) {
+  for (final g in groups) {
+    if (g.type == GroupType.Selector && g.hidden != true) return g;
+  }
+  return groups.isEmpty ? null : groups.first;
+}
+
+class VpsHomePage extends ConsumerWidget {
+  const VpsHomePage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final zh = _zh(context);
-    return Scaffold(
-      title: zh ? '首页' : 'Home',
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 760;
-          final side = wide ? 32.0 : 16.0;
-          const gap = 16.0;
-          final takeover = DashboardWidget.networkTakeover.platforms.contains(
-            SupportPlatform.currentPlatform,
-          );
-          return DashboardDensityScope(
-            density: wide ? DashboardDensity.compact : DashboardDensity.mobile,
-            scale: 1,
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                side,
-                context.contentTopPadding,
-                side,
-                24 + context.bottomInset,
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 980),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: gap,
+    final p = VpsPalette.of(context);
+    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
+    final systemProxy = ref.watch(networkSettingProvider.select((s) => s.systemProxy));
+    final tun = ref.watch(patchClashConfigProvider.select((s) => s.tun.enable));
+    return VpsPage(
+      title: tr(context, '你好', 'Hello'),
+      subtitle: tr(context, '自己的服务器，自己的 VPN', 'Your server, your VPN'),
+      children: [
+        const _Hero(),
+        const SizedBox(height: 16),
+        const _Stats(),
+        const SizedBox(height: 16),
+        LayoutBuilder(
+          builder: (context, c) {
+            final wide = c.maxWidth >= 720;
+            final routing = VpsCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      _HeroCard(wide: wide),
-                      SizedBox(
-                        height: wide ? 132 : 124,
-                        child: const Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          spacing: gap,
-                          children: [
-                            Expanded(
-                              child: SpeedCard(
-                                direction: TrafficDirection.upload,
-                              ),
-                            ),
-                            Expanded(
-                              child: SpeedCard(
-                                direction: TrafficDirection.download,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 64, child: OutboundModeBar()),
-                      SizedBox(
-                        height: 64,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          spacing: gap,
-                          children: takeover
-                              ? const [
-                                  Expanded(
-                                    child: NetworkTakeoverTile(
-                                      TakeoverSwitch.systemProxy,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: NetworkTakeoverTile(
-                                      TakeoverSwitch.tun,
-                                    ),
-                                  ),
-                                ]
-                              : const [Expanded(child: VpnTile())],
-                        ),
-                      ),
-                      SizedBox(
-                        height: wide ? 176 : null,
-                        child: Flex(
-                          direction: wide ? Axis.horizontal : Axis.vertical,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          spacing: gap,
-                          children: [
-                            if (wide)
-                              const Expanded(child: ProfilesCard())
-                            else
-                              const SizedBox(height: 160, child: ProfilesCard()),
-                            if (wide)
-                              const Expanded(
-                                child: ServiceStatusCard(columns: 2),
-                              )
-                            else
-                              const SizedBox(
-                                height: 176,
-                                child: ServiceStatusCard(columns: 1),
-                              ),
-                          ],
-                        ),
-                      ),
+                      VpsIconView(VpsIcon.globe, size: 19, color: p.accent),
+                      const SizedBox(width: 10),
+                      Text(tr(context, '上网方式', 'Routing'), style: vpsText(p, size: 15, weight: FontWeight.w700)),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 14),
+                  VpsSegmented<Mode>(
+                    items: const [Mode.rule, Mode.global],
+                    value: mode == Mode.direct ? Mode.rule : mode,
+                    labelOf: (m) => m == Mode.rule
+                        ? tr(context, '智能分流', 'Smart')
+                        : tr(context, '全部走代理', 'Everything'),
+                    onChanged: (m) => ref.read(setupActionProvider.notifier).changeMode(m),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    mode == Mode.global
+                        ? tr(context, '所有网站都经过你的服务器', 'Every site goes through your server')
+                        : tr(context, '国内网站直连更快，国外网站走服务器', 'Local sites go direct, the rest via your server'),
+                    style: vpsText(p, size: 12.5, color: p.soft),
+                  ),
+                ],
               ),
-            ),
-          );
-        },
-      ),
+            );
+            final takeover = VpsCard(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Column(
+                children: [
+                  VpsRow(
+                    icon: VpsIcon.bolt,
+                    title: tr(context, '浏览器和大多数软件', 'Browsers and most apps'),
+                    subtitle: tr(context, '系统代理', 'System proxy'),
+                    trailing: VpsSwitch(
+                      value: systemProxy,
+                      onChanged: (v) => ref.read(networkSettingProvider.notifier).update((s) => s.copyWith(systemProxy: v)),
+                    ),
+                  ),
+                  Container(height: 1, color: p.line),
+                  VpsRow(
+                    icon: VpsIcon.shield,
+                    title: tr(context, '全部软件（含终端、游戏）', 'Every app, terminal included'),
+                    subtitle: tr(context, '虚拟网卡 · 需要管理员权限', 'Virtual adapter · needs admin'),
+                    trailing: VpsSwitch(
+                      value: tun,
+                      onChanged: (v) => ref.read(patchClashConfigProvider.notifier).update((s) => s.copyWith.tun(enable: v)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+            if (!wide) {
+              return Column(children: [routing, const SizedBox(height: 16), takeover]);
+            }
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: routing),
+                  const SizedBox(width: 16),
+                  Expanded(child: takeover),
+                ],
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        const _AiStrip(),
+      ],
     );
   }
 }
 
-/// The coral card: brand, connected or not, where traffic exits, and the
-/// one button that connects.
-class _HeroCard extends ConsumerStatefulWidget {
-  const _HeroCard({required this.wide});
-
-  final bool wide;
+class _Hero extends ConsumerStatefulWidget {
+  const _Hero();
 
   @override
-  ConsumerState<_HeroCard> createState() => _HeroCardState();
+  ConsumerState<_Hero> createState() => _HeroState();
 }
 
-class _HeroCardState extends ConsumerState<_HeroCard> {
+class _HeroState extends ConsumerState<_Hero> {
   late final OutboundIpProbe _probe;
 
   @override
@@ -176,363 +159,261 @@ class _HeroCardState extends ConsumerState<_HeroCard> {
 
   @override
   Widget build(BuildContext context) {
-    final zh = _zh(context);
+    final p = VpsPalette.of(context);
     final isStart = ref.watch(isStartProvider);
     final suspended = isStart && ref.watch(suspendProvider);
-    final hasProfile = ref.watch(
-      profilesProvider.select((state) => state.isNotEmpty),
-    );
-    final runTime = ref.watch(runTimeProvider);
-    final info = ref
-        .watch(
-          outboundIpProbeProvider.select(
-            (state) => state.entryOf(routedOutbound),
-          ),
-        )
-        .value;
-    final dark = context.colorScheme.brightness == Brightness.dark;
     final on = isStart && !suspended;
+    final hasProfile = ref.watch(profilesProvider.select((s) => s.isNotEmpty));
+    final runTime = ref.watch(runTimeProvider);
+    final info = ref.watch(outboundIpProbeProvider.select((s) => s.entryOf(routedOutbound))).value;
+    final group = mainGroup(ref.watch(currentGroupsStateProvider).value);
+    final line = group == null ? null : ref.watch(selectedProxyNameProvider(group.name));
 
     final title = !hasProfile
-        ? (zh ? '还没有添加服务器' : 'No server yet')
+        ? tr(context, '先添加你的服务器', 'Add your server first')
         : suspended
-        ? (zh ? '已暂停' : 'Paused')
+        ? tr(context, '已暂停', 'Paused')
         : on
-        ? (zh ? '已连接' : 'Connected')
-        : (zh ? '未连接' : 'Not connected');
-    final subtitle = !hasProfile
-        ? (zh ? '点右边的按钮，粘贴订阅链接就能开始' : 'Tap the button to add a subscription')
+        ? tr(context, '已连接', 'Connected')
+        : tr(context, '未连接', 'Not connected');
+    final sub = !hasProfile
+        ? tr(context, '点按钮，粘贴部署工具给你的订阅链接', 'Tap the button and paste your subscription link')
         : on
-        ? (zh ? '已运行 ${getTimeText(runTime)}' : 'Up ${getTimeText(runTime)}')
-        : (zh ? '点右边的按钮，一键连接' : 'Tap the button to connect');
-    final exit = info == null
-        ? null
-        : '${_countryLabel(context, info.countryCode)} · ${info.countryCode.toUpperCase()}';
+        ? tr(context, '已安全连接 ${getTimeText(runTime)}', 'Protected for ${getTimeText(runTime)}')
+        : tr(context, '点一下按钮就能连上', 'One tap to connect');
 
-    final gradient = on
-        ? const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [vpsCoralSoft, vpsCoral, vpsCoralDeep],
-          )
-        : LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: dark
-                ? const [Color(0xFF3A2A2C), Color(0xFF2A2224), Color(0xFF221D1F)]
-                : const [Color(0xFFFFF1EE), Color(0xFFFFE3DD), Color(0xFFFFD6CE)],
-          );
-    final ink = on
-        ? const Color(0xFFFFFFFF)
-        : (dark ? const Color(0xFFFFFFFF) : const Color(0xFF3B1F1C));
-    final inkSoft = ink.withValues(alpha: 0.78);
-
-    final button = _PowerButton(
-      on: on,
-      enabled: true,
-      size: widget.wide ? 148 : 120,
-      // With no server yet, the button leads to where one is added.
-      onTap: hasProfile
-          ? () => ref.read(commonActionProvider.notifier).toggleRunning()
-          : () => ref
-                .read(currentPageLabelProvider.notifier)
-                .toPage(PageLabel.tools),
-    );
-
-    final texts = Column(
-      crossAxisAlignment: widget.wide
-          ? CrossAxisAlignment.start
-          : CrossAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _Brand(ink: ink),
-        SizedBox(height: widget.wide ? 28 : 20),
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: widget.wide ? 40 : 32,
-            fontWeight: FontWeight.w800,
-            height: 1.1,
-            color: ink,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(subtitle, style: TextStyle(fontSize: 15, color: inkSoft)),
-        if (exit != null && hasProfile) ...[
-          const SizedBox(height: 18),
-          _Pill(
-            ink: ink,
-            label: zh ? '出口  $exit' : 'Exit  $exit',
-          ),
-        ],
-      ],
-    );
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 450),
-      curve: Curves.easeOutCubic,
-      decoration: BoxDecoration(
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: on
-            ? [
-                BoxShadow(
-                  color: vpsCoral.withValues(alpha: 0.35),
-                  blurRadius: 36,
-                  offset: const Offset(0, 14),
-                ),
-              ]
-            : const [],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: Stack(
-        children: [
-          // Soft decorative circles.
-          Positioned(
-            right: -60,
-            top: -80,
-            child: _Blob(size: 260, color: ink.withValues(alpha: 0.07)),
-          ),
-          Positioned(
-            left: -40,
-            bottom: -90,
-            child: _Blob(size: 200, color: ink.withValues(alpha: 0.05)),
-          ),
-          Padding(
-            padding: EdgeInsets.all(widget.wide ? 36 : 24),
-            child: widget.wide
-                ? Row(
-                    children: [
-                      Expanded(child: texts),
-                      const SizedBox(width: 24),
-                      button,
-                    ],
-                  )
-                : Column(
-                    children: [texts, const SizedBox(height: 24), button],
+    return LayoutBuilder(
+      builder: (context, c) {
+        final wide = c.maxWidth >= 640;
+        final button = _PowerRing(
+          on: on,
+          size: wide ? 176 : 150,
+          label: !hasProfile ? tr(context, '添加', 'Add') : (on ? tr(context, '断开', 'Stop') : tr(context, '连接', 'Connect')),
+          onTap: hasProfile
+              ? () => ref.read(commonActionProvider.notifier).toggleRunning()
+              : () => vpsTab.value = vpsTabMe,
+        );
+        final texts = Column(
+          crossAxisAlignment: wide ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Text(
+                title,
+                key: ValueKey(title),
+                style: vpsText(p, size: wide ? 40 : 32, weight: FontWeight.w800, spacing: -0.5, height: 1.1,
+                    color: on && !p.dark ? vpsCoralDeep : p.text),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(sub, textAlign: wide ? TextAlign.start : TextAlign.center, style: vpsText(p, size: 14.5, color: p.soft)),
+            if (hasProfile) ...[
+              const SizedBox(height: 22),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                alignment: wide ? WrapAlignment.start : WrapAlignment.center,
+                children: [
+                  _InfoPill(
+                    label: tr(context, '出口', 'Exit'),
+                    value: info == null ? '—' : '${countryName(context, info.countryCode)} · ${info.countryCode.toUpperCase()}',
                   ),
-          ),
-        ],
-      ),
-      ),
-    );
-  }
-}
-
-class _Brand extends StatelessWidget {
-  const _Brand({required this.ink});
-
-  final Color ink;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 30,
-          height: 30,
+                  if (line != null && line.isNotEmpty)
+                    _InfoPill(label: tr(context, '线路', 'Line'), value: line),
+                ],
+              ),
+            ],
+          ],
+        );
+        return Container(
+          padding: EdgeInsets.all(wide ? 36 : 24),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(9),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [vpsCoralSoft, vpsCoralDeep],
-            ),
-            border: Border.all(
-              color: const Color(0xFFFFFFFF).withValues(alpha: 0.6),
-              width: 1.5,
-            ),
+            color: p.dark ? const Color(0x14FFFFFF) : const Color(0xFFFFFFFF),
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(color: on ? p.accent.withValues(alpha: 0.5) : p.line, width: on ? 1.5 : 1),
+            boxShadow: p.dark
+                ? const []
+                : [BoxShadow(color: const Color(0xFF7A3B2E).withValues(alpha: 0.08), blurRadius: 40, offset: const Offset(0, 14))],
           ),
-          alignment: Alignment.center,
-          child: const Text(
-            'V',
-            style: TextStyle(
-              color: Color(0xFFFFFFFF),
-              fontWeight: FontWeight.w900,
-              fontSize: 16,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          'vps2vpn',
-          style: TextStyle(
-            color: ink,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.4,
-          ),
-        ),
-      ],
+          child: wide
+              ? Row(children: [Expanded(child: texts), const SizedBox(width: 24), button])
+              : Column(children: [button, const SizedBox(height: 18), texts]),
+        );
+      },
     );
   }
 }
 
-class _Pill extends StatelessWidget {
-  const _Pill({required this.ink, required this.label});
+class _InfoPill extends StatelessWidget {
+  const _InfoPill({required this.label, required this.value});
 
-  final Color ink;
   final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: ink.withValues(alpha: 0.14),
+        color: p.dark ? const Color(0x12FFFFFF) : const Color(0xFFFBF3F0),
         borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: p.line),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: ink,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Text.rich(
+        TextSpan(children: [
+          TextSpan(text: '$label  ', style: vpsText(p, size: 13, color: p.soft)),
+          TextSpan(text: value, style: vpsText(p, size: 13, weight: FontWeight.w700)),
+        ]),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
 }
 
-class _Blob extends StatelessWidget {
-  const _Blob({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-}
-
-/// A big round power button with a breathing ring while connected.
-class _PowerButton extends StatefulWidget {
-  const _PowerButton({
-    required this.on,
-    required this.enabled,
-    required this.size,
-    required this.onTap,
-  });
+/// The connect button: a glowing ring that breathes while connected.
+class _PowerRing extends StatefulWidget {
+  const _PowerRing({required this.on, required this.size, required this.label, required this.onTap});
 
   final bool on;
-  final bool enabled;
   final double size;
+  final String label;
   final VoidCallback onTap;
 
   @override
-  State<_PowerButton> createState() => _PowerButtonState();
+  State<_PowerRing> createState() => _PowerRingState();
 }
 
-class _PowerButtonState extends State<_PowerButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2200),
-  );
-  bool _hover = false;
-  bool _down = false;
+class _PowerRingState extends State<_PowerRing> with SingleTickerProviderStateMixin {
+  late final AnimationController _spin = AnimationController(vsync: this, duration: const Duration(seconds: 6));
 
   @override
   void initState() {
     super.initState();
-    if (widget.on) _pulse.repeat();
+    if (widget.on) _spin.repeat();
   }
 
   @override
-  void didUpdateWidget(_PowerButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.on && !_pulse.isAnimating) _pulse.repeat();
-    if (!widget.on && _pulse.isAnimating) {
-      _pulse.stop();
-      _pulse.value = 0;
-    }
+  void didUpdateWidget(_PowerRing old) {
+    super.didUpdateWidget(old);
+    if (widget.on && !_spin.isAnimating) _spin.repeat();
+    if (!widget.on && _spin.isAnimating) _spin.stop();
   }
 
   @override
   void dispose() {
-    _pulse.dispose();
+    _spin.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = widget.size;
-    final on = widget.on;
-    final face = on ? const Color(0xFFFFFFFF) : vpsCoral;
-    final glyph = on ? vpsCoralDeep : const Color(0xFFFFFFFF);
-    final scale = _down ? 0.94 : (_hover ? 1.04 : 1.0);
-    return Opacity(
-      opacity: widget.enabled ? 1 : 0.45,
-      child: MouseRegion(
-        cursor: widget.enabled
-            ? SystemMouseCursors.click
-            : SystemMouseCursors.basic,
-        onEnter: (_) => setState(() => _hover = true),
-        onExit: (_) => setState(() => _hover = false),
-        child: GestureDetector(
-          onTapDown: (_) => setState(() => _down = true),
-          onTapCancel: () => setState(() => _down = false),
-          onTapUp: (_) => setState(() => _down = false),
-          onTap: widget.enabled ? widget.onTap : null,
-          child: SizedBox(
-            width: size * 1.35,
-            height: size * 1.35,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (on)
-                  AnimatedBuilder(
-                    animation: _pulse,
-                    builder: (_, _) {
-                      final t = _pulse.value;
-                      return Container(
-                        width: size * (1 + 0.35 * t),
-                        height: size * (1 + 0.35 * t),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(
-                            0xFFFFFFFF,
-                          ).withValues(alpha: 0.28 * (1 - t)),
-                        ),
-                      );
-                    },
+    final p = VpsPalette.of(context);
+    final s = widget.size;
+    return VpsPressable(
+      onTap: widget.onTap,
+      child: SizedBox(
+        width: s,
+        height: s,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Outer glow.
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 500),
+              width: s,
+              height: s,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: vpsCoral.withValues(alpha: widget.on ? 0.45 : (p.dark ? 0.15 : 0.18)),
+                    blurRadius: widget.on ? 60 : 30,
+                    spreadRadius: widget.on ? 4 : 0,
                   ),
-                AnimatedScale(
-                  scale: scale,
-                  duration: const Duration(milliseconds: 160),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 350),
-                    width: size,
-                    height: size,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: face,
-                      boxShadow: [
-                        BoxShadow(
-                          color: (on ? const Color(0xFF000000) : vpsCoral)
-                              .withValues(alpha: on ? 0.18 : 0.45),
-                          blurRadius: 28,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: CustomPaint(painter: _PowerGlyph(glyph)),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+            // Rotating gradient ring.
+            AnimatedBuilder(
+              animation: _spin,
+              builder: (_, _) => Transform.rotate(
+                angle: _spin.value * 2 * math.pi,
+                child: CustomPaint(
+                  size: Size(s, s),
+                  painter: _RingPainter(on: widget.on, track: p.dark ? const Color(0x1FFFFFFF) : const Color(0xFFF3E6E2)),
+                ),
+              ),
+            ),
+            // Face.
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              width: s * 0.7,
+              height: s * 0.7,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: widget.on ? p.accentGradient : null,
+                color: widget.on ? null : (p.dark ? const Color(0xFF1C1D2E) : const Color(0xFFFFF4F1)),
+                border: widget.on ? null : Border.all(color: p.accent.withValues(alpha: 0.5), width: 1.5),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CustomPaint(
+                    size: Size.square(s * 0.24),
+                    painter: _PowerGlyph(widget.on ? const Color(0xFFFFFFFF) : p.accent),
+                  ),
+                  SizedBox(height: s * 0.03),
+                  Text(
+                    widget.label,
+                    style: vpsText(p, size: s * 0.08, weight: FontWeight.w700, color: widget.on ? const Color(0xFFFFFFFF) : p.accent),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _RingPainter extends CustomPainter {
+  _RingPainter({required this.on, required this.track});
+
+  final bool on;
+  final Color track;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.width / 2 - 6;
+    final rect = Rect.fromCircle(center: c, radius: r);
+    canvas.drawCircle(c, r, Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6
+      ..color = track);
+    if (!on) return;
+    canvas.drawArc(
+      rect,
+      0,
+      math.pi * 1.4,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6
+        ..strokeCap = StrokeCap.round
+        ..shader = const SweepGradient(
+          colors: [Color(0x00FF8A70), vpsCoralSoft, vpsCoralDeep, vpsViolet],
+          stops: [0, 0.35, 0.7, 1],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) => old.on != on || old.track != track;
 }
 
 class _PowerGlyph extends CustomPainter {
@@ -543,27 +424,176 @@ class _PowerGlyph extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
-    final r = size.width * 0.2;
+    final r = size.width * 0.42;
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.065
+      ..strokeWidth = size.width * 0.12
       ..strokeCap = StrokeCap.round;
-    const gapAngle = math.pi / 3.2;
-    canvas.drawArc(
-      Rect.fromCircle(center: c.translate(0, r * 0.12), radius: r),
-      -math.pi / 2 + gapAngle / 2,
-      2 * math.pi - gapAngle,
-      false,
-      paint,
-    );
-    canvas.drawLine(
-      c.translate(0, -r * 1.15),
-      c.translate(0, -r * 0.05),
-      paint,
-    );
+    const gap = math.pi / 3;
+    canvas.drawArc(Rect.fromCircle(center: c.translate(0, r * 0.15), radius: r), -math.pi / 2 + gap / 2, 2 * math.pi - gap, false, paint);
+    canvas.drawLine(c.translate(0, -r * 1.05), c.translate(0, -r * 0.05), paint);
   }
 
   @override
-  bool shouldRepaint(_PowerGlyph oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(_PowerGlyph old) => old.color != color;
+}
+
+class _Stats extends ConsumerWidget {
+  const _Stats();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final traffics = ref.watch(trafficsProvider);
+    final now = traffics.list.safeLast(const Traffic());
+    final total = ref.watch(totalTrafficProvider);
+    final profile = ref.watch(currentProfileProvider);
+    final sub = profile?.subscriptionInfo;
+    String? left;
+    String? expire;
+    if (sub != null && sub.total > 0) {
+      final remain = math.max(0, sub.total - sub.upload - sub.download);
+      left = remain.traffic.show;
+    }
+    if (sub != null && sub.expire > 0) {
+      final days = DateTime.fromMillisecondsSinceEpoch(sub.expire * 1000).difference(DateTime.now()).inDays;
+      expire = days >= 0 ? tr(context, '还剩 $days 天', '$days days left') : tr(context, '已到期', 'Expired');
+    }
+    final tiles = [
+      _Stat(icon: VpsIcon.arrowDown, label: tr(context, '下载', 'Down'), value: '${now.down.traffic.show}/s'),
+      _Stat(icon: VpsIcon.arrowUp, label: tr(context, '上传', 'Up'), value: '${now.up.traffic.show}/s'),
+      _Stat(icon: VpsIcon.sparkle, label: tr(context, '本次用量', 'This session'), value: (total.up + total.down).traffic.show),
+      _Stat(
+        icon: VpsIcon.shield,
+        label: left != null ? tr(context, '剩余流量', 'Data left') : tr(context, '到期', 'Expires'),
+        value: left ?? expire ?? '—',
+        foot: left != null ? expire : null,
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, c) {
+        final cols = c.maxWidth >= 720 ? 4 : 2;
+        final w = (c.maxWidth - 12 * (cols - 1)) / cols;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [for (final t in tiles) SizedBox(width: w, child: t)],
+        );
+      },
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.icon, required this.label, required this.value, this.foot});
+
+  final VpsIcon icon;
+  final String label;
+  final String value;
+  final String? foot;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    return VpsCard(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      radius: 22,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              VpsIconView(icon, size: 16, color: p.accent),
+              const SizedBox(width: 6),
+              Text(label, style: vpsText(p, size: 12.5, color: p.soft, weight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: vpsText(p, size: 22, weight: FontWeight.w800, spacing: -0.3)),
+          if (foot != null) Text(foot!, style: vpsText(p, size: 12, color: p.soft)),
+        ],
+      ),
+    );
+  }
+}
+
+const aiTargets = [ServiceTarget.claude, ServiceTarget.chatgpt, ServiceTarget.gemini];
+
+/// "Can I use the AI sites right now?" in one line.
+class _AiStrip extends ConsumerStatefulWidget {
+  const _AiStrip();
+
+  @override
+  ConsumerState<_AiStrip> createState() => _AiStripState();
+}
+
+class _AiStripState extends ConsumerState<_AiStrip> {
+  late final ServiceStatus _services;
+
+  @override
+  void initState() {
+    super.initState();
+    _services = ref.read(serviceStatusProvider.notifier);
+    for (final t in aiTargets) {
+      _services.watch(t);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final t in aiTargets) {
+      _services.unwatch(t);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = VpsPalette.of(context);
+    final state = ref.watch(serviceStatusProvider);
+    return VpsCard(
+      onTap: () => vpsTab.value = vpsTabCheck,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(gradient: p.accentGradient, borderRadius: BorderRadius.circular(12)),
+            alignment: Alignment.center,
+            child: const VpsIconView(VpsIcon.sparkle, size: 19, color: Color(0xFFFFFFFF)),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr(context, 'AI 能不能用', 'AI availability'), style: vpsText(p, size: 15, weight: FontWeight.w700)),
+                Text(tr(context, '通过你的服务器访问时', 'Through your server'), style: vpsText(p, size: 12.5, color: p.soft)),
+              ],
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final t in aiTargets) serviceChip(context, t, state.entryOf(t)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Plain-word status chip for one site.
+Widget serviceChip(BuildContext context, ServiceTarget t, ProbeEntry<ServiceCheck> entry) {
+  final p = VpsPalette.of(context);
+  final check = entry.value;
+  final (mark, color) = switch (check?.status) {
+    null => (entry.isLoading ? '…' : '?', p.muted),
+    ServiceProbeStatus.available => ('✓', p.good),
+    ServiceProbeStatus.restricted || ServiceProbeStatus.originalsOnly || ServiceProbeStatus.comingSoon => ('!', p.warn),
+    _ => ('✗', p.bad),
+  };
+  return VpsChip(label: '${t.label} $mark', color: color);
 }

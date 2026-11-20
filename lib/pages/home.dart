@@ -4,6 +4,7 @@ import 'package:fl_clash/manager/app_manager.dart';
 import 'package:fl_clash/models/common.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
+import 'package:fl_clash/vps2vpn/shell.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -22,6 +23,13 @@ class HomePage extends ConsumerWidget {
     // material an unpainted body shows black until the next frame lands.
     if (!hasViewSize) {
       return ColoredBox(color: SurfaceLevel.page.colorOf(context.colorScheme));
+    }
+    // vps2vpn: our own window for everyday use; FlClash's in advanced mode.
+    final advancedMode = ref.watch(
+      appSettingProvider.select((state) => state.advancedMode),
+    );
+    if (!advancedMode) {
+      return const HomeBackScopeContainer(child: VpsShell());
     }
     return HomeBackScopeContainer(
       child: AppSidebarContainer(

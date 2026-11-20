@@ -8,6 +8,7 @@ import 'package:fl_clash/models/config.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/ui/ui.dart';
+import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -401,9 +402,14 @@ class _WindowHeaderState extends ConsumerState<WindowHeader> {
     final backdropOpacity = ref.watch(isMobileViewProvider)
         ? null
         : ref.watch(windowBlurProvider);
+    // vps2vpn: in simple mode the title bar blends into our own backdrop.
+    final simple = !ref.watch(
+      appSettingProvider.select((state) => state.advancedMode),
+    );
     return WindowHeaderBar(
       height: kHeaderHeight,
-      backdropOpacity: backdropOpacity,
+      backdropOpacity: simple ? null : backdropOpacity,
+      fill: simple ? VpsPalette.of(context).bg : null,
       onDragStart: desktopWindow.startDragging,
       // rust_api answers title-bar double clicks on macOS by the system setting.
       onDoubleTap: system.isMacOS ? null : caption.toggleMaximized,
@@ -432,6 +438,7 @@ class WindowHeaderBar extends StatelessWidget {
     this.backdropOpacity,
     this.title,
     this.actions,
+    this.fill,
   });
 
   final double height;
@@ -441,13 +448,20 @@ class WindowHeaderBar extends StatelessWidget {
   final Widget? title;
   final Widget? actions;
 
+  /// A flat color with no divider (vps2vpn simple mode).
+  final Color? fill;
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = context.colorScheme;
     final backdropOpacity = this.backdropOpacity;
+    final fill = this.fill;
     return Surface(
-      color: backdropOpacity != null ? Colors.transparent : colorScheme.surface,
-      shape: Border(bottom: Divider.createBorderSide(context)),
+      color: fill ??
+          (backdropOpacity != null ? Colors.transparent : colorScheme.surface),
+      shape: fill != null
+          ? null
+          : Border(bottom: Divider.createBorderSide(context)),
       child: SizedBox(
         height: height,
         child: Stack(
@@ -460,11 +474,11 @@ class WindowHeaderBar extends StatelessWidget {
                 },
                 onDoubleTap: onDoubleTap,
                 child: ColoredBox(
-                  color: backdropOpacity != null
+                  color: fill ?? (backdropOpacity != null
                       ? colorScheme.chromeSurface.withValues(
                           alpha: backdropOpacity,
                         )
-                      : colorScheme.chromeSurface,
+                      : colorScheme.chromeSurface),
                 ),
               ),
             ),

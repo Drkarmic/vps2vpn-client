@@ -18,7 +18,7 @@ class Navigation implements NavigationPort {
     if (!advancedMode) {
       return simpleNavigationItems(
         hasProxies: hasProxies,
-        dashboard: (_) => const VpsHomeView(),
+        dashboard: (_) => const VpsHomePage(),
         proxies: (_) => const ProxiesView(),
       );
     }
