@@ -50,5 +50,6 @@ export 'system.dart';
 export 'system_fonts.dart';
 export 'task.dart';
 export 'task_pool.dart';
+export 'tun_self_check.dart';
 export 'webdav.dart';
 export 'yaml.dart';

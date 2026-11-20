@@ -346,6 +346,15 @@ abstract class CoreHandlerInterface {
 
   Future<void> stopListener() => _command(CoreMethod.listenerStop);
 
+  /// Whether the TUN the applied config asks for listens; see
+  /// `core/lifecycle.go` handleTunStatus.
+  Future<TunStatus> getTunStatus() {
+    return _query(
+      CoreMethod.tunStatus,
+      (data) => TunStatus.fromJson(Map<String, Object?>.from(data as Map)),
+    );
+  }
+
   Future<RouteSnapshot> watchRoute(bool watch) {
     return _query(
       CoreMethod.routeWatch,
