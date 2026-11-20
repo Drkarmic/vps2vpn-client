@@ -91,6 +91,9 @@ class CommonAction extends _$CommonAction {
   }
 
   Future<bool> autoCheckUpdate() async {
+    // vps2vpn: no update source yet. Never ask FlClash's GitHub releases,
+    // which would offer to replace this app with upstream FlClash.
+    if (vps2vpnUpdatesDisabled) return false;
     if (!ref.read(appSettingProvider).autoCheckUpdate) return false;
     final Map<String, dynamic>? res;
     try {

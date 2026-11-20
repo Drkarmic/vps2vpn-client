@@ -32,10 +32,10 @@ class BuildConfig {
     goLdflags: '-w -s',
     coreVersion: '',
     coreDir: 'core',
-    coreName: 'FlClashCore',
+    coreName: 'vps2vpnCore',
     outputDir: 'libclash',
     helperDir: 'services/helper',
-    helperName: 'FlClashHelperService',
+    helperName: 'vps2vpnHelperService',
   );
 
   static BuildConfig load({required String rootDir}) {

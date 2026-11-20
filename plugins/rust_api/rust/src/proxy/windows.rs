@@ -320,7 +320,7 @@ fn watch_session_end() {
 fn run_session_window() {
     unsafe {
         let instance = GetModuleHandleW(null());
-        let class = wide("FlClashSystemProxySession");
+        let class = wide("vps2vpnSystemProxySession");
         let window_class = WNDCLASSW {
             lpfnWndProc: Some(session_window_proc),
             hInstance: instance,

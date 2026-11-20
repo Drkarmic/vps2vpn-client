@@ -65,7 +65,7 @@ begin
   AppDir := AddBackslash(ExpandConstant('{app}'));
   StringChangeEx(AppDir, '''', '''''', True);
   Exec('powershell.exe',
-    '-NoProfile -NonInteractive -Command "Get-Process -Name FlClash,FlClashCore,FlClashHelperService -ErrorAction SilentlyContinue | ' +
+    '-NoProfile -NonInteractive -Command "Get-Process -Name vps2vpn,vps2vpnCore,vps2vpnHelperService -ErrorAction SilentlyContinue | ' +
     'Where-Object { $_.Path -and $_.Path.StartsWith(''' + AppDir + ''', [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
@@ -75,7 +75,7 @@ var
   HelperPath: String;
   ResultCode: Integer;
 begin
-  HelperPath := ExpandConstant('{app}\\FlClashHelperService.exe');
+  HelperPath := ExpandConstant('{app}\\vps2vpnHelperService.exe');
   if FileExists(HelperPath) then
   begin
     Exec(HelperPath, 'uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -113,7 +113,7 @@ begin
     RegDeleteValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run', '{{DISPLAY_NAME}}');
   end;
 
-  Schemes := ['clash', 'clashmeta', 'flclash'];
+  Schemes := ['vps2vpn'];
   for i := 0 to GetArrayLength(Schemes)-1 do
   begin
     if RegQueryStringValue(HKCU, 'Software\Classes\' + Schemes[i] + '\shell\open\command', '', Value) and PointsIntoApp(Value) then

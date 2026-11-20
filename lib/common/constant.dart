@@ -9,15 +9,18 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:flutter/widgets.dart';
 
-const appName = 'FlClash';
-const appHelperService = 'FlClashHelperService';
+const appName = 'vps2vpn';
+const appHelperService = 'vps2vpnHelperService';
+
+/// vps2vpn has no update channel yet; see autoCheckUpdate.
+const vps2vpnUpdatesDisabled = true;
 const coreManifestName = 'manifest.json';
 const browserUa =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const packageName = 'com.follow.clash';
 final unixSocketPath = '/tmp/FlClashSocket_${Random().nextInt(10000)}.sock';
 final windowsPipeName = '\\\\.\\pipe\\FlClashCore_${_randomPipeId()}';
-const helperPort = 47890;
+const helperPort = 47990; // vps2vpn: FlClash helper uses 47890
 const helperPortKey =
     'SYSTEM\\CurrentControlSet\\Services\\$appHelperService\\Runtime';
 const helperPortValue = 'Port';

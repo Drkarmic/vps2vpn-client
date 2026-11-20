@@ -70,7 +70,7 @@ fn instance_name(prefix: &str) -> Vec<u16> {
 pub fn activate_message() -> u32 {
     static MESSAGE: OnceLock<u32> = OnceLock::new();
     *MESSAGE.get_or_init(|| {
-        let name = instance_name("flclash.activate:");
+        let name = instance_name("vps2vpn.activate:");
         unsafe { RegisterWindowMessageW(name.as_ptr()) }
     })
 }
@@ -78,7 +78,7 @@ pub fn activate_message() -> u32 {
 // The handle stays open for the life of the process. An elevated owner's
 // mutex is denied to a non-elevated launch: taken all the same.
 fn claim_instance() -> bool {
-    let name = instance_name("Local\\flclash.instance:");
+    let name = instance_name("Local\\vps2vpn.instance:");
     let mutex = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
     let error = unsafe { GetLastError() };
     if mutex.is_null() {

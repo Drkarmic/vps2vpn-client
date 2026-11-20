@@ -155,7 +155,7 @@ fn run_window(ready: mpsc::Sender<Option<usize>>) {
     let _ = FLUSH_MENUS.set(allow_dark_menus());
     unsafe {
         let instance = GetModuleHandleW(null());
-        let class = wide("FlClashTray");
+        let class = wide("vps2vpnTray");
         let window_class = WNDCLASSW {
             lpfnWndProc: Some(window_proc),
             hInstance: instance,

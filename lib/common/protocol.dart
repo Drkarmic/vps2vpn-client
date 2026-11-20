@@ -5,7 +5,9 @@ import 'package:rust_api/rust_api.dart' as rust_api;
 import 'constant.dart';
 import 'print.dart';
 
-const protocolSchemes = ['clash', 'clashmeta', 'flclash'];
+// vps2vpn registers only its own scheme, so the clash:// handler of an
+// installed FlClash or Clash Verge is never taken over.
+const protocolSchemes = ['vps2vpn'];
 
 /// A user-level desktop entry that claims the schemes for the running binary,
 /// so an AppImage or a development build is reachable without a packaged
@@ -21,7 +23,7 @@ class LinuxProtocolRegistrationPlan {
     required this.applicationsDir,
   });
 
-  String get desktopId => 'flclash-url-handler.desktop';
+  String get desktopId => 'vps2vpn-url-handler.desktop';
 
   String get desktopPath => '$applicationsDir/$desktopId';
 

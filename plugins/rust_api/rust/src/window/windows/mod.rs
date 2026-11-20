@@ -94,7 +94,7 @@ thread_local! {
 fn job_message() -> u32 {
     static MESSAGE: OnceLock<u32> = OnceLock::new();
     *MESSAGE.get_or_init(|| {
-        let name: Vec<u16> = "flclash.window.job".encode_utf16().chain(Some(0)).collect();
+        let name: Vec<u16> = "vps2vpn.window.job".encode_utf16().chain(Some(0)).collect();
         unsafe { RegisterWindowMessageW(name.as_ptr()) }
     })
 }
