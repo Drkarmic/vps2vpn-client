@@ -1,0 +1,44 @@
+name: vps2vpn installer check
+
+# Installs an installer that was already built (attached to a release of this
+# repository) on a throwaway Windows runner and checks the takeover end to
+# end. No build here, so it takes a few minutes.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag that carries the setup .exe
+        required: true
+        default: test-1.0.0
+
+jobs:
+  e2e:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Checkout the test script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Download the installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download '${{ inputs.tag }}' -R '${{ github.repository }}' -p '*-setup.exe' -D installer
+          Get-ChildItem installer
+
+      - name: Install and take over (end to end)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem installer -Filter '*.exe' | Select-Object -First 1).FullName
+          ./.github/scripts/takeover-e2e.ps1 -Setup $setup -Out e2e
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e
+          path: e2e
+          if-no-files-found: ignore
