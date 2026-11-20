@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 const _replaceAttempts = 10;
 const _replaceRetryDelay = Duration(milliseconds: 50);
@@ -40,9 +41,15 @@ extension FileExt on File {
     return writeAsBytes(bytes);
   }
 
-  /// Writes to one file must not overlap: they share the temporary sibling.
+  /// Each write uses a different temporary sibling so overlapping calls
+  /// cannot truncate or rename one another's staging file.
   Future<void> writeAsStringAtomically(String content) async {
-    final temp = File('$path.$pid.tmp');
+    final random = Random.secure();
+    final suffix = [
+      random.nextInt(1 << 32).toRadixString(36),
+      random.nextInt(1 << 32).toRadixString(36),
+    ].join();
+    final temp = File('$path.$pid.$suffix.tmp');
     try {
       await temp.parent.create(recursive: true);
       await temp.writeAsString(content, flush: true);
