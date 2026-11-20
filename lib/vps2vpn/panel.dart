@@ -75,28 +75,45 @@ class VpsClientRelease {
     required this.version,
     required this.url,
     this.notes,
+    this.files = const {},
   });
 
   final String version;
+
+  /// What "download" opens when there is no file for this platform.
   final Uri url;
   final String? notes;
+
+  /// Platform (windows, android, macos, linux) → installer on the panel.
+  final Map<String, Uri> files;
+
+  static Uri? _web(Object? v) {
+    final u = Uri.tryParse('${v ?? ''}');
+    return u != null && (u.isScheme('http') || u.isScheme('https')) ? u : null;
+  }
 
   static VpsClientRelease? fromJson(Object? json) {
     if (json is! Map) return null;
     final version = '${json['version'] ?? ''}'.trim().replaceFirst('v', '');
-    final url = Uri.tryParse('${json['url'] ?? ''}');
-    if (version.isEmpty ||
-        url == null ||
-        !(url.isScheme('http') || url.isScheme('https'))) {
-      return null;
-    }
+    final raw = json['files'];
+    final files = <String, Uri>{
+      if (raw is Map)
+        for (final e in raw.entries)
+          if (_web(e.value) case final u?) '${e.key}'.toLowerCase(): u,
+    };
+    final url = _web(json['url']) ?? files.values.firstOrNull;
+    if (version.isEmpty || url == null) return null;
     final notes = json['notes'];
     return VpsClientRelease(
       version: version,
       url: url,
-      notes: notes is String && notes.isNotEmpty ? notes : null,
+      notes: notes is String && notes.trim().isNotEmpty ? notes.trim() : null,
+      files: files,
     );
   }
+
+  /// The installer for [platform] when the panel has one, else [url].
+  Uri downloadFor(String platform) => files[platform] ?? url;
 
   /// True when this release is newer than [current]; false when either
   /// version is not plain numbers.

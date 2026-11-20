@@ -278,6 +278,7 @@ class _VpsCheckPageState extends ConsumerState<VpsCheckPage> {
             );
             if (!wide)
               return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [exit, const SizedBox(height: 12), score],
               );
             return IntrinsicHeight(

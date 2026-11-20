@@ -451,7 +451,8 @@ class VpsPage extends StatelessWidget {
             side,
             wide ? 30 : 18,
             side,
-            wide ? 36 : 100,
+            // The shell floats its bottom bar below 760 window width.
+            MediaQuery.sizeOf(context).width < 760 ? 100 : 36,
           ),
           child: Center(
             child: ConstrainedBox(

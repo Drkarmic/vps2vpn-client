@@ -516,32 +516,46 @@ class _ChoiceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = VpsPalette.of(context);
+    final head = Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: ShapeDecoration(
+            color: p.track,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: BorderRadius.circular(9),
+              side: BorderSide(color: p.line),
+            ),
+          ),
+          child: VpsIconView(icon, size: 17, color: p.soft),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: vpsText(p, size: 14.5, weight: FontWeight.w500),
+          ),
+        ),
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            alignment: Alignment.center,
-            decoration: ShapeDecoration(
-              color: p.track,
-              shape: RoundedSuperellipseBorder(
-                borderRadius: BorderRadius.circular(9),
-                side: BorderSide(color: p.line),
+      // Narrow windows put the choices under the label, full width.
+      child: LayoutBuilder(
+        builder: (context, c) => c.maxWidth < 480
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [head, const SizedBox(height: 10), child],
+              )
+            : Row(
+                children: [
+                  Expanded(child: head),
+                  SizedBox(width: 300, child: child),
+                ],
               ),
-            ),
-            child: VpsIconView(icon, size: 17, color: p.soft),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              label,
-              style: vpsText(p, size: 14.5, weight: FontWeight.w500),
-            ),
-          ),
-          SizedBox(width: 300, child: child),
-        ],
       ),
     );
   }

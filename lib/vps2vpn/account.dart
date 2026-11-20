@@ -2,6 +2,8 @@
 // Settings page and the server's own AI check on the Check page. Both stay
 // hidden for subscriptions that are not vps2vpn links.
 
+import 'dart:io';
+
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/state.dart';
@@ -305,8 +307,10 @@ class VpsUpdateCard extends ConsumerWidget {
             VpsButton(
               label: tr(context, '下载', 'Download'),
               filled: true,
-              onTap: () =>
-                  launchUrl(release.url, mode: LaunchMode.externalApplication),
+              onTap: () => launchUrl(
+                release.downloadFor(Platform.operatingSystem),
+                mode: LaunchMode.externalApplication,
+              ),
             ),
           ],
         ),

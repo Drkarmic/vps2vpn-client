@@ -72,6 +72,30 @@ void main() {
     expect(VpsClientRelease.fromJson(null), isNull);
   });
 
+  test('prefers the installer the panel holds for this platform', () {
+    final r = VpsClientRelease.fromJson({
+      'version': '1.10.0',
+      'url': 'https://panel/s/t/download/vps2vpn-1.10.0-windows-setup.exe',
+      'notes': '',
+      'files': {
+        'windows':
+            'https://panel/s/t/download/vps2vpn-1.10.0-windows-setup.exe',
+        'android': 'https://panel/s/t/download/vps2vpn-1.10.0-android.apk',
+        'bad': 'javascript:alert(1)',
+      },
+    })!;
+    expect(r.notes, isNull);
+    expect(r.newerThan('1.2.0'), isTrue);
+    expect(r.downloadFor('android').path, endsWith('android.apk'));
+    expect(r.downloadFor('linux'), r.url);
+    expect(r.files.containsKey('bad'), isFalse);
+    final onlyFiles = VpsClientRelease.fromJson({
+      'version': '2.0.0',
+      'files': {'windows': 'https://panel/x.exe'},
+    })!;
+    expect(onlyFiles.url.toString(), 'https://panel/x.exe');
+  });
+
   test('names the line kinds the panel knows', () {
     expect(vpsLineKind({'type': 'hysteria2'}), 'hy2');
     expect(vpsLineKind({'type': 'tuic'}), 'tuic');
