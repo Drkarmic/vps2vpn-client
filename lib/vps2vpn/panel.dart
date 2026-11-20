@@ -541,6 +541,19 @@ String? vpsLineKind(Map<String, dynamic> def) {
   };
 }
 
+/// A proxy's server address for per-line health reports. Node definitions
+/// carry their port separately; accept IPv6 literals but not host:port values.
+String? vpsLineReportHost(Map<String, dynamic> def) {
+  final raw = def['server'];
+  if (raw is! String) return null;
+  final host = _normHost(raw);
+  if (host.isEmpty) return null;
+  if (!host.contains(':')) return host;
+  final ip = InternetAddress.tryParse(host);
+  if (ip == null || ip.type != InternetAddressType.IPv6) return null;
+  return ip.address;
+}
+
 /// The signed-in member for the current subscription, or null when it is
 /// not a vps2vpn link.
 final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
@@ -689,14 +702,13 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
           if (def == null) continue;
           _collectPin(def, targetHost, pins);
           final kind = vpsLineKind(def);
-          final rawHost = '${def['server'] ?? ''}'.trim();
-          final host = _normHost(rawHost);
-          if (kind == null || host.isEmpty || host.contains(':')) continue;
+          final host = vpsLineReportHost(def);
+          if (kind == null || host == null) continue;
           lines.add(
             VpsWatchedLine(
               name: proxy.name,
               kind: kind,
-              host: rawHost,
+              host: host,
               testUrl: testUrl,
             ),
           );
