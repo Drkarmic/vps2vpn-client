@@ -550,7 +550,8 @@ String? vpsLineReportHost(Map<String, dynamic> def) {
   if (host.isEmpty) return null;
   if (!host.contains(':')) return host;
   final ip = InternetAddress.tryParse(host);
-  return ip?.type == InternetAddressType.IPv6 ? ip!.address : null;
+  if (ip == null || ip.type != InternetAddressType.IPv6) return null;
+  return ip.address;
 }
 
 /// The signed-in member for the current subscription, or null when it is
