@@ -177,9 +177,8 @@ class DAVTransport {
       if (status != null && accept.contains(status)) {
         return response;
       }
-      // The response from a redirected OPTIONS request may belong to another
-      // origin. Only the configured server may negotiate or replace its
-      // cached Digest credentials; a foreign 401 must remain an error.
+      // A redirected OPTIONS may land on another origin, whose challenge is
+      // not this server's.
       if (status == 401 &&
           !retriedAuth &&
           _sameOrigin(uri, origin) &&
@@ -222,10 +221,9 @@ class DAVTransport {
         next.scheme != 'https') {
       return false;
     }
-    if ((method == 'PUT' || method == 'GET') && !_sameOrigin(next, origin)) {
-      return false;
-    }
-    return true;
+    // Only the reachability probe may leave the origin: a MKCOL, PUT or GET
+    // answered elsewhere would report a change or a file this server lacks.
+    return method == 'OPTIONS' || _sameOrigin(next, origin);
   }
 
   Future<Response<dynamic>> _request(

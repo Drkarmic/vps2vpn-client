@@ -100,10 +100,7 @@ void main() {
 
       expect(adapter.requests, hasLength(2));
       expect(adapter.requests[1].uri.host, 'other.example');
-      expect(
-        adapter.requests[1].headers,
-        isNot(contains('authorization')),
-      );
+      expect(adapter.requests[1].headers, isNot(contains('authorization')));
 
       // A later request must still use origin credentials, not the
       // challenge supplied by the redirected third-party host.
@@ -247,6 +244,61 @@ void main() {
       expect(retryAuth, contains('realm="y"'));
     },
   );
+
+  for (final method in ['MKCOL', 'PUT', 'GET']) {
+    test('$method does not follow a redirect to another origin', () async {
+      final adapter = _ScriptedAdapter(
+        (options) => options.uri.host == 'origin.example'
+            ? ResponseBody.fromString(
+                '',
+                307,
+                headers: {
+                  'location': ['https://other.example/created'],
+                },
+              )
+            : ResponseBody.fromString('', 201),
+      );
+      final transport = DAVTransport(
+        uri: 'https://origin.example/base',
+        user: 'user',
+        password: 'pass',
+        dio: _dioWith(adapter),
+      );
+
+      await expectLater(switch (method) {
+        'MKCOL' => transport.mkcol('backups'),
+        'PUT' => transport.put('backups/a.zip', [1]),
+        _ => transport.get('backups/a.zip'),
+      }, throwsA(isA<DAVException>()));
+      expect(adapter.requests, hasLength(1));
+    });
+  }
+
+  test('MKCOL follows a redirect within the origin', () async {
+    final adapter = _ScriptedAdapter(
+      (options) => options.uri.path == '/base/backups/'
+          ? ResponseBody.fromString(
+              '',
+              301,
+              headers: {
+                'location': ['/base/Backups/'],
+              },
+            )
+          : ResponseBody.fromString('', 201),
+    );
+    final transport = DAVTransport(
+      uri: 'https://origin.example/base',
+      user: 'user',
+      password: 'pass',
+      dio: _dioWith(adapter),
+    );
+
+    await transport.mkcol('backups');
+
+    expect(adapter.requests.map((r) => r.method), ['MKCOL', 'MKCOL']);
+    expect(adapter.requests[1].uri.path, '/base/Backups/');
+    expect(adapter.requests[1].headers, contains('authorization'));
+  });
 
   DAVTransport partialTransport(String contentRange) {
     final adapter = _ScriptedAdapter(
