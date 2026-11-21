@@ -187,6 +187,38 @@ void main() {
     expect(_texts(), findsNothing);
   });
 
+  test('a platform map key cannot spoof the signed installer OS', () {
+    final android = Uri.parse(
+      'https://example.com/vps2vpn-1.1.0-android-arm64.apk',
+    );
+    final release = VpsClientRelease(
+      version: '1.1.0',
+      url: android,
+      files: {'windows': android, 'android': android},
+    );
+    expect(release.installerFor('windows'), isNull);
+    expect(release.installerFor('android'), android);
+    expect(release.pageFor('windows'), isNull);
+
+    // A later "-windows-" substring cannot turn an Android file into Windows.
+    final misleading = Uri.parse(
+      'https://example.com/vps2vpn-1.1.0-android-arm64-windows-setup.exe',
+    );
+    expect(
+      VpsClientRelease(version: '1.1.0', url: misleading)
+          .installerFor('windows'),
+      isNull,
+    );
+    final windows = Uri.parse(
+      'https://example.com/vps2vpn-1.1.0-windows-amd64-setup.exe',
+    );
+    expect(
+      VpsClientRelease(version: '1.1.0', url: windows)
+          .installerFor('windows'),
+      windows,
+    );
+  });
+
   test('installs by itself only what this build can run', () {
     const setup = 'vps2vpn-1.1.0-windows-amd64-setup.exe';
     const zip = 'vps2vpn-1.1.0-windows-amd64-portable.zip';
