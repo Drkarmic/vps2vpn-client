@@ -420,7 +420,8 @@ func TestHandleValidateProxiesLeavesARunningProxysResolverInPlace(t *testing.T) 
 	if got[0] != "" {
 		t.Fatalf("easytier proxy reported %q", got[0])
 	}
-	if !strings.Contains(got[1], "/outside") || strings.Contains(got[1], "\x00") {
+	// The state dir is a native path, C:\outside on Windows.
+	if !strings.Contains(got[1], filepath.FromSlash("/outside")) || strings.Contains(got[1], "\x00") {
 		t.Errorf("unsafe state dir reported %q, want the proxy's own name", got[1])
 	}
 	resolvers := dns.NewResolver(dns.Config{
