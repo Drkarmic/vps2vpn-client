@@ -11,7 +11,7 @@ Iterable<File> _dartFilesIn(String root) sync* {
   if (!directory.existsSync()) {
     fail('$root no longer exists; update this test.');
   }
-  for (final entity in directory.listSync(recursive: true)) {
+  for (final entity in listSources(root)) {
     if (entity is File &&
         entity.path.endsWith('.dart') &&
         !entity.path.endsWith('.g.dart') &&

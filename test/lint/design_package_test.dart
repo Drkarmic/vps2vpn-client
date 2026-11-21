@@ -1,7 +1,8 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+import 'sources.dart';
 
 const _roots = ['lib', 'test', 'tool', 'plugins'];
 
@@ -35,11 +36,11 @@ void main() {
       if (!directory.existsSync()) {
         fail('$root no longer exists; update _roots.');
       }
-      for (final entity in directory.listSync(recursive: true)) {
+      for (final entity in listSources(root)) {
         if (entity is! File || !entity.path.endsWith('.dart')) {
           continue;
         }
-        final relative = p.relative(entity.path);
+        final relative = sourcePath(entity.path);
         if (_isGenerated(relative)) {
           continue;
         }

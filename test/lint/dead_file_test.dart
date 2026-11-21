@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import 'sources.dart';
+
 const _entryPoints = ['lib/main.dart'];
 
 /// Types, and the top level names a file publishes alongside them — the
@@ -20,7 +22,7 @@ Iterable<File> _dartFiles({required bool includeGenerated}) sync* {
     if (!directory.existsSync()) {
       fail('$root no longer exists; update this test.');
     }
-    for (final entity in directory.listSync(recursive: true)) {
+    for (final entity in listSources(root)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
       final generated =
           entity.path.endsWith('.g.dart') ||

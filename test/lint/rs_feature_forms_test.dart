@@ -3,12 +3,13 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 import '../../tool/src/strip_rs_feature.dart';
+import 'sources.dart';
 
 void main() {
   test('every rsFeature check takes a form the strip tool reads', () {
     final failures = <String>[];
     for (final root in ['lib', 'test']) {
-      for (final file in Directory(root).listSync(recursive: true)) {
+      for (final file in listSources(root)) {
         final path = file.path;
         if (file is! File ||
             !path.endsWith('.dart') ||

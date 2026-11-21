@@ -721,6 +721,9 @@ HelperClient _client(
   final dio = Dio()..httpClientAdapter = adapter;
   return HelperClient(
     dio: dio,
+    // The default reads the port the Windows service publishes through the
+    // Rust library, which a test does not load.
+    baseUrl: 'http://$localhost:$helperPort',
     expectedHelperPath: expectedHelperPath ?? () => r'C:\Helper.exe',
     readCoreSha256: readCoreSha256 ?? () async => _coreSha256,
   );

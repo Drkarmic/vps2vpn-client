@@ -1,7 +1,8 @@
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
+
+import 'sources.dart';
 
 const _uiRoots = [
   'lib/ui',
@@ -33,11 +34,11 @@ void main() {
       if (!directory.existsSync()) {
         fail('$root no longer exists; update _uiRoots.');
       }
-      for (final entity in directory.listSync(recursive: true)) {
+      for (final entity in listSources(root)) {
         if (entity is! File || !entity.path.endsWith('.dart')) {
           continue;
         }
-        final relative = p.relative(entity.path);
+        final relative = sourcePath(entity.path);
         if (_isGenerated(relative)) {
           continue;
         }

@@ -11,7 +11,7 @@ void main() {
     final offenders = <String>[];
 
     for (final root in [...sourceRoots, 'test']) {
-      for (final entity in Directory(root).listSync(recursive: true)) {
+      for (final entity in listSources(root)) {
         if (entity is! File ||
             !entity.path.endsWith('.dart') ||
             entity.path.endsWith('.g.dart') ||

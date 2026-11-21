@@ -7,6 +7,8 @@ import 'package:fl_clash/l10n/l10n.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'sources.dart';
+
 const _arbDir = 'arb';
 const _libDir = 'lib';
 
@@ -77,7 +79,7 @@ void main() {
 
   test('no Intl.message call builds a key at runtime', () {
     final offenders = <String>[];
-    for (final entity in Directory(_libDir).listSync(recursive: true)) {
+    for (final entity in listSources(_libDir)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
       final path = entity.path;
       if (path.contains('/generated/') || path.contains('/l10n/')) continue;

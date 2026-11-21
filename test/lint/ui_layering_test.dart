@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import 'sources.dart';
+
 const _stateManagement = [
   'flutter_riverpod',
   'hooks_riverpod',
@@ -20,7 +22,7 @@ String _resolve(String uri, String from) {
     return 'lib/${uri.substring('package:fl_clash/'.length)}';
   }
   if (uri.startsWith('dart:') || uri.startsWith('package:')) return uri;
-  return p.normalize(p.join(p.dirname(from), uri));
+  return p.posix.normalize(p.posix.join(p.posix.dirname(from), uri));
 }
 
 bool _isStateManagement(String uri) =>
@@ -65,9 +67,9 @@ void main() {
       fail('lib/ui no longer exists; update this test.');
     }
     final offenders = <String>[];
-    for (final entity in directory.listSync(recursive: true)) {
+    for (final entity in listSources(directory.path)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
-      final chain = _escape(p.relative(entity.path));
+      final chain = _escape(sourcePath(entity.path));
       if (chain != null) offenders.add(chain.join(' -> '));
     }
     expect(

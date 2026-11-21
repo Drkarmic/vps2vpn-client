@@ -3,11 +3,16 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as path;
 import 'package:rust_api/tray.dart';
 
 import '../../helpers/fake_tray_host.dart';
 
 const _asset = 'assets/images/tray/unix/status_1.png';
+
+/// [posixPath] in the separators of the host, which the bundle directory is
+/// joined with even when a test overrides the target platform.
+String _native(String posixPath) => path.joinAll(path.posix.split(posixPath));
 
 TraySpec _spec({
   String asset = _asset,
@@ -340,8 +345,10 @@ void main() {
       await Tray.instance.show(_spec());
 
       expect(
-        host.lastShown!.image.path,
-        endsWith('flutter_assets/assets/images/tray/unix/3.0x/status_1.png'),
+        path.normalize(host.lastShown!.image.path),
+        endsWith(
+          _native('flutter_assets/assets/images/tray/unix/3.0x/status_1.png'),
+        ),
       );
     });
 
@@ -351,8 +358,10 @@ void main() {
       await Tray.instance.show(_spec());
 
       expect(
-        host.lastShown!.image.path,
-        endsWith('flutter_assets/assets/images/tray/unix/status_1.png'),
+        path.normalize(host.lastShown!.image.path),
+        endsWith(
+          _native('flutter_assets/assets/images/tray/unix/status_1.png'),
+        ),
       );
     });
 
