@@ -175,8 +175,9 @@ class AuthenticationAccountItem extends ConsumerWidget {
         (state) => state.authentication.username,
       ),
       // mihomo and the Dart proxy string both split user:pass on the first
-      // colon, so a colon in the username breaks authentication.
-      normalize: (value) => value.trim().replaceAll(':', ''),
+      // colon, so a colon in the username breaks authentication; the proxy
+      // string also ends at ';' (FlClashHttpOverrides.pacUserInfo).
+      normalize: (value) => value.trim().replaceAll(RegExp('[:;]'), ''),
       onChanged: (ref, value) => ref
           .read(networkSettingProvider.notifier)
           .update((state) => state.copyWith.authentication(username: value)),
@@ -195,7 +196,10 @@ class AuthenticationPasswordItem extends ConsumerWidget {
       selector: networkSettingProvider.select(
         (state) => state.authentication.password,
       ),
-      normalize: (value) => value.trim(),
+      // The app's own requests carry it in the proxy string, which ends at
+      // ';' (FlClashHttpOverrides.pacUserInfo). Credentials it cannot carry
+      // fall back to ones an HttpClient cannot replace later (#73).
+      normalize: (value) => value.trim().replaceAll(';', ''),
       onChanged: (ref, value) => ref
           .read(networkSettingProvider.notifier)
           .update((state) => state.copyWith.authentication(password: value)),

@@ -152,7 +152,7 @@ void main() {
       String pass = password,
     }) {
       final container = buildContainer(mixedPort: port);
-      container.read(networkSettingProvider.notifier).value = NetworkProps()
+      container.read(networkSettingProvider.notifier).value = const NetworkProps()
           .copyWith(
             authentication: AuthenticationProps(
               enable: true,
@@ -257,6 +257,48 @@ void main() {
       expect(received, [expected]);
       expect(uploaded, [1, 2, 3, 4, 5]);
     }
+
+    test(
+      'a new password reaches the proxy on a client kept from before (#73)',
+      () async {
+        final proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(() => proxy.close(force: true));
+        final received = <String?>[];
+        proxy.listen((request) async {
+          received.add(
+            request.headers.value(HttpHeaders.proxyAuthorizationHeader),
+          );
+          await request.drain<void>();
+          await request.response.close();
+        });
+        final container = withAuth(proxy.port, pass: 'semi;old');
+        // The app watches these; unwatched they reset between the requests.
+        container.listen(patchClashConfigProvider, (_, _) {});
+        container.listen(networkSettingProvider, (_, _) {});
+        final client = FlClashHttpOverrides(container).createHttpClient(null);
+        addTearDown(() => client.close(force: true));
+        Future<void> get() async {
+          final request = await client.getUrl(
+            Uri.parse('http://example.invalid/'),
+          );
+          await (await request.close()).drain<void>();
+        }
+
+        await get();
+        container.read(networkSettingProvider.notifier).value = const NetworkProps()
+            .copyWith(
+              authentication: const AuthenticationProps(
+                enable: true,
+                username: username,
+                password: 'rotated',
+              ),
+            );
+        await get();
+        String basic(String pass) =>
+            'Basic ${base64Encode(utf8.encode('$username:$pass'))}';
+        expect(received, [basic('semi;old'), basic('rotated')]);
+      },
+    );
 
     test('authenticate a streamed plain-HTTP upload up front', () async {
       await streamedPut(withAuth, expected);
