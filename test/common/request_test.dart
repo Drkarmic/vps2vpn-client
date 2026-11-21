@@ -12,6 +12,7 @@ import 'package:fl_clash/common/release_asset.dart';
 import 'package:fl_clash/common/request.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' show join;
 import 'package:riverpod/riverpod.dart';
 
 class _StalledHttpClient extends Fake implements HttpClient {
@@ -224,6 +225,47 @@ void main() {
         download(request),
         throwsA(isA<ReleaseNotVerifiedException>()),
       );
+    });
+
+
+    test('a failed retry does not destroy an already verified installer', () async {
+      final existing = File(join(directory.path, name));
+      await existing.writeAsBytes(package);
+      final corrupt = requestServing('$digest  ./$name\n', utf8.encode('corrupt'));
+
+      await expectLater(
+        download(corrupt),
+        throwsA(isA<ReleaseNotVerifiedException>()),
+      );
+
+      expect(await existing.readAsBytes(), package);
+      expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
+    });
+
+    test('a network failure leaves a previous installer intact', () async {
+      final existing = File(join(directory.path, name));
+      await existing.writeAsBytes(package);
+      final downloader = Request()
+        ..releaseDio.httpClientAdapter = _PathAdapter({
+          '/$repository/releases/download/v1.2.3/${updateChecksumsName('v1.2.3')}':
+              () => ResponseBody.fromString('$digest  ./$name\n', 200),
+          '/$repository/releases/download/v1.2.3/$name': () =>
+              ResponseBody.fromString('offline', 503),
+        });
+
+      await expectLater(download(downloader), throwsA(isA<DioException>()));
+      expect(await existing.readAsBytes(), package);
+      expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
+    });
+
+    test('a verified replacement publishes only after checksum passes', () async {
+      final existing = File(join(directory.path, name));
+      await existing.writeAsString('old');
+      final downloader = requestServing('$digest  ./$name\n', package);
+
+      expect(await download(downloader), existing.path);
+      expect(await existing.readAsBytes(), package);
+      expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
     });
 
     test('refuses an asset the listing does not name', () async {
