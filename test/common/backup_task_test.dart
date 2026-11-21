@@ -729,7 +729,10 @@ void main() {
           '../escaped.txt': utf8.encode('outside'),
         });
 
-        await expectLater(restore(archivePath), failsWith(BackupFailure.invalid));
+        await expectLater(
+          restore(archivePath),
+          failsWith(BackupFailure.invalid),
+        );
 
         expect(
           File(join(staging.parent.path, 'escaped.txt')).existsSync(),

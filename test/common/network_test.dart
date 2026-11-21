@@ -119,14 +119,17 @@ void main() {
       expect(await getLocalIpAddress(), '192.168.50.7');
     });
 
-    test('does not select a Wi-Fi IPv6 link-local over reachable IPv4', () async {
-      listing([
-        _FakeInterface('wlan0', [_v6('fe80::abcd')]),
-        _FakeInterface('eth1', [_v4('10.0.0.15')]),
-      ]);
+    test(
+      'does not select a Wi-Fi IPv6 link-local over reachable IPv4',
+      () async {
+        listing([
+          _FakeInterface('wlan0', [_v6('fe80::abcd')]),
+          _FakeInterface('eth1', [_v4('10.0.0.15')]),
+        ]);
 
-      expect(await getLocalIpAddress(), '10.0.0.15');
-    });
+        expect(await getLocalIpAddress(), '10.0.0.15');
+      },
+    );
 
     test('retains valid IPv6 when link-local IPv4 is unusable', () async {
       listing([

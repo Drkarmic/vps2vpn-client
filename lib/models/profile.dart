@@ -86,10 +86,9 @@ extension SubscriptionInfoExt on SubscriptionInfo {
 
   /// Only four-digit UTC calendar years are shown in the UI. The guard must
   /// come before multiplication to milliseconds or DateTime construction.
-  DateTime? get expireDate =>
-      expire > 0 && expire <= 253402300799
-          ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
-          : null;
+  DateTime? get expireDate => expire > 0 && expire <= 253402300799
+      ? DateTime.fromMillisecondsSinceEpoch(expire * 1000)
+      : null;
 }
 
 @freezed

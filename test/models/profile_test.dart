@@ -33,14 +33,10 @@ void main() {
 
     test('rejects impossible calendar epochs before DateTime conversion', () {
       for (final epoch in [9000000000000, 9223372036854775807, -1, 0]) {
-        final sub = SubscriptionInfo(
-          expire: epoch,
-        );
+        final sub = SubscriptionInfo(expire: epoch);
         expect(sub.expireDate, isNull, reason: 'epoch: $epoch');
       }
-      final accepted = SubscriptionInfo.formHString(
-        'expire=1893456000',
-      );
+      final accepted = SubscriptionInfo.formHString('expire=1893456000');
       expect(accepted.expireDate?.millisecondsSinceEpoch, 1893456000000);
     });
 
@@ -142,8 +138,9 @@ void main() {
       expect(
         SubscriptionInfo.fromJson(
           json.decode(
-            json.encode(info.copyWith(announce: 'Hi', supportUrl: 'https://a.b')
-                .toJson()),
+            json.encode(
+              info.copyWith(announce: 'Hi', supportUrl: 'https://a.b').toJson(),
+            ),
           ),
         ),
         info.copyWith(announce: 'Hi', supportUrl: 'https://a.b'),
@@ -163,8 +160,10 @@ void main() {
 
       expect(named.label, '我的线路');
       expect(unnamed.label, 'clash.yaml');
-      expect(subscription.withSubscriptionHeaders(headers({})).label,
-          'sub.example');
+      expect(
+        subscription.withSubscriptionHeaders(headers({})).label,
+        'sub.example',
+      );
     });
 
     test('a label of its own outlives profile-title', () {

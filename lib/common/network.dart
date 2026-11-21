@@ -57,9 +57,7 @@ Future<String?> getLocalIpAddress() async {
           return 0;
         });
   for (final interface in interfaces) {
-    final addresses = interface.addresses
-        .where(_usableLocalAddress)
-        .toList();
+    final addresses = interface.addresses.where(_usableLocalAddress).toList();
     if (addresses.isEmpty) {
       continue;
     }

@@ -120,11 +120,13 @@ class LinkManager {
     if (url != null) {
       // Catch both synchronous callbacks and rejected async callbacks.
       // Logging the original error would expose user subscription tokens.
-      unawaited(Future<void>.sync(() async {
-        await installConfigCallBack(url);
-      }).catchError((Object _) {
-        commonPrint.log('App link handling failed');
-      }));
+      unawaited(
+        Future<void>.sync(() async {
+          await installConfigCallBack(url);
+        }).catchError((Object _) {
+          commonPrint.log('App link handling failed');
+        }),
+      );
     }
   }
 

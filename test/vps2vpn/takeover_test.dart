@@ -126,26 +126,34 @@ void main() {
     expect(await quitRivals(const [fake]), ['Probe']);
   });
 
-  test('quitting targets only observed PIDs and reports what is left', () async {
-    final calls = <List<String>>[];
-    var scans = 0;
-    Future<ProcessResult> run(String exe, List<String> args) async {
-      calls.add([exe, ...args]);
-      if (exe == 'tasklist') {
-        scans++;
-        // After taskkill only an elevated FlClash core survives.
-        return _ok('"FlClashCore.exe","4188","Services","0","9 K"\r\n');
+  test(
+    'quitting targets only observed PIDs and reports what is left',
+    () async {
+      final calls = <List<String>>[];
+      var scans = 0;
+      Future<ProcessResult> run(String exe, List<String> args) async {
+        calls.add([exe, ...args]);
+        if (exe == 'tasklist') {
+          scans++;
+          // After taskkill only an elevated FlClash core survives.
+          return _ok('"FlClashCore.exe","4188","Services","0","9 K"\r\n');
+        }
+        return _ok('');
       }
-      return _ok('');
-    }
 
-    final left = await quitRivals(parseRivals(tasklist), run: run);
-    final kills = calls.where((c) => c.first == 'taskkill').toList();
-    expect(kills.map((c) => c.last), ['4120', '4188', '5000']);
-    expect(kills.every((c) => c.contains('/PID') && !c.contains('/IM') && !c.contains('/T')), isTrue);
-    expect(scans, 1);
-    expect(left, ['FlClash']);
-  });
+      final left = await quitRivals(parseRivals(tasklist), run: run);
+      final kills = calls.where((c) => c.first == 'taskkill').toList();
+      expect(kills.map((c) => c.last), ['4120', '4188', '5000']);
+      expect(
+        kills.every(
+          (c) => c.contains('/PID') && !c.contains('/IM') && !c.contains('/T'),
+        ),
+        isTrue,
+      );
+      expect(scans, 1);
+      expect(left, ['FlClash']);
+    },
+  );
 
   test('same executable name kills only the scanned PIDs', () async {
     const rivals = [
@@ -159,9 +167,13 @@ void main() {
       if (exe == 'tasklist') return _ok('');
       return _ok('');
     }
+
     await quitRivals(rivals, run: run);
     expect(kills.map((args) => args.last), ['4120', '4130']);
-    expect(kills.every((args) => args.contains('/PID') && !args.contains('/T')), isTrue);
+    expect(
+      kills.every((args) => args.contains('/PID') && !args.contains('/T')),
+      isTrue,
+    );
   });
 
   test('cancelling takeover stops pending terminations', () async {
@@ -181,6 +193,7 @@ void main() {
       }
       return _ok('');
     }
+
     final left = await quitRivals(rivals, run: run, isCurrent: () => current);
     expect(kills.map((args) => args.last), ['4120']);
     expect(left, ['FlClash', 'mihomo']);

@@ -36,34 +36,37 @@ void main() {
     expect(vpsLineReportHost({'server': 42}), isNull);
   });
 
-  test('an IPv6-only line reports down and recovery after real scans', () async {
-    final host = vpsLineReportHost({'server': '[2001:4860:4860::8888]'})!;
-    final line = VpsWatchedLine(
-      name: 'hy2-ipv6',
-      kind: 'hy2',
-      host: host,
-      testUrl: 'https://probe.invalid',
-    );
-    var healthy = false;
-    final reports = <(String, bool)>[];
-    final watch = VpsLineWatch(
-      lines: () async => [line],
-      probe: (_) async => healthy,
-      report: (node, ok) async {
-        reports.add((node.host, ok));
-        return true;
-      },
-    );
-    addTearDown(watch.dispose);
+  test(
+    'an IPv6-only line reports down and recovery after real scans',
+    () async {
+      final host = vpsLineReportHost({'server': '[2001:4860:4860::8888]'})!;
+      final line = VpsWatchedLine(
+        name: 'hy2-ipv6',
+        kind: 'hy2',
+        host: host,
+        testUrl: 'https://probe.invalid',
+      );
+      var healthy = false;
+      final reports = <(String, bool)>[];
+      final watch = VpsLineWatch(
+        lines: () async => [line],
+        probe: (_) async => healthy,
+        report: (node, ok) async {
+          reports.add((node.host, ok));
+          return true;
+        },
+      );
+      addTearDown(watch.dispose);
 
-    await watch.checkNow();
-    await watch.checkNow();
-    expect(reports, isEmpty);
-    await watch.checkNow();
-    expect(reports, [(host, false)]);
+      await watch.checkNow();
+      await watch.checkNow();
+      expect(reports, isEmpty);
+      await watch.checkNow();
+      expect(reports, [(host, false)]);
 
-    healthy = true;
-    await watch.checkNow();
-    expect(reports, [(host, false), (host, true)]);
-  });
+      healthy = true;
+      await watch.checkNow();
+      expect(reports, [(host, false), (host, true)]);
+    },
+  );
 }
