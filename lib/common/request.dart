@@ -339,8 +339,8 @@ class Request {
       if (await fileSha256(staged.path) != expected) {
         throw ReleaseNotVerifiedException(name);
       }
-      // Publish only verified bytes. If replacement is unsupported (notably
-      // on some Windows filesystems), fail without deleting the old installer.
+      // Publish only verified bytes. If the destination is locked and cannot
+      // be replaced, fail without deleting the old verified installer.
       await staged.rename(path);
       return path;
     } finally {
