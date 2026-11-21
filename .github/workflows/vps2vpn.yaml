@@ -5,8 +5,16 @@ name: vps2vpn Windows
 # The upstream release workflows are removed: they publish to FlClash channels.
 # Run by hand only: a full build from source takes ~30 minutes. The quick
 # check of an installer built elsewhere is e2e.yaml.
+# With "publish", a build that passed its checks is signed with the update key
+# (secret UPDATE_SIGNING_KEY) and uploaded as the pre-release test-<version>.
+# It becomes the latest release only by hand, after e2e.yaml passes on it.
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Sign the installers and upload them as the pre-release test-<version>'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -23,6 +31,8 @@ jobs:
   windows:
     runs-on: windows-2022
     timeout-minutes: 90
+    permissions:
+      contents: write   # only the publish step uses it
     steps:
       - name: Enable git long paths
         run: git config --global core.longpaths true
@@ -89,6 +99,9 @@ jobs:
           if (-not $src) { throw 'No Windows amd64 setup installer found in dist/' }
           New-Item -ItemType Directory -Force release | Out-Null
           Copy-Item $src.FullName "release/vps2vpn-$ver-windows-amd64-setup.exe"
+          $zip = Get-ChildItem dist -Filter 'vps2vpn-*-windows-amd64-portable.zip' | Select-Object -First 1
+          if ($zip) { Copy-Item $zip.FullName "release/vps2vpn-$ver-windows-amd64-portable.zip" }
+          "VERSION=$ver" >> $env:GITHUB_ENV
           Get-ChildItem release
 
       - name: Record build inputs
@@ -118,6 +131,32 @@ jobs:
           $setup = (Get-ChildItem release -Filter '*-windows-amd64-setup.exe' | Select-Object -First 1).FullName
           if ([string]::IsNullOrWhiteSpace($setup)) { throw 'No Windows amd64 setup installer found in release/' }
           ./.github/scripts/takeover-e2e.ps1 -Setup $setup -Out e2e
+
+      - name: Sign and upload the pre-release
+        if: ${{ inputs.publish }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$SIGNING_KEY" ] || { echo "secret UPDATE_SIGNING_KEY is not set" >&2; exit 1; }
+          key="$RUNNER_TEMP/update-key.pem"
+          trap 'rm -f "$key"' EXIT
+          umask 077
+          printf '%s\n' "$SIGNING_KEY" > "$key"
+          # The app only takes signatures from the key built into it.
+          want=$(grep -oE "[0-9a-f]{64}" lib/vps2vpn/update_signing.dart | head -1)
+          have=$(openssl pkey -in "$key" -pubout -outform DER | tail -c 32 | od -An -tx1 | tr -d ' \n')
+          [ "$want" = "$have" ] || { echo "UPDATE_SIGNING_KEY is not the key the app trusts" >&2; exit 1; }
+          cd release
+          files=(vps2vpn-$VERSION-windows-amd64-setup.exe vps2vpn-$VERSION-windows-amd64-portable.zip)
+          sha256sum "${files[@]}" > SHA256SUMS.txt
+          bash ../tool/sign_update.sh -k "$key" "${files[@]}"
+          rm -f "$key"
+          gh release create "test-$VERSION" --repo "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" \
+            --title "test $VERSION" --notes "Pre-release for the automated installer check. Not for users." \
+            "${files[@]}" "${files[@]/%/.sig}" SHA256SUMS.txt
 
       - name: Upload installer
         # The account's artifact storage can be full; results are in the log too.
