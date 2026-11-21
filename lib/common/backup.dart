@@ -264,6 +264,12 @@ Future<void> _extract(String archivePath, String stagingDirPath) async {
       final output = _BoundedOutputFileStream(outPath, file.size);
       try {
         file.writeContent(output);
+      } on BackupException {
+        rethrow;
+      } on Exception {
+        // A corrupt entry, or one that inflates past its declared size
+        // (archive refuses it itself since 4.5).
+        throw const BackupException(BackupFailure.invalid);
       } finally {
         await output.close();
       }
