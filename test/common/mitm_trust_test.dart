@@ -386,7 +386,7 @@ void main() {
       }
       return LinuxMitmTrustStore(
         home: '${root.path}/home',
-        searchPath: '/nonexistent:${bin.path}',
+        searchPath: ['/nonexistent', bin.path],
         run: processes.run,
         elevate: (command) async {
           elevated.add(command);
