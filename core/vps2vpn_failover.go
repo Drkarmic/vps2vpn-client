@@ -72,10 +72,22 @@ func (w *lineWatch) observe(groups []lineGroup) []lineMove {
 	at := w.clock()
 	var moves []lineMove
 	present := make(map[string]bool, len(groups))
+	clearCooldown := func(name string) {
+		for key := range w.closed {
+			if key[0] == name {
+				delete(w.closed, key)
+			}
+		}
+	}
 	for _, group := range groups {
 		present[group.name] = true
 		last, known := w.seen[group.name]
 		w.seen[group.name] = lineSeen{id: group.id, now: group.now}
+		if known && last.id != group.id {
+			// A fresh fallback has fresh connections. A prior instance's
+			// cooldown must not suppress a new failover after config reload.
+			clearCooldown(group.name)
+		}
 		if !known || last.id != group.id || last.now == "" || last.now == group.now {
 			continue
 		}
@@ -92,6 +104,8 @@ func (w *lineWatch) observe(groups []lineGroup) []lineMove {
 	for name := range w.seen {
 		if !present[name] {
 			delete(w.seen, name)
+			// Stop/disable/restart is also a fresh group lifetime.
+			clearCooldown(name)
 		}
 	}
 	for key, closedAt := range w.closed {
