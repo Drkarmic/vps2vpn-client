@@ -1,8 +1,14 @@
 package core
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/metacubex/mihomo/adapter"
+	"github.com/metacubex/mihomo/adapter/outboundgroup"
+	"github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/tunnel"
 )
 
 type fakeLineConn struct {
@@ -129,6 +135,74 @@ func TestLineWatchForgetsAGroupThatIsGone(t *testing.T) {
 	watch.observe(nil)
 	if moves := watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")}); len(moves) != 0 {
 		t.Fatalf("a group seen again after it was gone moved: %v", moves)
+	}
+}
+
+func TestLineWatchLetsGoOfTheGroupsOnceStopped(t *testing.T) {
+	watch, _ := newTestLineWatch()
+	isRunning.Store(false)
+	vpsOn(t)
+	watch.observe([]lineGroup{smartGroupAt(new(int), "hy2")})
+	checkLineMoves(watch)
+	if len(watch.seen) != 0 {
+		t.Fatalf("a stopped core still holds %d groups", len(watch.seen))
+	}
+}
+
+func TestLineWatchLetsGoOfTheGroupsOnceSmartLinesAreOff(t *testing.T) {
+	watch, _ := newTestLineWatch()
+	isRunning.Store(true)
+	t.Cleanup(func() { isRunning.Store(false) })
+	vpsSmartEnabled.Store(false)
+	watch.observe([]lineGroup{smartGroupAt(new(int), "hy2")})
+	checkLineMoves(watch)
+	if len(watch.seen) != 0 {
+		t.Fatalf("smart lines off, the watch still holds %d groups", len(watch.seen))
+	}
+}
+
+func TestLineCheckSurvivesAPanic(t *testing.T) {
+	runLineCheck(func() { panic("boom") })
+	ran := false
+	runLineCheck(func() { ran = true })
+	if !ran {
+		t.Fatal("the check after a panic did not run")
+	}
+}
+
+// Against mihomo's own Fallback: the line it leaves is judged by the group's
+// test URL, and a group that is not a Fallback is not watched.
+func TestLineWatchFollowsARealFallbackOffADeadLine(t *testing.T) {
+	const url = "http://line-watch.invalid/generate_204"
+	members := []constant.Proxy{namedProxy("hy2"), namedProxy("reality")}
+	fallback := newLocalFallback(t, vpsSmartGroup, url, outboundgroup.FallbackOption{}, members)
+	tunnel.UpdateProxies(map[string]constant.Proxy{
+		vpsSmartGroup: adapter.NewProxy(fallback),
+		vpsAIGroup:    selectorGroup(t, vpsAIGroup, "hy2"),
+	}, nil)
+	t.Cleanup(func() { tunnel.UpdateProxies(nil, nil) })
+
+	watch, _ := newTestLineWatch()
+	groups := currentLineGroups()
+	if len(groups) != 1 || groups[0].name != vpsSmartGroup || groups[0].now != "hy2" {
+		t.Fatalf("groups = %+v, want the smart group on hy2 alone", groups)
+	}
+	watch.observe(groups)
+
+	// A probe that fails marks hy2 down for the group's URL only.
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _ = members[0].URLTest(dead, url, nil)
+	if members[0].AliveForTestUrl(url) {
+		t.Fatal("the failed probe left hy2 up")
+	}
+
+	moves := watch.observe(currentLineGroups())
+	if len(moves) != 1 || moves[0] != (lineMove{group: vpsSmartGroup, from: "hy2", to: "reality"}) {
+		t.Fatalf("moves = %v", moves)
+	}
+	if groups[0].alive("gone") != true {
+		t.Fatal("a line the group no longer has was taken for a dead one")
 	}
 }
 

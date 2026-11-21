@@ -198,23 +198,37 @@ var (
 	lineWatchState = newLineWatch(lineWatchCooldown, time.Now)
 )
 
+// The watch runs for the life of the process, and on Android that process is
+// the app: a panic on one tick must not take it down or end the watch.
 func startLineWatch() {
 	lineWatchOnce.Do(func() {
 		go func() {
 			ticker := time.NewTicker(lineWatchInterval)
 			defer ticker.Stop()
 			for range ticker.C {
-				checkLineMoves()
+				runLineCheck(func() { checkLineMoves(lineWatchState) })
 			}
 		}()
 	})
 }
 
-func checkLineMoves() {
+func runLineCheck(check func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			logError("panic in line watch: %v\n%s", r, stackTrace())
+		}
+	}()
+	check()
+}
+
+func checkLineMoves(w *lineWatch) {
 	if !isRunning.Load() || !vpsSmartEnabled.Load() {
+		// The groups last seen hold the whole proxy graph of a config that
+		// is gone or stopped, and are no baseline for the next one.
+		w.observe(nil)
 		return
 	}
-	moves := lineWatchState.observe(currentLineGroups())
+	moves := w.observe(currentLineGroups())
 	if len(moves) == 0 {
 		return
 	}
