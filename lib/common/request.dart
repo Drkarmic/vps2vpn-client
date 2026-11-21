@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -308,29 +309,47 @@ class Request {
     }
     final path = join(directory, name);
     final uri = releaseAssetUri(tag, name);
-    if (app case final android?) {
-      await android.downloadFile(
-        uri,
-        path,
-        title: name,
-        onReceiveProgress: onReceiveProgress ?? (_, _) {},
-        cancelToken: cancelToken ?? CancelToken(),
-      );
-    } else {
-      await releaseDio.downloadUri(
-        uri,
-        path,
-        onReceiveProgress: onReceiveProgress,
-        cancelToken: cancelToken,
-      );
-    }
-    if (await fileSha256(path) != expected) {
+    // Download into an unpredictable sibling rather than the final file:
+    // both Dio and Android DownloadManager may truncate or delete their
+    // destination before any network or checksum error is known.
+    // Keep staging on the same filesystem for an atomic publish.
+    final random = Random.secure();
+    final suffix = [
+      random.nextInt(1 << 32).toRadixString(36),
+      random.nextInt(1 << 32).toRadixString(36),
+    ].join();
+    final staged = File(join(directory, '.vps2vpn-$suffix-$name'));
+    try {
+      if (app case final android?) {
+        await android.downloadFile(
+          uri,
+          staged.path,
+          title: name,
+          onReceiveProgress: onReceiveProgress ?? (_, _) {},
+          cancelToken: cancelToken ?? CancelToken(),
+        );
+      } else {
+        await releaseDio.downloadUri(
+          uri,
+          staged.path,
+          onReceiveProgress: onReceiveProgress,
+          cancelToken: cancelToken,
+        );
+      }
+      if (await fileSha256(staged.path) != expected) {
+        throw ReleaseNotVerifiedException(name);
+      }
+      // Publish only verified bytes. If replacement is unsupported (notably
+      // on some Windows filesystems), fail without deleting the old installer.
+      await staged.rename(path);
+      return path;
+    } finally {
       try {
-        await File(path).safeDelete();
-      } catch (_) {}
-      throw ReleaseNotVerifiedException(name);
+        await staged.delete();
+      } on FileSystemException {
+        // A successful rename has already removed the staging path.
+      }
     }
-    return path;
   }
 }
 
