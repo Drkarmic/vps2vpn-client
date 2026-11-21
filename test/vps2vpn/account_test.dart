@@ -1,6 +1,11 @@
+import 'package:fl_clash/common/app_update.dart';
+import 'package:fl_clash/common/release_asset.dart';
+import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/account.dart';
+import 'package:fl_clash/vps2vpn/auto_update.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/test_app.dart';
@@ -31,7 +36,15 @@ Finder _texts() => find.descendant(
 
 const _gb = 1024 * 1024 * 1024;
 
+SelfUpdateAsset? _asset(ReleaseOs? os) => os == null
+    ? null
+    : (os: os, arch: ReleaseArch.amd64, form: null, extension: '');
+
 void main() {
+  final realAsset = resolveSelfUpdateAsset;
+  setUp(() => resolveSelfUpdateAsset = () => null);
+  tearDown(() => resolveSelfUpdateAsset = realAsset);
+
   testWidgets('hidden for subscriptions that are not vps2vpn links', (
     tester,
   ) async {
@@ -135,5 +148,65 @@ void main() {
       withClient('1.1.0'),
     );
     expect(_texts(), findsNothing);
+  });
+
+  test('installs by itself only what this build can run', () {
+    const setup = 'vps2vpn-1.1.0-windows-amd64-setup.exe';
+    const zip = 'vps2vpn-1.1.0-windows-amd64-portable.zip';
+    const apk = 'vps2vpn-1.1.0-android-arm64.apk';
+    resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+    expect(vpsSelfInstallable(setup), isTrue);
+    expect(vpsSelfInstallable(zip), isFalse);
+    expect(vpsSelfInstallable(apk), isFalse);
+    resolveSelfUpdateAsset = () => _asset(ReleaseOs.android);
+    expect(vpsSelfInstallable(apk), isTrue);
+    expect(vpsSelfInstallable(setup), isFalse);
+    // A portable Windows copy, macOS and Linux keep the manual download.
+    resolveSelfUpdateAsset = () => null;
+    expect(vpsSelfInstallable(setup), isFalse);
+    expect(vpsSelfInstallable(apk), isFalse);
+  });
+
+  testWidgets('an installed build updates, shows progress and installs', (
+    tester,
+  ) async {
+    resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+    await _pump(
+      tester,
+      const VpsUpdateCard(currentVersion: '1.0.0'),
+      VpsMemberResult(
+        member: VpsMember(
+          name: 'Ann',
+          enabled: true,
+          client: VpsClientRelease(
+            version: '1.1.0',
+            url: Uri.parse(
+              'https://example.com/client/vps2vpn-1.1.0-windows-amd64-setup.exe',
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Update'), findsOneWidget);
+    expect(find.textContaining('installs itself'), findsOneWidget);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(VpsUpdateCard)),
+    );
+    final download = container.read(updateDownloadStateProvider.notifier);
+    download.value = const UpdateDownloading(
+      'v1.1.0',
+      received: 50,
+      total: 100,
+    );
+    await tester.pump();
+    expect(find.text('Downloading 50%'), findsOneWidget);
+    download.value = const UpdateReady('v1.1.0', 'setup.exe');
+    await tester.pump();
+    expect(find.text('Install & restart'), findsOneWidget);
+    // A pending update for another version is not this one.
+    download.value = const UpdateReady('v1.0.5', 'setup.exe');
+    await tester.pump();
+    expect(find.text('Update'), findsOneWidget);
+    download.value = null;
   });
 }

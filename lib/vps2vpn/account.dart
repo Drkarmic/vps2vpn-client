@@ -3,17 +3,15 @@
 // hidden for subscriptions that are not vps2vpn links.
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
-import 'package:fl_clash/state.dart';
+import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/vps2vpn/auto_update.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:prism_ui/prism_ui.dart' show BannerLevel;
-import 'package:url_launcher/url_launcher.dart';
 
 String _ago(BuildContext context, DateTime at) {
   final d = DateTime.now().difference(at);
@@ -285,16 +283,10 @@ class VpsAccountCard extends ConsumerWidget {
   }
 }
 
-String? _appVersion() {
-  try {
-    return globalState.packageInfo.version;
-  } catch (_) {
-    return null;
-  }
-}
-
-/// Settings page: the owner published a newer client on the panel. Opens
-/// the download in the browser; never downloads or installs by itself.
+/// Settings page: the owner published a newer client on the panel. A build
+/// that installs by itself downloads it (the app also does so in the
+/// background, see auto_update.dart) and installs it with one tap; any other
+/// gets the signature-checked installer in its downloads folder.
 class VpsUpdateCard extends ConsumerWidget {
   const VpsUpdateCard({super.key, this.currentVersion});
 
@@ -304,10 +296,20 @@ class VpsUpdateCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final release = ref.watch(vpsMemberProvider).value?.member?.client;
-    final current = currentVersion ?? _appVersion();
+    final current = currentVersion ?? vpsAppVersion();
+    final download = ref.watch(updateDownloadStateProvider);
     if (release == null || current == null || !release.newerThan(current)) {
       return const SizedBox.shrink();
     }
+    final installs = vpsSelfInstallable(
+      vpsReleaseDownload(release).pathSegments.lastOrNull ?? '',
+    );
+    final tag = 'v${release.version}';
+    final ready = download is UpdateReady && download.tag == tag;
+    final busy = download is UpdateDownloading;
+    final percent = download is UpdateDownloading && download.total > 0
+        ? ' ${(download.received * 100 ~/ download.total).clamp(0, 100)}%'
+        : '';
     final p = VpsPalette.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -333,11 +335,18 @@ class VpsUpdateCard extends ConsumerWidget {
                   const SizedBox(height: 4),
                   Text(
                     release.notes ??
-                        tr(
-                          context,
-                          '当前 $current，下载后运行安装包即可升级',
-                          'You have $current; run the downloaded installer',
-                        ),
+                        (installs
+                            ? tr(
+                                context,
+                                '当前 $current，更新会自动安装并重启 vps2vpn',
+                                'You have $current; the update installs '
+                                    'itself and restarts vps2vpn',
+                              )
+                            : tr(
+                                context,
+                                '当前 $current，下载后运行安装包即可升级',
+                                'You have $current; run the downloaded installer',
+                              )),
                     style: vpsText(p, size: 13, color: p.soft, height: 1.45),
                   ),
                 ],
@@ -345,86 +354,27 @@ class VpsUpdateCard extends ConsumerWidget {
             ),
             const SizedBox(width: 12),
             VpsButton(
-              label: tr(context, '下载', 'Download'),
+              label: ready
+                  ? tr(context, '安装并重启', 'Install & restart')
+                  : busy
+                  ? tr(context, '下载中$percent', 'Downloading$percent')
+                  : installs
+                  ? tr(context, '更新', 'Update')
+                  : tr(context, '下载', 'Download'),
               filled: true,
-              onTap: () => unawaited(
-                _download(
-                  context,
-                  ref,
-                  release.downloadFor(Platform.operatingSystem),
-                  current,
-                ),
-              ),
+              onTap: ready
+                  ? () => unawaited(
+                      ref.read(commonActionProvider.notifier).installUpdate(),
+                    )
+                  : busy
+                  ? null
+                  : () => unawaited(
+                      vpsDownloadPanelUpdate(ref, release, current: current),
+                    ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  /// Downloads inside the app with the panel's pinned certificate (a
-  /// self-signed panel would trip the browser) and keeps the installer only
-  /// when it carries the release signature, then shows the folder. There is
-  /// no browser fallback: a browser download could not be checked, and a
-  /// panel that fails the check on purpose must not get one.
-  Future<void> _download(
-    BuildContext context,
-    WidgetRef ref,
-    Uri url,
-    String current,
-  ) async {
-    dialogs.showBanner(
-      tr(context, '正在下载新版本…', 'Downloading the new version…'),
-      level: BannerLevel.info,
-    );
-    try {
-      final pins = await ref.read(vpsPanelPinsProvider.future);
-      final dir = Directory(await appPath.downloadDirPath);
-      await dir.create(recursive: true);
-      final file = await vpsDownloadRelease(
-        url,
-        dir,
-        pinnedSha256: pins,
-        currentVersion: current,
-      );
-      if (!context.mounted) return;
-      dialogs.showBanner(
-        tr(
-          context,
-          '已下载并校验签名：${file.path}，关闭 vps2vpn 后运行它即可升级',
-          'Downloaded and signature checked: ${file.path}. Quit vps2vpn, '
-              'then run it to upgrade',
-        ),
-        level: BannerLevel.info,
-      );
-      await launchUrl(Uri.file(dir.path));
-    } on VpsUpdateRejected catch (e) {
-      if (!context.mounted) return;
-      dialogs.showBanner(switch (e.reason) {
-        'unsigned' => tr(
-          context,
-          '这个安装包没有签名，已拒绝。请让管理员把发布页上同名的 .sig 文件一起放到面板上',
-          'This installer is not signed and was refused. Ask the owner to '
-              'put the matching .sig file from the release on the panel',
-        ),
-        'notNewer' => tr(
-          context,
-          '面板提供的安装包不比当前版本新，已拒绝',
-          'The installer on the panel is not newer than this version; refused',
-        ),
-        _ => tr(
-          context,
-          '安装包签名不对，可能被篡改，已删除。请联系管理员',
-          "The installer's signature is wrong (it may have been tampered "
-              'with) and it was deleted. Contact the owner',
-        ),
-      }, level: BannerLevel.warning);
-    } catch (_) {
-      if (!context.mounted) return;
-      dialogs.showBanner(
-        tr(context, '下载失败，请稍后再试', 'The download failed; try again later'),
-        level: BannerLevel.warning,
-      );
-    }
   }
 }

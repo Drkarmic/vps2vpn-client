@@ -12,6 +12,7 @@ import 'package:fl_clash/plugins/app.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/ui/ui.dart';
+import 'package:fl_clash/vps2vpn/auto_update.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
@@ -59,6 +60,7 @@ class Application extends ConsumerStatefulWidget {
 
 class ApplicationState extends ConsumerState<Application> {
   Timer? _autoUpdateProfilesTaskTimer;
+  Timer? _clientUpdateTimer;
   bool _preHasVpn = false;
   // Android's NetworkObserver resets the Core on a new network itself.
   late final _networkReset = NetworkResetTrigger(
@@ -80,6 +82,7 @@ class ApplicationState extends ConsumerState<Application> {
         exit(0);
       }
       _autoUpdateProfilesTask();
+      _clientUpdateTask(const Duration(seconds: 30));
       _initLink();
       if (!safeModeBuild) {
         unawaited(app?.initShortcuts());
@@ -113,6 +116,16 @@ class ApplicationState extends ConsumerState<Application> {
       unawaited(
         ref.read(profilesActionProvider.notifier).addProfileFromLink(url),
       );
+    });
+  }
+
+  /// A newer client the panel offers is fetched in the background and then
+  /// offered for a one-tap install (vps2vpn/auto_update.dart).
+  void _clientUpdateTask(Duration delay) {
+    _clientUpdateTimer = Timer(delay, () async {
+      if (!safeModeBuild) await vpsAutoUpdateCheck(ref);
+      if (!mounted) return;
+      _clientUpdateTask(vpsUpdateCheckInterval);
     });
   }
 
@@ -214,6 +227,7 @@ class ApplicationState extends ConsumerState<Application> {
   void dispose() {
     linkManager.destroy();
     _autoUpdateProfilesTaskTimer?.cancel();
+    _clientUpdateTimer?.cancel();
     _networkReset.dispose();
     super.dispose();
   }

@@ -851,6 +851,7 @@ Future<File> vpsDownloadRelease(
   Set<String> pinnedSha256 = const {},
   String? currentVersion,
   String publicKeyHex = vpsUpdatePublicKeyHex,
+  void Function(int received, int total)? onProgress,
 }) async {
   if (!url.isScheme('https')) {
     throw const HttpException('Release link is not HTTPS');
@@ -899,6 +900,7 @@ Future<File> vpsDownloadRelease(
       throw HttpException('Download failed (HTTP ${res.statusCode})');
     }
 
+    final total = res.contentLength > 0 ? res.contentLength : 0;
     final output = await part.open(mode: FileMode.write);
     final digest = _DigestSink();
     final hasher = sha256.startChunkedConversion(digest);
@@ -916,6 +918,7 @@ Future<File> vpsDownloadRelease(
         // Await disk I/O: IOSink.add queues unbounded pending writes on slow disks.
         await output.writeFrom(chunk);
         hasher.add(chunk);
+        onProgress?.call(size, total);
       }
     } finally {
       await output.close();
