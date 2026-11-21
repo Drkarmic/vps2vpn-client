@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -46,6 +47,7 @@ class DAVTransport {
   }
 
   static const _maxRedirects = 5;
+  static const maxBackupBytes = 512 * 1024 * 1024;
 
   final String user;
   final String password;
@@ -113,6 +115,111 @@ class DAVTransport {
     );
   }
 
+  /// Send the backup directly from disk rather than holding a ZIP in RAM.
+  /// A fresh stream is needed if the server first asks for Digest auth.
+  Future<void> putFile(String path, String filePath) async {
+    final file = File(filePath);
+    final length = await file.length();
+    await _send(
+      'PUT',
+      path,
+      bodyFactory: () => file.openRead(),
+      headers: {
+        Headers.contentTypeHeader: 'application/octet-stream',
+        Headers.contentLengthHeader: length,
+      },
+      accept: const {200, 201, 204},
+    );
+  }
+
+  /// Save a bounded response to a sibling temporary file. A failed download,
+  /// an oversized stream, or an incomplete 206 must not overwrite a backup.
+  Future<void> getFile(
+    String path,
+    String filePath, {
+    int maxBytes = maxBackupBytes,
+  }) async {
+    final response = await _send(
+      'GET',
+      path,
+      responseType: ResponseType.stream,
+      accept: const {200, 206},
+    );
+    final data = response.data;
+    if (data is! ResponseBody) {
+      throw DAVException(method: 'GET', path: path, reasonPhrase: 'missing body');
+    }
+    final random = Random.secure();
+    final suffix =
+        '${random.nextInt(1 << 32).toRadixString(16)}'
+        '${random.nextInt(1 << 32).toRadixString(16)}';
+    final staging = File('$filePath.$pid.$suffix.tmp');
+    RandomAccessFile? writer;
+    try {
+      final declared = int.tryParse(
+        response.headers.value(Headers.contentLengthHeader) ?? '',
+      );
+      if (declared != null && declared > maxBytes) {
+        await data.stream.listen(null).cancel();
+        throw DAVException(
+          method: 'GET',
+          path: path,
+          reasonPhrase: 'backup exceeds download limit',
+        );
+      }
+      await staging.parent.create(recursive: true);
+      writer = await staging.open(mode: FileMode.write);
+      var received = 0;
+      await for (final chunk in data.stream) {
+        if (chunk.length > maxBytes - received) {
+          throw DAVException(
+            method: 'GET',
+            path: path,
+            reasonPhrase: 'backup exceeds download limit',
+          );
+        }
+        // Wait for disk I/O so a slow disk cannot queue the entire download.
+        await writer.writeFrom(chunk);
+        received += chunk.length;
+      }
+      // A short 200 must not replace an existing backup with a truncated ZIP.
+      // Compressed responses may report the wire length, not decoded bytes.
+      if (declared != null &&
+          (response.headers.value('content-encoding') ?? 'identity') ==
+              'identity' &&
+          received != declared) {
+        throw DAVException(
+          method: 'GET',
+          path: path,
+          reasonPhrase: 'response length does not match Content-Length',
+        );
+      }
+      if (response.statusCode == 206 &&
+          !_coversWhole(response.headers.value('content-range'), received)) {
+        throw DAVException(
+          method: 'GET',
+          path: path,
+          statusCode: 206,
+          reasonPhrase: 'incomplete content range',
+        );
+      }
+      await writer.flush();
+      await writer.close();
+      writer = null;
+      await staging.rename(filePath);
+    } catch (_) {
+      if (writer != null) {
+        try {
+          await writer.close();
+        } catch (_) {}
+      }
+      try {
+        if (await staging.exists()) await staging.delete();
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
   Future<Uint8List> get(String path) async {
     final response = await _send(
       'GET',
@@ -157,6 +264,7 @@ class DAVTransport {
     String path, {
     bool collection = false,
     List<int>? body,
+    Stream<List<int>> Function()? bodyFactory,
     Map<String, dynamic> headers = const {},
     ResponseType responseType = ResponseType.plain,
     required Set<int> accept,
@@ -170,6 +278,7 @@ class DAVTransport {
         uri,
         origin: origin,
         body: body,
+        bodyFactory: bodyFactory,
         headers: headers,
         responseType: responseType,
       );
@@ -183,6 +292,7 @@ class DAVTransport {
           !retriedAuth &&
           _sameOrigin(uri, origin) &&
           _adoptChallenge(response)) {
+        await _discardStream(response);
         retriedAuth = true;
         continue;
       }
@@ -195,16 +305,27 @@ class DAVTransport {
           origin: origin,
           next: next,
         )) {
+          await _discardStream(response);
           uri = next;
           continue;
         }
       }
+      await _discardStream(response);
       throw DAVException(
         method: method,
         path: path,
         statusCode: status,
         reasonPhrase: response.statusMessage,
       );
+    }
+  }
+
+  /// Cancel a streamed error/redirect before retrying; the request can hold
+  /// an open connection even though the response body will never be read.
+  static Future<void> _discardStream(Response<dynamic> response) async {
+    final body = response.data;
+    if (body is ResponseBody) {
+      await body.stream.listen(null).cancel();
     }
   }
 
@@ -231,12 +352,13 @@ class DAVTransport {
     Uri uri, {
     required Uri origin,
     List<int>? body,
+    Stream<List<int>> Function()? bodyFactory,
     required Map<String, dynamic> headers,
     required ResponseType responseType,
   }) {
     return _dio.requestUri<dynamic>(
       uri,
-      data: body,
+      data: bodyFactory?.call() ?? body,
       options: Options(
         method: method,
         headers: {...headers, ..._authorization(method, uri, origin)},
