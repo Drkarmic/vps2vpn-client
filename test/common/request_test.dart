@@ -404,6 +404,27 @@ void main() {
       expect((proxied.calls, direct.calls), (1, 0));
     });
 
+    test('getFileResponseForUrl enforces the same byte limit', () async {
+      final (:request, :proxied, :direct) = routes(
+        proxied: (_) => ResponseBody(
+          Stream.fromIterable([
+            Uint8List.fromList([1, 2, 3]),
+            Uint8List.fromList([4, 5, 6]),
+          ]),
+          200,
+        ),
+        direct: _status(200, 'must not be asked'),
+      );
+
+      await expectLater(
+        request.getFileResponseForUrl(url, maxBytes: 4),
+        throwsA(isA<SubscriptionTooLargeException>()),
+      );
+      final small = await request.getFileResponseForUrl(url, maxBytes: 6);
+      expect(small.data, [1, 2, 3, 4, 5, 6]);
+      expect(direct.calls, 0);
+    });
+
     test('enforces the same byte limit on the direct fallback', () async {
       final (:request, :proxied, :direct) = routes(
         proxied: _status(502),

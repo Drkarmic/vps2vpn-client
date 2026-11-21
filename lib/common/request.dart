@@ -187,9 +187,14 @@ class Request {
     );
   }
 
-  Future<Response<Uint8List>> getFileResponseForUrl(String url) async {
+  /// Bounded like a subscription: what it fetches (a custom config, a MITM
+  /// resource) is held in memory whole.
+  Future<Response<Uint8List>> getFileResponseForUrl(
+    String url, {
+    int maxBytes = maxSubscriptionBytes,
+  }) async {
     try {
-      return await _download<Uint8List>(url, ResponseType.bytes);
+      return await _downloadCapped(url, maxBytes);
     } catch (e) {
       commonPrint.log(
         'getFileResponseForUrl error ${compactError(e)}',
