@@ -226,7 +226,11 @@ func vpsWildcardMatchesAI(pattern string) bool {
 		}
 	}
 	for _, domain := range vpsAIDomains {
-		if vpsWildcardMatches(pattern, domain) || vpsWildcardMatches(pattern, "a."+domain) {
+		// A literal AI-domain tail can have arbitrarily many leading labels.
+		// Checking just the root and "a."+domain misses rules such as
+		// *.*.claude.ai or api.*.openai.com that match deeper subdomains.
+		if strings.HasSuffix(pattern, "."+domain) ||
+			vpsWildcardMatches(pattern, domain) || vpsWildcardMatches(pattern, "a."+domain) {
 			return true
 		}
 	}

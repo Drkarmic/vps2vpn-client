@@ -88,6 +88,44 @@ func TestVps2vpnEnhanceKeepsCuratedAIRules(t *testing.T) {
 	}
 }
 
+func TestVps2vpnEnhancePreservesDeepWildcardAIRules(t *testing.T) {
+	vpsOn(t)
+	cases := []struct {
+		pattern string
+		sample  string
+	}{
+		{"*.*.claude.ai", "a.b.claude.ai"},
+		{"api.*.openai.com", "api.sub.openai.com"},
+		{"*.*.gemini.google.com", "x.y.gemini.google.com"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.pattern, func(t *testing.T) {
+			if !vpsWildcardMatches(tt.pattern, tt.sample) {
+				t.Fatalf("%q should match %q", tt.pattern, tt.sample)
+			}
+			if !vpsWildcardMatchesAI(tt.pattern) {
+				t.Fatalf("%q was not detected as covering an AI subdomain", tt.pattern)
+			}
+			rule := "DOMAIN-WILDCARD," + tt.pattern + ",Proxy"
+			raw := vpsTestRaw(rule, "MATCH,Proxy")
+			vps2vpnEnhance(raw, 0)
+			if vpsGroup(raw, vpsAIGroup) != nil {
+				t.Fatal("injected AI group would override existing wildcard rule")
+			}
+			if raw.Rule[0] != rule {
+				t.Fatalf("curated rule was displaced: %v", raw.Rule[:2])
+			}
+		})
+	}
+	if vpsWildcardMatchesAI("*.*.example.org") {
+		t.Fatal("unrelated wildcard must not be treated as an AI domain rule")
+	}
+	inline := map[string]any{"behavior": "domain", "payload": []any{"*.*.claude.ai"}}
+	if !vpsInlineProviderRoutesAI(inline) {
+		t.Fatal("inline domain rule provider with deep wildcard was missed")
+	}
+}
+
 func TestVps2vpnEnhanceSingleLineUntouched(t *testing.T) {
 	vpsOn(t)
 	raw := config.DefaultRawConfig()
