@@ -344,11 +344,25 @@ class Request {
       await staged.rename(path);
       return path;
     } finally {
-      try {
-        await staged.delete();
-      } on FileSystemException {
-        // A successful rename has already removed the staging path.
+      await _deleteStaged(staged);
+    }
+  }
+}
+
+/// Removes a staging file unless a successful rename already did. A cancelled
+/// Dio download fails its future before it has closed the file, and Windows
+/// refuses to delete an open file, so retry for a moment; anything still left
+/// is cleared with the update folder at the next start.
+Future<void> _deleteStaged(File staged) async {
+  for (var attempt = 0; ; attempt++) {
+    try {
+      await staged.delete();
+      return;
+    } on FileSystemException {
+      if (attempt >= 20 || !await staged.exists()) {
+        return;
       }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
     }
   }
 }
