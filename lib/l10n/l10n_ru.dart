@@ -3992,4 +3992,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get subscriptionTooLarge => 'Подписка слишком большая для загрузки';
+
+  @override
+  String get subscriptionAnnounce => 'Сообщение от провайдера';
+
+  @override
+  String get subscriptionWebPage => 'Моя страница';
+
+  @override
+  String get subscriptionSupport => 'Связаться с поддержкой';
+
+  @override
+  String get subscriptionLinkOpenFailed => 'Не удалось открыть ссылку';
 }

@@ -132,6 +132,21 @@ class $ProfilesTable extends Profiles
         type: DriftSqlType.int,
         requiredDuringInsert: true,
       );
+  static const VerificationMeta _userAutoUpdateDurationMeta =
+      const VerificationMeta('userAutoUpdateDuration');
+  @override
+  late final GeneratedColumn<bool> userAutoUpdateDuration =
+      GeneratedColumn<bool>(
+        'user_auto_update_duration',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("user_auto_update_duration" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   @override
   late final GeneratedColumnWithTypeConverter<SubscriptionInfo?, String>
   subscriptionInfo = GeneratedColumn<String>(
@@ -205,6 +220,7 @@ class $ProfilesTable extends Profiles
     matchTarget,
     exitTargets,
     autoUpdateDurationMillis,
+    userAutoUpdateDuration,
     subscriptionInfo,
     autoUpdate,
     selectedMap,
@@ -304,6 +320,15 @@ class $ProfilesTable extends Profiles
     } else if (isInserting) {
       context.missing(_autoUpdateDurationMillisMeta);
     }
+    if (data.containsKey('user_auto_update_duration')) {
+      context.handle(
+        _userAutoUpdateDurationMeta,
+        userAutoUpdateDuration.isAcceptableOrUnknown(
+          data['user_auto_update_duration']!,
+          _userAutoUpdateDurationMeta,
+        ),
+      );
+    }
     if (data.containsKey('auto_update')) {
       context.handle(
         _autoUpdateMeta,
@@ -379,6 +404,10 @@ class $ProfilesTable extends Profiles
         DriftSqlType.int,
         data['${effectivePrefix}auto_update_duration_millis'],
       )!,
+      userAutoUpdateDuration: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}user_auto_update_duration'],
+      )!,
       subscriptionInfo: $ProfilesTable.$convertersubscriptionInfo.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.string,
@@ -452,6 +481,7 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
   final String? matchTarget;
   final Map<String, String>? exitTargets;
   final int autoUpdateDurationMillis;
+  final bool userAutoUpdateDuration;
   final SubscriptionInfo? subscriptionInfo;
   final bool autoUpdate;
   final Map<String, String> selectedMap;
@@ -471,6 +501,7 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
     this.matchTarget,
     this.exitTargets,
     required this.autoUpdateDurationMillis,
+    required this.userAutoUpdateDuration,
     this.subscriptionInfo,
     required this.autoUpdate,
     required this.selectedMap,
@@ -511,6 +542,7 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
     map['auto_update_duration_millis'] = Variable<int>(
       autoUpdateDurationMillis,
     );
+    map['user_auto_update_duration'] = Variable<bool>(userAutoUpdateDuration);
     if (!nullToAbsent || subscriptionInfo != null) {
       map['subscription_info'] = Variable<String>(
         $ProfilesTable.$convertersubscriptionInfo.toSql(subscriptionInfo),
@@ -564,6 +596,7 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
           ? const Value.absent()
           : Value(exitTargets),
       autoUpdateDurationMillis: Value(autoUpdateDurationMillis),
+      userAutoUpdateDuration: Value(userAutoUpdateDuration),
       subscriptionInfo: subscriptionInfo == null && nullToAbsent
           ? const Value.absent()
           : Value(subscriptionInfo),
@@ -603,6 +636,9 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
       autoUpdateDurationMillis: serializer.fromJson<int>(
         json['autoUpdateDurationMillis'],
       ),
+      userAutoUpdateDuration: serializer.fromJson<bool>(
+        json['userAutoUpdateDuration'],
+      ),
       subscriptionInfo: serializer.fromJson<SubscriptionInfo?>(
         json['subscriptionInfo'],
       ),
@@ -635,6 +671,7 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
       'autoUpdateDurationMillis': serializer.toJson<int>(
         autoUpdateDurationMillis,
       ),
+      'userAutoUpdateDuration': serializer.toJson<bool>(userAutoUpdateDuration),
       'subscriptionInfo': serializer.toJson<SubscriptionInfo?>(
         subscriptionInfo,
       ),
@@ -659,6 +696,7 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
     Value<String?> matchTarget = const Value.absent(),
     Value<Map<String, String>?> exitTargets = const Value.absent(),
     int? autoUpdateDurationMillis,
+    bool? userAutoUpdateDuration,
     Value<SubscriptionInfo?> subscriptionInfo = const Value.absent(),
     bool? autoUpdate,
     Map<String, String>? selectedMap,
@@ -683,6 +721,8 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
     exitTargets: exitTargets.present ? exitTargets.value : this.exitTargets,
     autoUpdateDurationMillis:
         autoUpdateDurationMillis ?? this.autoUpdateDurationMillis,
+    userAutoUpdateDuration:
+        userAutoUpdateDuration ?? this.userAutoUpdateDuration,
     subscriptionInfo: subscriptionInfo.present
         ? subscriptionInfo.value
         : this.subscriptionInfo,
@@ -720,6 +760,9 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
       autoUpdateDurationMillis: data.autoUpdateDurationMillis.present
           ? data.autoUpdateDurationMillis.value
           : this.autoUpdateDurationMillis,
+      userAutoUpdateDuration: data.userAutoUpdateDuration.present
+          ? data.userAutoUpdateDuration.value
+          : this.userAutoUpdateDuration,
       subscriptionInfo: data.subscriptionInfo.present
           ? data.subscriptionInfo.value
           : this.subscriptionInfo,
@@ -750,6 +793,7 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
           ..write('matchTarget: $matchTarget, ')
           ..write('exitTargets: $exitTargets, ')
           ..write('autoUpdateDurationMillis: $autoUpdateDurationMillis, ')
+          ..write('userAutoUpdateDuration: $userAutoUpdateDuration, ')
           ..write('subscriptionInfo: $subscriptionInfo, ')
           ..write('autoUpdate: $autoUpdate, ')
           ..write('selectedMap: $selectedMap, ')
@@ -774,6 +818,7 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
     matchTarget,
     exitTargets,
     autoUpdateDurationMillis,
+    userAutoUpdateDuration,
     subscriptionInfo,
     autoUpdate,
     selectedMap,
@@ -797,6 +842,7 @@ class RawProfile extends DataClass implements Insertable<RawProfile> {
           other.matchTarget == this.matchTarget &&
           other.exitTargets == this.exitTargets &&
           other.autoUpdateDurationMillis == this.autoUpdateDurationMillis &&
+          other.userAutoUpdateDuration == this.userAutoUpdateDuration &&
           other.subscriptionInfo == this.subscriptionInfo &&
           other.autoUpdate == this.autoUpdate &&
           other.selectedMap == this.selectedMap &&
@@ -818,6 +864,7 @@ class ProfilesCompanion extends UpdateCompanion<RawProfile> {
   final Value<String?> matchTarget;
   final Value<Map<String, String>?> exitTargets;
   final Value<int> autoUpdateDurationMillis;
+  final Value<bool> userAutoUpdateDuration;
   final Value<SubscriptionInfo?> subscriptionInfo;
   final Value<bool> autoUpdate;
   final Value<Map<String, String>> selectedMap;
@@ -837,6 +884,7 @@ class ProfilesCompanion extends UpdateCompanion<RawProfile> {
     this.matchTarget = const Value.absent(),
     this.exitTargets = const Value.absent(),
     this.autoUpdateDurationMillis = const Value.absent(),
+    this.userAutoUpdateDuration = const Value.absent(),
     this.subscriptionInfo = const Value.absent(),
     this.autoUpdate = const Value.absent(),
     this.selectedMap = const Value.absent(),
@@ -857,6 +905,7 @@ class ProfilesCompanion extends UpdateCompanion<RawProfile> {
     this.matchTarget = const Value.absent(),
     this.exitTargets = const Value.absent(),
     required int autoUpdateDurationMillis,
+    this.userAutoUpdateDuration = const Value.absent(),
     this.subscriptionInfo = const Value.absent(),
     required bool autoUpdate,
     required Map<String, String> selectedMap,
@@ -884,6 +933,7 @@ class ProfilesCompanion extends UpdateCompanion<RawProfile> {
     Expression<String>? matchTarget,
     Expression<String>? exitTargets,
     Expression<int>? autoUpdateDurationMillis,
+    Expression<bool>? userAutoUpdateDuration,
     Expression<String>? subscriptionInfo,
     Expression<bool>? autoUpdate,
     Expression<String>? selectedMap,
@@ -905,6 +955,8 @@ class ProfilesCompanion extends UpdateCompanion<RawProfile> {
       if (exitTargets != null) 'exit_targets': exitTargets,
       if (autoUpdateDurationMillis != null)
         'auto_update_duration_millis': autoUpdateDurationMillis,
+      if (userAutoUpdateDuration != null)
+        'user_auto_update_duration': userAutoUpdateDuration,
       if (subscriptionInfo != null) 'subscription_info': subscriptionInfo,
       if (autoUpdate != null) 'auto_update': autoUpdate,
       if (selectedMap != null) 'selected_map': selectedMap,
@@ -927,6 +979,7 @@ class ProfilesCompanion extends UpdateCompanion<RawProfile> {
     Value<String?>? matchTarget,
     Value<Map<String, String>?>? exitTargets,
     Value<int>? autoUpdateDurationMillis,
+    Value<bool>? userAutoUpdateDuration,
     Value<SubscriptionInfo?>? subscriptionInfo,
     Value<bool>? autoUpdate,
     Value<Map<String, String>>? selectedMap,
@@ -948,6 +1001,8 @@ class ProfilesCompanion extends UpdateCompanion<RawProfile> {
       exitTargets: exitTargets ?? this.exitTargets,
       autoUpdateDurationMillis:
           autoUpdateDurationMillis ?? this.autoUpdateDurationMillis,
+      userAutoUpdateDuration:
+          userAutoUpdateDuration ?? this.userAutoUpdateDuration,
       subscriptionInfo: subscriptionInfo ?? this.subscriptionInfo,
       autoUpdate: autoUpdate ?? this.autoUpdate,
       selectedMap: selectedMap ?? this.selectedMap,
@@ -1002,6 +1057,11 @@ class ProfilesCompanion extends UpdateCompanion<RawProfile> {
         autoUpdateDurationMillis.value,
       );
     }
+    if (userAutoUpdateDuration.present) {
+      map['user_auto_update_duration'] = Variable<bool>(
+        userAutoUpdateDuration.value,
+      );
+    }
     if (subscriptionInfo.present) {
       map['subscription_info'] = Variable<String>(
         $ProfilesTable.$convertersubscriptionInfo.toSql(subscriptionInfo.value),
@@ -1046,6 +1106,7 @@ class ProfilesCompanion extends UpdateCompanion<RawProfile> {
           ..write('matchTarget: $matchTarget, ')
           ..write('exitTargets: $exitTargets, ')
           ..write('autoUpdateDurationMillis: $autoUpdateDurationMillis, ')
+          ..write('userAutoUpdateDuration: $userAutoUpdateDuration, ')
           ..write('subscriptionInfo: $subscriptionInfo, ')
           ..write('autoUpdate: $autoUpdate, ')
           ..write('selectedMap: $selectedMap, ')
@@ -5584,6 +5645,7 @@ typedef $$ProfilesTableCreateCompanionBuilder =
       Value<String?> matchTarget,
       Value<Map<String, String>?> exitTargets,
       required int autoUpdateDurationMillis,
+      Value<bool> userAutoUpdateDuration,
       Value<SubscriptionInfo?> subscriptionInfo,
       required bool autoUpdate,
       required Map<String, String> selectedMap,
@@ -5605,6 +5667,7 @@ typedef $$ProfilesTableUpdateCompanionBuilder =
       Value<String?> matchTarget,
       Value<Map<String, String>?> exitTargets,
       Value<int> autoUpdateDurationMillis,
+      Value<bool> userAutoUpdateDuration,
       Value<SubscriptionInfo?> subscriptionInfo,
       Value<bool> autoUpdate,
       Value<Map<String, String>> selectedMap,
@@ -5763,6 +5826,11 @@ class $$ProfilesTableFilterComposer
 
   ColumnFilters<int> get autoUpdateDurationMillis => $composableBuilder(
     column: $table.autoUpdateDurationMillis,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get userAutoUpdateDuration => $composableBuilder(
+    column: $table.userAutoUpdateDuration,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5974,6 +6042,11 @@ class $$ProfilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get userAutoUpdateDuration => $composableBuilder(
+    column: $table.userAutoUpdateDuration,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get subscriptionInfo => $composableBuilder(
     column: $table.subscriptionInfo,
     builder: (column) => ColumnOrderings(column),
@@ -6062,6 +6135,11 @@ class $$ProfilesTableAnnotationComposer
 
   GeneratedColumn<int> get autoUpdateDurationMillis => $composableBuilder(
     column: $table.autoUpdateDurationMillis,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get userAutoUpdateDuration => $composableBuilder(
+    column: $table.userAutoUpdateDuration,
     builder: (column) => column,
   );
 
@@ -6237,6 +6315,7 @@ class $$ProfilesTableTableManager
                 Value<String?> matchTarget = const Value.absent(),
                 Value<Map<String, String>?> exitTargets = const Value.absent(),
                 Value<int> autoUpdateDurationMillis = const Value.absent(),
+                Value<bool> userAutoUpdateDuration = const Value.absent(),
                 Value<SubscriptionInfo?> subscriptionInfo =
                     const Value.absent(),
                 Value<bool> autoUpdate = const Value.absent(),
@@ -6257,6 +6336,7 @@ class $$ProfilesTableTableManager
                 matchTarget: matchTarget,
                 exitTargets: exitTargets,
                 autoUpdateDurationMillis: autoUpdateDurationMillis,
+                userAutoUpdateDuration: userAutoUpdateDuration,
                 subscriptionInfo: subscriptionInfo,
                 autoUpdate: autoUpdate,
                 selectedMap: selectedMap,
@@ -6278,6 +6358,7 @@ class $$ProfilesTableTableManager
                 Value<String?> matchTarget = const Value.absent(),
                 Value<Map<String, String>?> exitTargets = const Value.absent(),
                 required int autoUpdateDurationMillis,
+                Value<bool> userAutoUpdateDuration = const Value.absent(),
                 Value<SubscriptionInfo?> subscriptionInfo =
                     const Value.absent(),
                 required bool autoUpdate,
@@ -6298,6 +6379,7 @@ class $$ProfilesTableTableManager
                 matchTarget: matchTarget,
                 exitTargets: exitTargets,
                 autoUpdateDurationMillis: autoUpdateDurationMillis,
+                userAutoUpdateDuration: userAutoUpdateDuration,
                 subscriptionInfo: subscriptionInfo,
                 autoUpdate: autoUpdate,
                 selectedMap: selectedMap,

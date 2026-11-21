@@ -32,6 +32,9 @@ class Profiles extends Table {
 
   IntColumn get autoUpdateDurationMillis => integer()();
 
+  BoolColumn get userAutoUpdateDuration =>
+      boolean().withDefault(const Constant(false))();
+
   TextColumn get subscriptionInfo =>
       text().map(const SubscriptionInfoConverter()).nullable()();
 
@@ -176,6 +179,7 @@ extension RawProfilExt on RawProfile {
       ageSecretKey: ageSecretKey ?? '',
       lastUpdateDate: lastUpdateDate,
       autoUpdateDuration: Duration(milliseconds: autoUpdateDurationMillis),
+      userAutoUpdateDuration: userAutoUpdateDuration,
       subscriptionInfo: subscriptionInfo,
       autoUpdate: autoUpdate,
       selectedMap: selectedMap,
@@ -199,6 +203,7 @@ extension ProfilesCompanionExt on Profile {
       ageSecretKey: Value(ageSecretKey.isEmpty ? null : ageSecretKey),
       lastUpdateDate: Value(lastUpdateDate),
       autoUpdateDurationMillis: autoUpdateDuration.inMilliseconds,
+      userAutoUpdateDuration: Value(userAutoUpdateDuration),
       subscriptionInfo: Value(subscriptionInfo),
       autoUpdate: autoUpdate,
       selectedMap: selectedMap,

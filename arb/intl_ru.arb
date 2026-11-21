@@ -1150,5 +1150,9 @@
   "vRouting": "Маршрутизация",
   "subscriptionEmpty": "Подписка вернула пустую конфигурацию",
   "subscriptionUpdateKeptLast": "Не удалось обновить {label}; используется последняя рабочая конфигурация",
-  "subscriptionTooLarge": "Подписка слишком большая для загрузки"
+  "subscriptionTooLarge": "Подписка слишком большая для загрузки",
+  "subscriptionAnnounce": "Сообщение от провайдера",
+  "subscriptionWebPage": "Моя страница",
+  "subscriptionSupport": "Связаться с поддержкой",
+  "subscriptionLinkOpenFailed": "Не удалось открыть ссылку"
 }

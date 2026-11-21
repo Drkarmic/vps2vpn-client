@@ -507,6 +507,34 @@ void main() {
     );
   });
 
+  testWidgets('the detail shows the announcement and the subscription links', (
+    tester,
+  ) async {
+    await writeAppliedConfig(tester);
+    setUpProfiles([
+      _profile(
+        1,
+        type: ProfileType.url,
+        info: const SubscriptionInfo(
+          announce: 'Service paused until renewal',
+          webPageUrl: 'https://panel.example/me',
+          supportUrl: 'tg://resolve?domain=help',
+        ),
+      ),
+    ]);
+    await pumpCard(tester);
+
+    await openDetail(tester);
+
+    expect(find.text('Notice from your provider'), findsOneWidget);
+    expect(find.text('Service paused until renewal'), findsOneWidget);
+    expect(find.text('My page'), findsOneWidget);
+    expect(find.text('https://panel.example/me'), findsOneWidget);
+    expect(find.text('Contact support'), findsOneWidget);
+    expect(find.text('tg://resolve?domain=help'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('tapping a custom profile edits it in a sheet, built as it '
       'opens', (tester) async {
     final profile = Profile.custom(label: 'mine');

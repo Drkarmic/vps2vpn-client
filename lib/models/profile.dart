@@ -10,6 +10,8 @@ import 'clash_config.dart';
 part 'generated/profile.freezed.dart';
 part 'generated/profile.g.dart';
 
+typedef SubscriptionHeader = String? Function(String name);
+
 /// Why the config at the path cannot be used, or null.
 typedef ValidateConfig =
     Future<String?> Function(String path, String ageSecretKey);
@@ -21,10 +23,28 @@ abstract class SubscriptionInfo with _$SubscriptionInfo {
     @Default(0) int download,
     @Default(0) int total,
     @Default(0) int expire,
+    String? announce,
+    String? webPageUrl,
+    String? supportUrl,
   }) = _SubscriptionInfo;
 
   factory SubscriptionInfo.fromJson(Map<String, Object?> json) =>
       _$SubscriptionInfoFromJson(json);
+
+  factory SubscriptionInfo.fromHeaders(SubscriptionHeader header) {
+    return SubscriptionInfo.formHString(
+      header('subscription-userinfo'),
+    ).copyWith(
+      announce: subscriptionHeaderText(
+        header('announce'),
+        maxLength: maxSubscriptionAnnounceLength,
+      ),
+      webPageUrl: subscriptionHeaderLink(
+        header('profile-web-page-url'),
+      )?.toString(),
+      supportUrl: subscriptionHeaderLink(header('support-url'))?.toString(),
+    );
+  }
 
   factory SubscriptionInfo.formHString(String? info) {
     if (info == null) return const SubscriptionInfo();
@@ -83,6 +103,9 @@ abstract class Profile with _$Profile {
     @Default('') String ageSecretKey,
     DateTime? lastUpdateDate,
     required Duration autoUpdateDuration,
+
+    /// The user set the interval; `profile-update-interval` leaves it alone.
+    @Default(false) bool userAutoUpdateDuration,
     SubscriptionInfo? subscriptionInfo,
     @Default(true) bool autoUpdate,
     @Default({}) Map<String, String> selectedMap,
@@ -199,21 +222,43 @@ extension ProfileExtension on Profile {
     if (_isBlank(bytes)) {
       throw MessageException(currentAppLocalizations.subscriptionEmpty);
     }
-    final disposition = response.headers.value('content-disposition');
-    final userinfo = response.headers.value('subscription-userinfo');
-    final updateInterval = int.tryParse(
-      response.headers.value('profile-update-interval')?.trim() ?? '',
+    return withSubscriptionHeaders(
+      (name) => response.headers[name]?.firstOrNull,
+    ).saveFile(bytes, validate: validate);
+  }
+
+  Profile withSubscriptionHeaders(SubscriptionHeader header) {
+    final updateInterval = subscriptionUpdateIntervalHours(
+      header('profile-update-interval'),
     );
     return copyWith(
       label: label.takeFirstValid([
-        getFileNameForDisposition(disposition),
+        subscriptionHeaderText(
+          header('profile-title'),
+          maxLength: maxSubscriptionTitleLength,
+        ),
+        getFileNameForDisposition(header('content-disposition')),
         defaultLabel,
       ]),
-      subscriptionInfo: SubscriptionInfo.formHString(userinfo),
-      autoUpdateDuration: updateInterval != null
-          ? Duration(hours: updateInterval.clamp(1, 168))
+      subscriptionInfo: SubscriptionInfo.fromHeaders(header),
+      autoUpdateDuration: updateInterval != null && !userAutoUpdateDuration
+          ? Duration(hours: updateInterval)
           : autoUpdateDuration,
-    ).saveFile(bytes, validate: validate);
+    );
+  }
+
+  /// What the user changed while [target] downloaded wins over [updated].
+  Profile withUpdate({required Profile target, required Profile updated}) {
+    return copyWith(
+      label: label.takeFirstValid([updated.label]),
+      subscriptionInfo: updated.subscriptionInfo,
+      lastUpdateDate: updated.lastUpdateDate,
+      autoUpdateDuration:
+          userAutoUpdateDuration ||
+              autoUpdateDuration != target.autoUpdateDuration
+          ? autoUpdateDuration
+          : updated.autoUpdateDuration,
+    );
   }
 
   Future<Profile> saveFile(

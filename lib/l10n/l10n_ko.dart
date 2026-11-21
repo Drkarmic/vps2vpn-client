@@ -3893,4 +3893,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get subscriptionTooLarge => '구독이 너무 커서 불러올 수 없습니다';
+
+  @override
+  String get subscriptionAnnounce => '제공자 공지';
+
+  @override
+  String get subscriptionWebPage => '내 페이지';
+
+  @override
+  String get subscriptionSupport => '지원 문의';
+
+  @override
+  String get subscriptionLinkOpenFailed => '링크를 열 수 없습니다';
 }

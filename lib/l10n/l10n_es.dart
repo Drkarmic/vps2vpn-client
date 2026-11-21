@@ -4042,4 +4042,16 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get subscriptionTooLarge =>
       'La suscripción es demasiado grande para cargarla';
+
+  @override
+  String get subscriptionAnnounce => 'Aviso de tu proveedor';
+
+  @override
+  String get subscriptionWebPage => 'Mi página';
+
+  @override
+  String get subscriptionSupport => 'Contactar con soporte';
+
+  @override
+  String get subscriptionLinkOpenFailed => 'No se pudo abrir el enlace';
 }

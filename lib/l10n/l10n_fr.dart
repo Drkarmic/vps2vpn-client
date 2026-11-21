@@ -4047,4 +4047,16 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get subscriptionTooLarge =>
       'L\'abonnement est trop volumineux pour être chargé';
+
+  @override
+  String get subscriptionAnnounce => 'Message de votre fournisseur';
+
+  @override
+  String get subscriptionWebPage => 'Ma page';
+
+  @override
+  String get subscriptionSupport => 'Contacter l’assistance';
+
+  @override
+  String get subscriptionLinkOpenFailed => 'Impossible d’ouvrir le lien';
 }

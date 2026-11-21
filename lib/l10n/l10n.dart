@@ -7019,6 +7019,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The subscription is too large to load'**
   String get subscriptionTooLarge;
+
+  /// No description provided for @subscriptionAnnounce.
+  ///
+  /// In en, this message translates to:
+  /// **'Notice from your provider'**
+  String get subscriptionAnnounce;
+
+  /// No description provided for @subscriptionWebPage.
+  ///
+  /// In en, this message translates to:
+  /// **'My page'**
+  String get subscriptionWebPage;
+
+  /// No description provided for @subscriptionSupport.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact support'**
+  String get subscriptionSupport;
+
+  /// No description provided for @subscriptionLinkOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open the link'**
+  String get subscriptionLinkOpenFailed;
 }
 
 class _AppLocalizationsDelegate

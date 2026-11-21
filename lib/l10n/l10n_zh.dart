@@ -3769,4 +3769,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get subscriptionTooLarge => '订阅内容过大，无法加载';
+
+  @override
+  String get subscriptionAnnounce => '服务商通知';
+
+  @override
+  String get subscriptionWebPage => '我的页面';
+
+  @override
+  String get subscriptionSupport => '联系客服';
+
+  @override
+  String get subscriptionLinkOpenFailed => '无法打开该链接';
 }

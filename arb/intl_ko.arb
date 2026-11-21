@@ -1150,5 +1150,9 @@
   "vRouting": "라우팅",
   "subscriptionEmpty": "구독이 빈 설정을 반환했습니다",
   "subscriptionUpdateKeptLast": "{label}을(를) 업데이트하지 못했습니다. 마지막으로 작동한 설정을 계속 사용합니다",
-  "subscriptionTooLarge": "구독이 너무 커서 불러올 수 없습니다"
+  "subscriptionTooLarge": "구독이 너무 커서 불러올 수 없습니다",
+  "subscriptionAnnounce": "제공자 공지",
+  "subscriptionWebPage": "내 페이지",
+  "subscriptionSupport": "지원 문의",
+  "subscriptionLinkOpenFailed": "링크를 열 수 없습니다"
 }

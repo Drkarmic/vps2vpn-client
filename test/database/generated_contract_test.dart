@@ -20,6 +20,7 @@ void main() {
       matchTarget: 'Proxy',
       exitTargets: const {'MATCH': 'Proxy'},
       autoUpdateDurationMillis: 3600000,
+      userAutoUpdateDuration: true,
       subscriptionInfo: const SubscriptionInfo(
         upload: 1,
         download: 2,
@@ -35,8 +36,8 @@ void main() {
       ),
     );
 
-    expect(profile.toColumns(true), hasLength(18));
-    expect(profile.toCompanion(true).toColumns(true), hasLength(18));
+    expect(profile.toColumns(true), hasLength(19));
+    expect(profile.toCompanion(true).toColumns(true), hasLength(19));
     expect(RawProfile.fromJson(profile.toJson()).toJson(), profile.toJson());
     expect(profile.copyWith(label: 'Next').label, 'Next');
     expect(
@@ -62,13 +63,14 @@ void main() {
       url: '',
       extendType: 'standard',
       autoUpdateDurationMillis: 0,
+      userAutoUpdateDuration: false,
       autoUpdate: false,
       selectedMap: {},
       unfoldSet: {},
     );
-    expect(emptyProfile.toColumns(true), hasLength(9));
-    expect(emptyProfile.toColumns(false), hasLength(18));
-    expect(emptyProfile.toCompanion(true).toColumns(true), hasLength(9));
+    expect(emptyProfile.toColumns(true), hasLength(10));
+    expect(emptyProfile.toColumns(false), hasLength(19));
+    expect(emptyProfile.toCompanion(true).toColumns(true), hasLength(10));
 
     final insertedProfile = ProfilesCompanion.insert(
       type: ProfileType.file,

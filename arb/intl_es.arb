@@ -1150,5 +1150,9 @@
   "vRouting": "Enrutamiento",
   "subscriptionEmpty": "La suscripción devolvió una configuración vacía",
   "subscriptionUpdateKeptLast": "No se pudo actualizar {label}; se sigue usando la última configuración que funcionaba",
-  "subscriptionTooLarge": "La suscripción es demasiado grande para cargarla"
+  "subscriptionTooLarge": "La suscripción es demasiado grande para cargarla",
+  "subscriptionAnnounce": "Aviso de tu proveedor",
+  "subscriptionWebPage": "Mi página",
+  "subscriptionSupport": "Contactar con soporte",
+  "subscriptionLinkOpenFailed": "No se pudo abrir el enlace"
 }

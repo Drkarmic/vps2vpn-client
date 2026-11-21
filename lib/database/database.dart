@@ -58,7 +58,7 @@ class Database extends _$Database {
   Database([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {
@@ -146,6 +146,13 @@ class Database extends _$Database {
           await _addColumnIfMissing(m, mitmModules, mitmModules.asksConsent);
           await _addColumnIfMissing(m, mitmModules, mitmModules.accepted);
           await _recordMitmConsent();
+        }
+        if (from < 27) {
+          await _addColumnIfMissing(
+            m,
+            profiles,
+            profiles.userAutoUpdateDuration,
+          );
         }
       }),
       beforeOpen: (_) => customStatement('PRAGMA foreign_keys = ON'),

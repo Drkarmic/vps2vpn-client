@@ -218,6 +218,33 @@ class _ProfileDetailSheetState extends ConsumerState<ProfileDetailSheet>
                           ),
                         ],
                       ),
+                    if (subscriptionInfo?.announce case final announce?)
+                      generateSection(
+                        title: appLocalizations.subscriptionAnnounce,
+                        items: [
+                          ListItem(
+                            title: Text(announce),
+                            alignment: ListRowAlignment.top,
+                          ),
+                        ],
+                      ),
+                    if (subscriptionInfo != null &&
+                        (subscriptionInfo.webPageUrl != null ||
+                            subscriptionInfo.supportUrl != null))
+                      generateSection(
+                        items: [
+                          if (subscriptionInfo.webPageUrl case final url?)
+                            _LinkRow(
+                              label: appLocalizations.subscriptionWebPage,
+                              url: url,
+                            ),
+                          if (subscriptionInfo.supportUrl case final url?)
+                            _LinkRow(
+                              label: appLocalizations.subscriptionSupport,
+                              url: url,
+                            ),
+                        ],
+                      ),
                     generateSection(
                       title: appLocalizations.profile,
                       items: [
@@ -344,6 +371,23 @@ class _InfoRow extends StatelessWidget {
             .copyWith(color: context.colorScheme.onSurfaceVariant),
         child: value,
       ),
+    );
+  }
+}
+
+class _LinkRow extends StatelessWidget {
+  const _LinkRow({required this.label, required this.url});
+
+  final String label;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListItem(
+      title: Text(label),
+      subtitle: Text(url, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: const GlyphIcon(AppGlyphs.openExternal),
+      onTap: () => openSubscriptionLink(url),
     );
   }
 }

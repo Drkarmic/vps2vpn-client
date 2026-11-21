@@ -16,7 +16,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$SubscriptionInfo {
 
- int get upload; int get download; int get total; int get expire;
+ int get upload; int get download; int get total; int get expire; String? get announce; String? get webPageUrl; String? get supportUrl;
 /// Create a copy of SubscriptionInfo
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -30,20 +30,20 @@ $SubscriptionInfoCopyWith<SubscriptionInfo> get copyWith => _$SubscriptionInfoCo
 @override
 bool operator ==(Object other) {
   final _this = this as SubscriptionInfo;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SubscriptionInfo&&(identical(other.upload, _this.upload) || other.upload == _this.upload)&&(identical(other.download, _this.download) || other.download == _this.download)&&(identical(other.total, _this.total) || other.total == _this.total)&&(identical(other.expire, _this.expire) || other.expire == _this.expire));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SubscriptionInfo&&(identical(other.upload, _this.upload) || other.upload == _this.upload)&&(identical(other.download, _this.download) || other.download == _this.download)&&(identical(other.total, _this.total) || other.total == _this.total)&&(identical(other.expire, _this.expire) || other.expire == _this.expire)&&(identical(other.announce, _this.announce) || other.announce == _this.announce)&&(identical(other.webPageUrl, _this.webPageUrl) || other.webPageUrl == _this.webPageUrl)&&(identical(other.supportUrl, _this.supportUrl) || other.supportUrl == _this.supportUrl));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as SubscriptionInfo;
-  return Object.hash(runtimeType,_this.upload,_this.download,_this.total,_this.expire);
+  return Object.hash(runtimeType,_this.upload,_this.download,_this.total,_this.expire,_this.announce,_this.webPageUrl,_this.supportUrl);
 }
 
 @override
 String toString() {
   final _this = this as SubscriptionInfo;
-  return 'SubscriptionInfo(upload: ${_this.upload}, download: ${_this.download}, total: ${_this.total}, expire: ${_this.expire})';
+  return 'SubscriptionInfo(upload: ${_this.upload}, download: ${_this.download}, total: ${_this.total}, expire: ${_this.expire}, announce: ${_this.announce}, webPageUrl: ${_this.webPageUrl}, supportUrl: ${_this.supportUrl})';
 }
 
 
@@ -54,7 +54,7 @@ abstract mixin class $SubscriptionInfoCopyWith<$Res>  {
   factory $SubscriptionInfoCopyWith(SubscriptionInfo value, $Res Function(SubscriptionInfo) _then) = _$SubscriptionInfoCopyWithImpl;
 @useResult
 $Res call({
- int upload, int download, int total, int expire
+ int upload, int download, int total, int expire, String? announce, String? webPageUrl, String? supportUrl
 });
 
 
@@ -71,13 +71,16 @@ class _$SubscriptionInfoCopyWithImpl<$Res>
 
 /// Create a copy of SubscriptionInfo
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? upload = null,Object? download = null,Object? total = null,Object? expire = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? upload = null,Object? download = null,Object? total = null,Object? expire = null,Object? announce = freezed,Object? webPageUrl = freezed,Object? supportUrl = freezed,}) {
   return _then(SubscriptionInfo(
 upload: null == upload ? _self.upload : upload // ignore: cast_nullable_to_non_nullable
 as int,download: null == download ? _self.download : download // ignore: cast_nullable_to_non_nullable
 as int,total: null == total ? _self.total : total // ignore: cast_nullable_to_non_nullable
 as int,expire: null == expire ? _self.expire : expire // ignore: cast_nullable_to_non_nullable
-as int,
+as int,announce: freezed == announce ? _self.announce : announce // ignore: cast_nullable_to_non_nullable
+as String?,webPageUrl: freezed == webPageUrl ? _self.webPageUrl : webPageUrl // ignore: cast_nullable_to_non_nullable
+as String?,supportUrl: freezed == supportUrl ? _self.supportUrl : supportUrl // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -162,10 +165,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int upload,  int download,  int total,  int expire)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int upload,  int download,  int total,  int expire,  String? announce,  String? webPageUrl,  String? supportUrl)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SubscriptionInfo() when $default != null:
-return $default(_that.upload,_that.download,_that.total,_that.expire);case _:
+return $default(_that.upload,_that.download,_that.total,_that.expire,_that.announce,_that.webPageUrl,_that.supportUrl);case _:
   return orElse();
 
 }
@@ -183,10 +186,10 @@ return $default(_that.upload,_that.download,_that.total,_that.expire);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int upload,  int download,  int total,  int expire)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int upload,  int download,  int total,  int expire,  String? announce,  String? webPageUrl,  String? supportUrl)  $default,) {final _that = this;
 switch (_that) {
 case _SubscriptionInfo():
-return $default(_that.upload,_that.download,_that.total,_that.expire);case _:
+return $default(_that.upload,_that.download,_that.total,_that.expire,_that.announce,_that.webPageUrl,_that.supportUrl);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -203,10 +206,10 @@ return $default(_that.upload,_that.download,_that.total,_that.expire);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int upload,  int download,  int total,  int expire)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int upload,  int download,  int total,  int expire,  String? announce,  String? webPageUrl,  String? supportUrl)?  $default,) {final _that = this;
 switch (_that) {
 case _SubscriptionInfo() when $default != null:
-return $default(_that.upload,_that.download,_that.total,_that.expire);case _:
+return $default(_that.upload,_that.download,_that.total,_that.expire,_that.announce,_that.webPageUrl,_that.supportUrl);case _:
   return null;
 
 }
@@ -218,13 +221,16 @@ return $default(_that.upload,_that.download,_that.total,_that.expire);case _:
 @JsonSerializable()
 
 class _SubscriptionInfo implements SubscriptionInfo {
-  const _SubscriptionInfo({this.upload = 0, this.download = 0, this.total = 0, this.expire = 0});
+  const _SubscriptionInfo({this.upload = 0, this.download = 0, this.total = 0, this.expire = 0, this.announce, this.webPageUrl, this.supportUrl});
   factory _SubscriptionInfo.fromJson(Map<String, dynamic> json) => _$SubscriptionInfoFromJson(json);
 
 @override@JsonKey() final  int upload;
 @override@JsonKey() final  int download;
 @override@JsonKey() final  int total;
 @override@JsonKey() final  int expire;
+@override final  String? announce;
+@override final  String? webPageUrl;
+@override final  String? supportUrl;
 
 /// Create a copy of SubscriptionInfo
 /// with the given fields replaced by the non-null parameter values.
@@ -239,18 +245,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SubscriptionInfo&&(identical(other.upload, upload) || other.upload == upload)&&(identical(other.download, download) || other.download == download)&&(identical(other.total, total) || other.total == total)&&(identical(other.expire, expire) || other.expire == expire));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SubscriptionInfo&&(identical(other.upload, upload) || other.upload == upload)&&(identical(other.download, download) || other.download == download)&&(identical(other.total, total) || other.total == total)&&(identical(other.expire, expire) || other.expire == expire)&&(identical(other.announce, announce) || other.announce == announce)&&(identical(other.webPageUrl, webPageUrl) || other.webPageUrl == webPageUrl)&&(identical(other.supportUrl, supportUrl) || other.supportUrl == supportUrl));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,upload,download,total,expire);
+    return Object.hash(runtimeType,upload,download,total,expire,announce,webPageUrl,supportUrl);
 }
 
 @override
 String toString() {
-    return 'SubscriptionInfo(upload: $upload, download: $download, total: $total, expire: $expire)';
+    return 'SubscriptionInfo(upload: $upload, download: $download, total: $total, expire: $expire, announce: $announce, webPageUrl: $webPageUrl, supportUrl: $supportUrl)';
 }
 
 
@@ -261,7 +267,7 @@ abstract mixin class _$SubscriptionInfoCopyWith<$Res> implements $SubscriptionIn
   factory _$SubscriptionInfoCopyWith(_SubscriptionInfo value, $Res Function(_SubscriptionInfo) _then) = __$SubscriptionInfoCopyWithImpl;
 @override @useResult
 $Res call({
- int upload, int download, int total, int expire
+ int upload, int download, int total, int expire, String? announce, String? webPageUrl, String? supportUrl
 });
 
 
@@ -278,13 +284,16 @@ class __$SubscriptionInfoCopyWithImpl<$Res>
 
 /// Create a copy of SubscriptionInfo
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? upload = null,Object? download = null,Object? total = null,Object? expire = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? upload = null,Object? download = null,Object? total = null,Object? expire = null,Object? announce = freezed,Object? webPageUrl = freezed,Object? supportUrl = freezed,}) {
   return _then(_SubscriptionInfo(
 upload: null == upload ? _self.upload : upload // ignore: cast_nullable_to_non_nullable
 as int,download: null == download ? _self.download : download // ignore: cast_nullable_to_non_nullable
 as int,total: null == total ? _self.total : total // ignore: cast_nullable_to_non_nullable
 as int,expire: null == expire ? _self.expire : expire // ignore: cast_nullable_to_non_nullable
-as int,
+as int,announce: freezed == announce ? _self.announce : announce // ignore: cast_nullable_to_non_nullable
+as String?,webPageUrl: freezed == webPageUrl ? _self.webPageUrl : webPageUrl // ignore: cast_nullable_to_non_nullable
+as String?,supportUrl: freezed == supportUrl ? _self.supportUrl : supportUrl // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -295,7 +304,8 @@ as int,
 /// @nodoc
 mixin _$Profile {
 
- int get id; ProfileType get type; String get label; String? get currentGroupName; String get url; String get ageSecretKey; DateTime? get lastUpdateDate; Duration get autoUpdateDuration; SubscriptionInfo? get subscriptionInfo; bool get autoUpdate; Map<String, String> get selectedMap; Set<String> get unfoldSet; int? get scriptId; Map<String, String> get exitTargets; int? get order;@JsonKey(fromJson: ProfileOverrides.safeFromJson) ProfileOverrides get overrides;
+ int get id; ProfileType get type; String get label; String? get currentGroupName; String get url; String get ageSecretKey; DateTime? get lastUpdateDate; Duration get autoUpdateDuration;/// The user set the interval; `profile-update-interval` leaves it alone.
+ bool get userAutoUpdateDuration; SubscriptionInfo? get subscriptionInfo; bool get autoUpdate; Map<String, String> get selectedMap; Set<String> get unfoldSet; int? get scriptId; Map<String, String> get exitTargets; int? get order;@JsonKey(fromJson: ProfileOverrides.safeFromJson) ProfileOverrides get overrides;
 /// Create a copy of Profile
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -309,20 +319,20 @@ $ProfileCopyWith<Profile> get copyWith => _$ProfileCopyWithImpl<Profile>(this as
 @override
 bool operator ==(Object other) {
   final _this = this as Profile;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Profile&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.type, _this.type) || other.type == _this.type)&&(identical(other.label, _this.label) || other.label == _this.label)&&(identical(other.currentGroupName, _this.currentGroupName) || other.currentGroupName == _this.currentGroupName)&&(identical(other.url, _this.url) || other.url == _this.url)&&(identical(other.ageSecretKey, _this.ageSecretKey) || other.ageSecretKey == _this.ageSecretKey)&&(identical(other.lastUpdateDate, _this.lastUpdateDate) || other.lastUpdateDate == _this.lastUpdateDate)&&(identical(other.autoUpdateDuration, _this.autoUpdateDuration) || other.autoUpdateDuration == _this.autoUpdateDuration)&&(identical(other.subscriptionInfo, _this.subscriptionInfo) || other.subscriptionInfo == _this.subscriptionInfo)&&(identical(other.autoUpdate, _this.autoUpdate) || other.autoUpdate == _this.autoUpdate)&&const DeepCollectionEquality().equals(other.selectedMap, _this.selectedMap)&&const DeepCollectionEquality().equals(other.unfoldSet, _this.unfoldSet)&&(identical(other.scriptId, _this.scriptId) || other.scriptId == _this.scriptId)&&const DeepCollectionEquality().equals(other.exitTargets, _this.exitTargets)&&(identical(other.order, _this.order) || other.order == _this.order)&&(identical(other.overrides, _this.overrides) || other.overrides == _this.overrides));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Profile&&(identical(other.id, _this.id) || other.id == _this.id)&&(identical(other.type, _this.type) || other.type == _this.type)&&(identical(other.label, _this.label) || other.label == _this.label)&&(identical(other.currentGroupName, _this.currentGroupName) || other.currentGroupName == _this.currentGroupName)&&(identical(other.url, _this.url) || other.url == _this.url)&&(identical(other.ageSecretKey, _this.ageSecretKey) || other.ageSecretKey == _this.ageSecretKey)&&(identical(other.lastUpdateDate, _this.lastUpdateDate) || other.lastUpdateDate == _this.lastUpdateDate)&&(identical(other.autoUpdateDuration, _this.autoUpdateDuration) || other.autoUpdateDuration == _this.autoUpdateDuration)&&(identical(other.userAutoUpdateDuration, _this.userAutoUpdateDuration) || other.userAutoUpdateDuration == _this.userAutoUpdateDuration)&&(identical(other.subscriptionInfo, _this.subscriptionInfo) || other.subscriptionInfo == _this.subscriptionInfo)&&(identical(other.autoUpdate, _this.autoUpdate) || other.autoUpdate == _this.autoUpdate)&&const DeepCollectionEquality().equals(other.selectedMap, _this.selectedMap)&&const DeepCollectionEquality().equals(other.unfoldSet, _this.unfoldSet)&&(identical(other.scriptId, _this.scriptId) || other.scriptId == _this.scriptId)&&const DeepCollectionEquality().equals(other.exitTargets, _this.exitTargets)&&(identical(other.order, _this.order) || other.order == _this.order)&&(identical(other.overrides, _this.overrides) || other.overrides == _this.overrides));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as Profile;
-  return Object.hash(runtimeType,_this.id,_this.type,_this.label,_this.currentGroupName,_this.url,_this.ageSecretKey,_this.lastUpdateDate,_this.autoUpdateDuration,_this.subscriptionInfo,_this.autoUpdate,const DeepCollectionEquality().hash(_this.selectedMap),const DeepCollectionEquality().hash(_this.unfoldSet),_this.scriptId,const DeepCollectionEquality().hash(_this.exitTargets),_this.order,_this.overrides);
+  return Object.hash(runtimeType,_this.id,_this.type,_this.label,_this.currentGroupName,_this.url,_this.ageSecretKey,_this.lastUpdateDate,_this.autoUpdateDuration,_this.userAutoUpdateDuration,_this.subscriptionInfo,_this.autoUpdate,const DeepCollectionEquality().hash(_this.selectedMap),const DeepCollectionEquality().hash(_this.unfoldSet),_this.scriptId,const DeepCollectionEquality().hash(_this.exitTargets),_this.order,_this.overrides);
 }
 
 @override
 String toString() {
   final _this = this as Profile;
-  return 'Profile(id: ${_this.id}, type: ${_this.type}, label: ${_this.label}, currentGroupName: ${_this.currentGroupName}, url: ${_this.url}, ageSecretKey: ${_this.ageSecretKey}, lastUpdateDate: ${_this.lastUpdateDate}, autoUpdateDuration: ${_this.autoUpdateDuration}, subscriptionInfo: ${_this.subscriptionInfo}, autoUpdate: ${_this.autoUpdate}, selectedMap: ${_this.selectedMap}, unfoldSet: ${_this.unfoldSet}, scriptId: ${_this.scriptId}, exitTargets: ${_this.exitTargets}, order: ${_this.order}, overrides: ${_this.overrides})';
+  return 'Profile(id: ${_this.id}, type: ${_this.type}, label: ${_this.label}, currentGroupName: ${_this.currentGroupName}, url: ${_this.url}, ageSecretKey: ${_this.ageSecretKey}, lastUpdateDate: ${_this.lastUpdateDate}, autoUpdateDuration: ${_this.autoUpdateDuration}, userAutoUpdateDuration: ${_this.userAutoUpdateDuration}, subscriptionInfo: ${_this.subscriptionInfo}, autoUpdate: ${_this.autoUpdate}, selectedMap: ${_this.selectedMap}, unfoldSet: ${_this.unfoldSet}, scriptId: ${_this.scriptId}, exitTargets: ${_this.exitTargets}, order: ${_this.order}, overrides: ${_this.overrides})';
 }
 
 
@@ -333,7 +343,7 @@ abstract mixin class $ProfileCopyWith<$Res>  {
   factory $ProfileCopyWith(Profile value, $Res Function(Profile) _then) = _$ProfileCopyWithImpl;
 @useResult
 $Res call({
- int id, ProfileType type, String label, String? currentGroupName, String url, String ageSecretKey, DateTime? lastUpdateDate, Duration autoUpdateDuration, SubscriptionInfo? subscriptionInfo, bool autoUpdate, Map<String, String> selectedMap, Set<String> unfoldSet, int? scriptId, Map<String, String> exitTargets, int? order,@JsonKey(fromJson: ProfileOverrides.safeFromJson) ProfileOverrides overrides
+ int id, ProfileType type, String label, String? currentGroupName, String url, String ageSecretKey, DateTime? lastUpdateDate, Duration autoUpdateDuration, bool userAutoUpdateDuration, SubscriptionInfo? subscriptionInfo, bool autoUpdate, Map<String, String> selectedMap, Set<String> unfoldSet, int? scriptId, Map<String, String> exitTargets, int? order,@JsonKey(fromJson: ProfileOverrides.safeFromJson) ProfileOverrides overrides
 });
 
 
@@ -350,7 +360,7 @@ class _$ProfileCopyWithImpl<$Res>
 
 /// Create a copy of Profile
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? type = null,Object? label = null,Object? currentGroupName = freezed,Object? url = null,Object? ageSecretKey = null,Object? lastUpdateDate = freezed,Object? autoUpdateDuration = null,Object? subscriptionInfo = freezed,Object? autoUpdate = null,Object? selectedMap = null,Object? unfoldSet = null,Object? scriptId = freezed,Object? exitTargets = null,Object? order = freezed,Object? overrides = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? type = null,Object? label = null,Object? currentGroupName = freezed,Object? url = null,Object? ageSecretKey = null,Object? lastUpdateDate = freezed,Object? autoUpdateDuration = null,Object? userAutoUpdateDuration = null,Object? subscriptionInfo = freezed,Object? autoUpdate = null,Object? selectedMap = null,Object? unfoldSet = null,Object? scriptId = freezed,Object? exitTargets = null,Object? order = freezed,Object? overrides = null,}) {
   return _then(Profile(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,type: null == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
@@ -360,7 +370,8 @@ as String?,url: null == url ? _self.url : url // ignore: cast_nullable_to_non_nu
 as String,ageSecretKey: null == ageSecretKey ? _self.ageSecretKey : ageSecretKey // ignore: cast_nullable_to_non_nullable
 as String,lastUpdateDate: freezed == lastUpdateDate ? _self.lastUpdateDate : lastUpdateDate // ignore: cast_nullable_to_non_nullable
 as DateTime?,autoUpdateDuration: null == autoUpdateDuration ? _self.autoUpdateDuration : autoUpdateDuration // ignore: cast_nullable_to_non_nullable
-as Duration,subscriptionInfo: freezed == subscriptionInfo ? _self.subscriptionInfo : subscriptionInfo // ignore: cast_nullable_to_non_nullable
+as Duration,userAutoUpdateDuration: null == userAutoUpdateDuration ? _self.userAutoUpdateDuration : userAutoUpdateDuration // ignore: cast_nullable_to_non_nullable
+as bool,subscriptionInfo: freezed == subscriptionInfo ? _self.subscriptionInfo : subscriptionInfo // ignore: cast_nullable_to_non_nullable
 as SubscriptionInfo?,autoUpdate: null == autoUpdate ? _self.autoUpdate : autoUpdate // ignore: cast_nullable_to_non_nullable
 as bool,selectedMap: null == selectedMap ? _self.selectedMap : selectedMap // ignore: cast_nullable_to_non_nullable
 as Map<String, String>,unfoldSet: null == unfoldSet ? _self.unfoldSet : unfoldSet // ignore: cast_nullable_to_non_nullable
@@ -474,10 +485,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  ProfileType type,  String label,  String? currentGroupName,  String url,  String ageSecretKey,  DateTime? lastUpdateDate,  Duration autoUpdateDuration,  SubscriptionInfo? subscriptionInfo,  bool autoUpdate,  Map<String, String> selectedMap,  Set<String> unfoldSet,  int? scriptId,  Map<String, String> exitTargets,  int? order, @JsonKey(fromJson: ProfileOverrides.safeFromJson)  ProfileOverrides overrides)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  ProfileType type,  String label,  String? currentGroupName,  String url,  String ageSecretKey,  DateTime? lastUpdateDate,  Duration autoUpdateDuration,  bool userAutoUpdateDuration,  SubscriptionInfo? subscriptionInfo,  bool autoUpdate,  Map<String, String> selectedMap,  Set<String> unfoldSet,  int? scriptId,  Map<String, String> exitTargets,  int? order, @JsonKey(fromJson: ProfileOverrides.safeFromJson)  ProfileOverrides overrides)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Profile() when $default != null:
-return $default(_that.id,_that.type,_that.label,_that.currentGroupName,_that.url,_that.ageSecretKey,_that.lastUpdateDate,_that.autoUpdateDuration,_that.subscriptionInfo,_that.autoUpdate,_that.selectedMap,_that.unfoldSet,_that.scriptId,_that.exitTargets,_that.order,_that.overrides);case _:
+return $default(_that.id,_that.type,_that.label,_that.currentGroupName,_that.url,_that.ageSecretKey,_that.lastUpdateDate,_that.autoUpdateDuration,_that.userAutoUpdateDuration,_that.subscriptionInfo,_that.autoUpdate,_that.selectedMap,_that.unfoldSet,_that.scriptId,_that.exitTargets,_that.order,_that.overrides);case _:
   return orElse();
 
 }
@@ -495,10 +506,10 @@ return $default(_that.id,_that.type,_that.label,_that.currentGroupName,_that.url
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  ProfileType type,  String label,  String? currentGroupName,  String url,  String ageSecretKey,  DateTime? lastUpdateDate,  Duration autoUpdateDuration,  SubscriptionInfo? subscriptionInfo,  bool autoUpdate,  Map<String, String> selectedMap,  Set<String> unfoldSet,  int? scriptId,  Map<String, String> exitTargets,  int? order, @JsonKey(fromJson: ProfileOverrides.safeFromJson)  ProfileOverrides overrides)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  ProfileType type,  String label,  String? currentGroupName,  String url,  String ageSecretKey,  DateTime? lastUpdateDate,  Duration autoUpdateDuration,  bool userAutoUpdateDuration,  SubscriptionInfo? subscriptionInfo,  bool autoUpdate,  Map<String, String> selectedMap,  Set<String> unfoldSet,  int? scriptId,  Map<String, String> exitTargets,  int? order, @JsonKey(fromJson: ProfileOverrides.safeFromJson)  ProfileOverrides overrides)  $default,) {final _that = this;
 switch (_that) {
 case _Profile():
-return $default(_that.id,_that.type,_that.label,_that.currentGroupName,_that.url,_that.ageSecretKey,_that.lastUpdateDate,_that.autoUpdateDuration,_that.subscriptionInfo,_that.autoUpdate,_that.selectedMap,_that.unfoldSet,_that.scriptId,_that.exitTargets,_that.order,_that.overrides);case _:
+return $default(_that.id,_that.type,_that.label,_that.currentGroupName,_that.url,_that.ageSecretKey,_that.lastUpdateDate,_that.autoUpdateDuration,_that.userAutoUpdateDuration,_that.subscriptionInfo,_that.autoUpdate,_that.selectedMap,_that.unfoldSet,_that.scriptId,_that.exitTargets,_that.order,_that.overrides);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -515,10 +526,10 @@ return $default(_that.id,_that.type,_that.label,_that.currentGroupName,_that.url
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  ProfileType type,  String label,  String? currentGroupName,  String url,  String ageSecretKey,  DateTime? lastUpdateDate,  Duration autoUpdateDuration,  SubscriptionInfo? subscriptionInfo,  bool autoUpdate,  Map<String, String> selectedMap,  Set<String> unfoldSet,  int? scriptId,  Map<String, String> exitTargets,  int? order, @JsonKey(fromJson: ProfileOverrides.safeFromJson)  ProfileOverrides overrides)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  ProfileType type,  String label,  String? currentGroupName,  String url,  String ageSecretKey,  DateTime? lastUpdateDate,  Duration autoUpdateDuration,  bool userAutoUpdateDuration,  SubscriptionInfo? subscriptionInfo,  bool autoUpdate,  Map<String, String> selectedMap,  Set<String> unfoldSet,  int? scriptId,  Map<String, String> exitTargets,  int? order, @JsonKey(fromJson: ProfileOverrides.safeFromJson)  ProfileOverrides overrides)?  $default,) {final _that = this;
 switch (_that) {
 case _Profile() when $default != null:
-return $default(_that.id,_that.type,_that.label,_that.currentGroupName,_that.url,_that.ageSecretKey,_that.lastUpdateDate,_that.autoUpdateDuration,_that.subscriptionInfo,_that.autoUpdate,_that.selectedMap,_that.unfoldSet,_that.scriptId,_that.exitTargets,_that.order,_that.overrides);case _:
+return $default(_that.id,_that.type,_that.label,_that.currentGroupName,_that.url,_that.ageSecretKey,_that.lastUpdateDate,_that.autoUpdateDuration,_that.userAutoUpdateDuration,_that.subscriptionInfo,_that.autoUpdate,_that.selectedMap,_that.unfoldSet,_that.scriptId,_that.exitTargets,_that.order,_that.overrides);case _:
   return null;
 
 }
@@ -530,7 +541,7 @@ return $default(_that.id,_that.type,_that.label,_that.currentGroupName,_that.url
 @JsonSerializable()
 
 class _Profile implements Profile {
-  const _Profile({required this.id, this.type = ProfileType.file, this.label = '', this.currentGroupName, this.url = '', this.ageSecretKey = '', this.lastUpdateDate, required this.autoUpdateDuration, this.subscriptionInfo, this.autoUpdate = true,  Map<String, String> selectedMap = const {},  Set<String> unfoldSet = const {}, this.scriptId,  Map<String, String> exitTargets = const {}, this.order, @JsonKey(fromJson: ProfileOverrides.safeFromJson) this.overrides = const ProfileOverrides()}): _selectedMap = selectedMap,_unfoldSet = unfoldSet,_exitTargets = exitTargets;
+  const _Profile({required this.id, this.type = ProfileType.file, this.label = '', this.currentGroupName, this.url = '', this.ageSecretKey = '', this.lastUpdateDate, required this.autoUpdateDuration, this.userAutoUpdateDuration = false, this.subscriptionInfo, this.autoUpdate = true,  Map<String, String> selectedMap = const {},  Set<String> unfoldSet = const {}, this.scriptId,  Map<String, String> exitTargets = const {}, this.order, @JsonKey(fromJson: ProfileOverrides.safeFromJson) this.overrides = const ProfileOverrides()}): _selectedMap = selectedMap,_unfoldSet = unfoldSet,_exitTargets = exitTargets;
   factory _Profile.fromJson(Map<String, dynamic> json) => _$ProfileFromJson(json);
 
 @override final  int id;
@@ -541,6 +552,8 @@ class _Profile implements Profile {
 @override@JsonKey() final  String ageSecretKey;
 @override final  DateTime? lastUpdateDate;
 @override final  Duration autoUpdateDuration;
+/// The user set the interval; `profile-update-interval` leaves it alone.
+@override@JsonKey() final  bool userAutoUpdateDuration;
 @override final  SubscriptionInfo? subscriptionInfo;
 @override@JsonKey() final  bool autoUpdate;
  final  Map<String, String> _selectedMap;
@@ -581,18 +594,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _Profile&&(identical(other.id, id) || other.id == id)&&(identical(other.type, type) || other.type == type)&&(identical(other.label, label) || other.label == label)&&(identical(other.currentGroupName, currentGroupName) || other.currentGroupName == currentGroupName)&&(identical(other.url, url) || other.url == url)&&(identical(other.ageSecretKey, ageSecretKey) || other.ageSecretKey == ageSecretKey)&&(identical(other.lastUpdateDate, lastUpdateDate) || other.lastUpdateDate == lastUpdateDate)&&(identical(other.autoUpdateDuration, autoUpdateDuration) || other.autoUpdateDuration == autoUpdateDuration)&&(identical(other.subscriptionInfo, subscriptionInfo) || other.subscriptionInfo == subscriptionInfo)&&(identical(other.autoUpdate, autoUpdate) || other.autoUpdate == autoUpdate)&&const DeepCollectionEquality().equals(other.selectedMap, _selectedMap)&&const DeepCollectionEquality().equals(other.unfoldSet, _unfoldSet)&&(identical(other.scriptId, scriptId) || other.scriptId == scriptId)&&const DeepCollectionEquality().equals(other.exitTargets, _exitTargets)&&(identical(other.order, order) || other.order == order)&&(identical(other.overrides, overrides) || other.overrides == overrides));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _Profile&&(identical(other.id, id) || other.id == id)&&(identical(other.type, type) || other.type == type)&&(identical(other.label, label) || other.label == label)&&(identical(other.currentGroupName, currentGroupName) || other.currentGroupName == currentGroupName)&&(identical(other.url, url) || other.url == url)&&(identical(other.ageSecretKey, ageSecretKey) || other.ageSecretKey == ageSecretKey)&&(identical(other.lastUpdateDate, lastUpdateDate) || other.lastUpdateDate == lastUpdateDate)&&(identical(other.autoUpdateDuration, autoUpdateDuration) || other.autoUpdateDuration == autoUpdateDuration)&&(identical(other.userAutoUpdateDuration, userAutoUpdateDuration) || other.userAutoUpdateDuration == userAutoUpdateDuration)&&(identical(other.subscriptionInfo, subscriptionInfo) || other.subscriptionInfo == subscriptionInfo)&&(identical(other.autoUpdate, autoUpdate) || other.autoUpdate == autoUpdate)&&const DeepCollectionEquality().equals(other.selectedMap, _selectedMap)&&const DeepCollectionEquality().equals(other.unfoldSet, _unfoldSet)&&(identical(other.scriptId, scriptId) || other.scriptId == scriptId)&&const DeepCollectionEquality().equals(other.exitTargets, _exitTargets)&&(identical(other.order, order) || other.order == order)&&(identical(other.overrides, overrides) || other.overrides == overrides));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,id,type,label,currentGroupName,url,ageSecretKey,lastUpdateDate,autoUpdateDuration,subscriptionInfo,autoUpdate,const DeepCollectionEquality().hash(_selectedMap),const DeepCollectionEquality().hash(_unfoldSet),scriptId,const DeepCollectionEquality().hash(_exitTargets),order,overrides);
+    return Object.hash(runtimeType,id,type,label,currentGroupName,url,ageSecretKey,lastUpdateDate,autoUpdateDuration,userAutoUpdateDuration,subscriptionInfo,autoUpdate,const DeepCollectionEquality().hash(_selectedMap),const DeepCollectionEquality().hash(_unfoldSet),scriptId,const DeepCollectionEquality().hash(_exitTargets),order,overrides);
 }
 
 @override
 String toString() {
-    return 'Profile(id: $id, type: $type, label: $label, currentGroupName: $currentGroupName, url: $url, ageSecretKey: $ageSecretKey, lastUpdateDate: $lastUpdateDate, autoUpdateDuration: $autoUpdateDuration, subscriptionInfo: $subscriptionInfo, autoUpdate: $autoUpdate, selectedMap: $selectedMap, unfoldSet: $unfoldSet, scriptId: $scriptId, exitTargets: $exitTargets, order: $order, overrides: $overrides)';
+    return 'Profile(id: $id, type: $type, label: $label, currentGroupName: $currentGroupName, url: $url, ageSecretKey: $ageSecretKey, lastUpdateDate: $lastUpdateDate, autoUpdateDuration: $autoUpdateDuration, userAutoUpdateDuration: $userAutoUpdateDuration, subscriptionInfo: $subscriptionInfo, autoUpdate: $autoUpdate, selectedMap: $selectedMap, unfoldSet: $unfoldSet, scriptId: $scriptId, exitTargets: $exitTargets, order: $order, overrides: $overrides)';
 }
 
 
@@ -603,7 +616,7 @@ abstract mixin class _$ProfileCopyWith<$Res> implements $ProfileCopyWith<$Res> {
   factory _$ProfileCopyWith(_Profile value, $Res Function(_Profile) _then) = __$ProfileCopyWithImpl;
 @override @useResult
 $Res call({
- int id, ProfileType type, String label, String? currentGroupName, String url, String ageSecretKey, DateTime? lastUpdateDate, Duration autoUpdateDuration, SubscriptionInfo? subscriptionInfo, bool autoUpdate, Map<String, String> selectedMap, Set<String> unfoldSet, int? scriptId, Map<String, String> exitTargets, int? order,@JsonKey(fromJson: ProfileOverrides.safeFromJson) ProfileOverrides overrides
+ int id, ProfileType type, String label, String? currentGroupName, String url, String ageSecretKey, DateTime? lastUpdateDate, Duration autoUpdateDuration, bool userAutoUpdateDuration, SubscriptionInfo? subscriptionInfo, bool autoUpdate, Map<String, String> selectedMap, Set<String> unfoldSet, int? scriptId, Map<String, String> exitTargets, int? order,@JsonKey(fromJson: ProfileOverrides.safeFromJson) ProfileOverrides overrides
 });
 
 
@@ -620,7 +633,7 @@ class __$ProfileCopyWithImpl<$Res>
 
 /// Create a copy of Profile
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? type = null,Object? label = null,Object? currentGroupName = freezed,Object? url = null,Object? ageSecretKey = null,Object? lastUpdateDate = freezed,Object? autoUpdateDuration = null,Object? subscriptionInfo = freezed,Object? autoUpdate = null,Object? selectedMap = null,Object? unfoldSet = null,Object? scriptId = freezed,Object? exitTargets = null,Object? order = freezed,Object? overrides = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? type = null,Object? label = null,Object? currentGroupName = freezed,Object? url = null,Object? ageSecretKey = null,Object? lastUpdateDate = freezed,Object? autoUpdateDuration = null,Object? userAutoUpdateDuration = null,Object? subscriptionInfo = freezed,Object? autoUpdate = null,Object? selectedMap = null,Object? unfoldSet = null,Object? scriptId = freezed,Object? exitTargets = null,Object? order = freezed,Object? overrides = null,}) {
   return _then(_Profile(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,type: null == type ? _self.type : type // ignore: cast_nullable_to_non_nullable
@@ -630,7 +643,8 @@ as String?,url: null == url ? _self.url : url // ignore: cast_nullable_to_non_nu
 as String,ageSecretKey: null == ageSecretKey ? _self.ageSecretKey : ageSecretKey // ignore: cast_nullable_to_non_nullable
 as String,lastUpdateDate: freezed == lastUpdateDate ? _self.lastUpdateDate : lastUpdateDate // ignore: cast_nullable_to_non_nullable
 as DateTime?,autoUpdateDuration: null == autoUpdateDuration ? _self.autoUpdateDuration : autoUpdateDuration // ignore: cast_nullable_to_non_nullable
-as Duration,subscriptionInfo: freezed == subscriptionInfo ? _self.subscriptionInfo : subscriptionInfo // ignore: cast_nullable_to_non_nullable
+as Duration,userAutoUpdateDuration: null == userAutoUpdateDuration ? _self.userAutoUpdateDuration : userAutoUpdateDuration // ignore: cast_nullable_to_non_nullable
+as bool,subscriptionInfo: freezed == subscriptionInfo ? _self.subscriptionInfo : subscriptionInfo // ignore: cast_nullable_to_non_nullable
 as SubscriptionInfo?,autoUpdate: null == autoUpdate ? _self.autoUpdate : autoUpdate // ignore: cast_nullable_to_non_nullable
 as bool,selectedMap: null == selectedMap ? _self._selectedMap : selectedMap // ignore: cast_nullable_to_non_nullable
 as Map<String, String>,unfoldSet: null == unfoldSet ? _self._unfoldSet : unfoldSet // ignore: cast_nullable_to_non_nullable

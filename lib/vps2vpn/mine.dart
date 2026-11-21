@@ -13,6 +13,7 @@ import 'package:fl_clash/vps2vpn/account.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -800,6 +801,10 @@ class _ProfileCard extends ConsumerWidget {
                   Text(expire, style: vpsText(p, size: 12.5, color: p.soft)),
               ],
             ),
+          ],
+          if (hasSubscriptionExtras(sub)) ...[
+            const SizedBox(height: 14),
+            VpsSubscriptionExtras(info: sub),
           ],
         ],
       ),

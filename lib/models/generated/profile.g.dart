@@ -12,6 +12,9 @@ _SubscriptionInfo _$SubscriptionInfoFromJson(Map<String, dynamic> json) =>
       download: (json['download'] as num?)?.toInt() ?? 0,
       total: (json['total'] as num?)?.toInt() ?? 0,
       expire: (json['expire'] as num?)?.toInt() ?? 0,
+      announce: json['announce'] as String?,
+      webPageUrl: json['webPageUrl'] as String?,
+      supportUrl: json['supportUrl'] as String?,
     );
 
 Map<String, dynamic> _$SubscriptionInfoToJson(_SubscriptionInfo instance) =>
@@ -20,6 +23,9 @@ Map<String, dynamic> _$SubscriptionInfoToJson(_SubscriptionInfo instance) =>
       'download': instance.download,
       'total': instance.total,
       'expire': instance.expire,
+      'announce': instance.announce,
+      'webPageUrl': instance.webPageUrl,
+      'supportUrl': instance.supportUrl,
     };
 
 _Profile _$ProfileFromJson(Map<String, dynamic> json) => _Profile(
@@ -37,6 +43,7 @@ _Profile _$ProfileFromJson(Map<String, dynamic> json) => _Profile(
   autoUpdateDuration: Duration(
     microseconds: (json['autoUpdateDuration'] as num).toInt(),
   ),
+  userAutoUpdateDuration: json['userAutoUpdateDuration'] as bool? ?? false,
   subscriptionInfo: json['subscriptionInfo'] == null
       ? null
       : SubscriptionInfo.fromJson(
@@ -74,6 +81,7 @@ Map<String, dynamic> _$ProfileToJson(_Profile instance) => <String, dynamic>{
   'ageSecretKey': instance.ageSecretKey,
   'lastUpdateDate': instance.lastUpdateDate?.toIso8601String(),
   'autoUpdateDuration': instance.autoUpdateDuration.inMicroseconds,
+  'userAutoUpdateDuration': instance.userAutoUpdateDuration,
   'subscriptionInfo': instance.subscriptionInfo,
   'autoUpdate': instance.autoUpdate,
   'selectedMap': instance.selectedMap,

@@ -3818,4 +3818,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get subscriptionTooLarge => 'サブスクリプションが大きすぎて読み込めません';
+
+  @override
+  String get subscriptionAnnounce => 'プロバイダーからのお知らせ';
+
+  @override
+  String get subscriptionWebPage => 'マイページ';
+
+  @override
+  String get subscriptionSupport => 'サポートに連絡';
+
+  @override
+  String get subscriptionLinkOpenFailed => 'リンクを開けませんでした';
 }

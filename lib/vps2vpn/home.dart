@@ -16,6 +16,7 @@ import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/kit.dart';
 import 'package:fl_clash/vps2vpn/servers.dart';
 import 'package:fl_clash/vps2vpn/shell.dart';
+import 'package:fl_clash/vps2vpn/subscription_notice.dart';
 import 'package:fl_clash/vps2vpn/takeover_notice.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -95,6 +96,7 @@ class VpsHomePage extends ConsumerWidget {
       ),
       children: [
         const VpsTakeoverNotice(),
+        const VpsSubscriptionNotice(),
         const _Hero(),
         const SizedBox(height: 16),
         const _Stats(),

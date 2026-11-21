@@ -3997,4 +3997,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get subscriptionTooLarge => 'The subscription is too large to load';
+
+  @override
+  String get subscriptionAnnounce => 'Notice from your provider';
+
+  @override
+  String get subscriptionWebPage => 'My page';
+
+  @override
+  String get subscriptionSupport => 'Contact support';
+
+  @override
+  String get subscriptionLinkOpenFailed => 'Couldn\'t open the link';
 }

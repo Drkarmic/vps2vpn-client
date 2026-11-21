@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
@@ -77,6 +79,167 @@ void main() {
       expect(info.download, 2400);
       expect(info.total, 10737418240);
       expect(info.expire, 0);
+    });
+  });
+
+  group('subscription headers', () {
+    SubscriptionHeader headers(Map<String, String> values) =>
+        (name) => values[name];
+
+    const subscription = Profile(
+      id: 9,
+      type: ProfileType.url,
+      url: 'https://sub.example/s/token',
+      autoUpdateDuration: defaultUpdateDuration,
+    );
+
+    test('reads the announcement and the links next to the usage', () {
+      final info = SubscriptionInfo.fromHeaders(
+        headers({
+          'subscription-userinfo': 'upload=1; download=2; total=3; expire=4',
+          'announce': 'base64:${base64.encode(utf8.encode('续费后恢复'))}',
+          'profile-web-page-url': 'https://panel.example/me',
+          'support-url': 'tg://resolve?domain=help',
+        }),
+      );
+
+      expect(
+        info,
+        const SubscriptionInfo(
+          upload: 1,
+          download: 2,
+          total: 3,
+          expire: 4,
+          announce: '续费后恢复',
+          webPageUrl: 'https://panel.example/me',
+          supportUrl: 'tg://resolve?domain=help',
+        ),
+      );
+    });
+
+    test('drops unsafe links and caps the announcement', () {
+      final info = SubscriptionInfo.fromHeaders(
+        headers({
+          'announce': 'x' * 1000,
+          'profile-web-page-url': 'javascript:alert(1)',
+          'support-url': 'https://user:pass@evil.example',
+        }),
+      );
+
+      expect(info.announce, hasLength(maxSubscriptionAnnounceLength));
+      expect(info.webPageUrl, isNull);
+      expect(info.supportUrl, isNull);
+    });
+
+    test('a stored info from before these fields still decodes', () {
+      final info = SubscriptionInfo.fromJson(
+        json.decode('{"upload":1,"download":2,"total":3,"expire":4}'),
+      );
+
+      expect(info.announce, isNull);
+      expect(info.webPageUrl, isNull);
+      expect(info.supportUrl, isNull);
+      expect(
+        SubscriptionInfo.fromJson(
+          json.decode(
+            json.encode(info.copyWith(announce: 'Hi', supportUrl: 'https://a.b')
+                .toJson()),
+          ),
+        ),
+        info.copyWith(announce: 'Hi', supportUrl: 'https://a.b'),
+      );
+    });
+
+    test('profile-title names a new profile before the file name does', () {
+      final named = subscription.withSubscriptionHeaders(
+        headers({
+          'profile-title': 'base64:${base64.encode(utf8.encode('我的线路'))}',
+          'content-disposition': 'attachment; filename="clash.yaml"',
+        }),
+      );
+      final unnamed = subscription.withSubscriptionHeaders(
+        headers({'content-disposition': 'attachment; filename="clash.yaml"'}),
+      );
+
+      expect(named.label, '我的线路');
+      expect(unnamed.label, 'clash.yaml');
+      expect(subscription.withSubscriptionHeaders(headers({})).label,
+          'sub.example');
+    });
+
+    test('a label of its own outlives profile-title', () {
+      final profile = subscription
+          .copyWith(label: 'Mine')
+          .withSubscriptionHeaders(headers({'profile-title': 'Theirs'}));
+
+      expect(profile.label, 'Mine');
+    });
+
+    test('profile-title is cleaned and capped', () {
+      final profile = subscription.withSubscriptionHeaders(
+        headers({'profile-title': '\u202E${'T' * 200}\n'}),
+      );
+
+      expect(profile.label, 'T' * maxSubscriptionTitleLength);
+    });
+
+    test('profile-update-interval sets the interval the user has not', () {
+      final updated = subscription.withSubscriptionHeaders(
+        headers({'profile-update-interval': '12'}),
+      );
+      final chosen = subscription
+          .copyWith(
+            autoUpdateDuration: const Duration(minutes: 30),
+            userAutoUpdateDuration: true,
+          )
+          .withSubscriptionHeaders(headers({'profile-update-interval': '12'}));
+      final invalid = subscription.withSubscriptionHeaders(
+        headers({'profile-update-interval': '0'}),
+      );
+
+      expect(updated.autoUpdateDuration, const Duration(hours: 12));
+      expect(chosen.autoUpdateDuration, const Duration(minutes: 30));
+      expect(invalid.autoUpdateDuration, defaultUpdateDuration);
+    });
+
+    test('an update keeps what the user changed during the download', () {
+      final updated = subscription.copyWith(
+        label: 'Theirs',
+        autoUpdateDuration: const Duration(hours: 12),
+        subscriptionInfo: const SubscriptionInfo(announce: 'New'),
+        lastUpdateDate: DateTime(2026, 11, 20),
+      );
+
+      final untouched = subscription.withUpdate(
+        target: subscription,
+        updated: updated,
+      );
+      final retimed = subscription
+          .copyWith(autoUpdateDuration: const Duration(hours: 2))
+          .withUpdate(target: subscription, updated: updated);
+      final chosen = subscription
+          .copyWith(userAutoUpdateDuration: true)
+          .withUpdate(target: subscription, updated: updated);
+      final named = subscription
+          .copyWith(label: 'Mine')
+          .withUpdate(target: subscription, updated: updated);
+
+      expect(untouched.label, 'Theirs');
+      expect(untouched.autoUpdateDuration, const Duration(hours: 12));
+      expect(untouched.subscriptionInfo?.announce, 'New');
+      expect(untouched.lastUpdateDate, DateTime(2026, 11, 20));
+      expect(retimed.autoUpdateDuration, const Duration(hours: 2));
+      expect(chosen.autoUpdateDuration, defaultUpdateDuration);
+      expect(named.label, 'Mine');
+    });
+
+    test('a stored profile from before the user flag follows the header', () {
+      final profile = Profile.fromJson(
+        json.decode(json.encode(subscription.toJson()))
+          ..remove('userAutoUpdateDuration'),
+      );
+
+      expect(profile.userAutoUpdateDuration, isFalse);
     });
   });
 

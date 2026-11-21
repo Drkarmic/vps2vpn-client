@@ -1150,5 +1150,9 @@
   "vRouting": "Routage",
   "subscriptionEmpty": "L'abonnement a renvoyé une configuration vide",
   "subscriptionUpdateKeptLast": "Impossible de mettre à jour {label} ; la dernière configuration fonctionnelle reste utilisée",
-  "subscriptionTooLarge": "L'abonnement est trop volumineux pour être chargé"
+  "subscriptionTooLarge": "L'abonnement est trop volumineux pour être chargé",
+  "subscriptionAnnounce": "Message de votre fournisseur",
+  "subscriptionWebPage": "Ma page",
+  "subscriptionSupport": "Contacter l’assistance",
+  "subscriptionLinkOpenFailed": "Impossible d’ouvrir le lien"
 }

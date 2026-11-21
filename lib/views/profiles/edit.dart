@@ -127,14 +127,19 @@ class _EditProfileViewState extends ConsumerState<EditProfileView> {
         ref.read(profilesProvider).getProfile(widget.profile.id) ??
         widget.profile;
     final interval = int.tryParse(_autoUpdateDurationController.text);
+    final autoUpdateDuration = interval != null && interval > 0
+        ? Duration(minutes: interval)
+        : current.autoUpdateDuration;
     var profile = current.copyWith(
       url: _urlController.text,
       ageSecretKey: _ageSecretKeyController.text.trim(),
       label: _labelController.text,
       autoUpdate: _autoUpdate,
-      autoUpdateDuration: interval != null && interval > 0
-          ? Duration(minutes: interval)
-          : current.autoUpdateDuration,
+      autoUpdateDuration: autoUpdateDuration,
+      userAutoUpdateDuration:
+          current.userAutoUpdateDuration ||
+          autoUpdateDuration.inMinutes !=
+              widget.profile.autoUpdateDuration.inMinutes,
     );
     final profilesAction = ref.read(profilesActionProvider.notifier);
     final appLocalizations = context.appLocalizations;

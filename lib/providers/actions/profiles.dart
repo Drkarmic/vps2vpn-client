@@ -215,15 +215,7 @@ class ProfilesAction extends _$ProfilesAction {
             latest.ageSecretKey != target.ageSecretKey) {
           return;
         }
-        final newProfile = latest.copyWith(
-          label: latest.label.takeFirstValid([updated.label]),
-          subscriptionInfo: updated.subscriptionInfo,
-          lastUpdateDate: updated.lastUpdateDate,
-          autoUpdateDuration:
-              latest.autoUpdateDuration != target.autoUpdateDuration
-              ? latest.autoUpdateDuration
-              : updated.autoUpdateDuration,
-        );
+        final newProfile = latest.withUpdate(target: target, updated: updated);
         ref.read(profilesProvider.notifier).put(newProfile);
         autoUpdateBackoff.succeed(target.id);
         if (target.id == ref.read(currentProfileIdProvider)) {

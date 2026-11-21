@@ -197,4 +197,50 @@ void main() {
     expect(saved.autoUpdate, isFalse);
     expect(saved.autoUpdateDuration, profile.autoUpdateDuration);
   });
+
+  testWidgets('a changed interval stops following the subscription header', (
+    tester,
+  ) async {
+    final profile = _urlProfile();
+    await pumpEditProfile(
+      tester,
+      profile: profile,
+      overrides: [
+        profilesProvider.overrideWith(() => TestProfiles([profile])),
+      ],
+    );
+    final interval = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField &&
+          widget.controller?.text == '${profile.autoUpdateDuration.inMinutes}',
+    );
+
+    await tester.enterText(interval, '30');
+    await tester.tap(find.byTooltip('Save'));
+    await tester.pump();
+
+    final saved = globalState.container.read(profilesProvider).single;
+    expect(saved.autoUpdateDuration, const Duration(minutes: 30));
+    expect(saved.userAutoUpdateDuration, isTrue);
+  });
+
+  testWidgets('saving an untouched interval keeps following the header', (
+    tester,
+  ) async {
+    final profile = _urlProfile();
+    await pumpEditProfile(
+      tester,
+      profile: profile,
+      overrides: [
+        profilesProvider.overrideWith(() => TestProfiles([profile])),
+      ],
+    );
+
+    await tester.tap(find.byTooltip('Save'));
+    await tester.pump();
+
+    final saved = globalState.container.read(profilesProvider).single;
+    expect(saved.autoUpdateDuration, profile.autoUpdateDuration);
+    expect(saved.userAutoUpdateDuration, isFalse);
+  });
 }
