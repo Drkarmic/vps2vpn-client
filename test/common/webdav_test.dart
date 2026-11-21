@@ -441,6 +441,32 @@ void main() {
     expect(await dir.list().toList(), hasLength(1));
   });
 
+  test('short HTTP 200 body cannot replace an existing backup', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-dav-short-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/backup.zip');
+    await file.writeAsString('original');
+    final transport = DAVTransport(
+      uri: 'https://origin.example/base',
+      user: 'user',
+      password: 'pass',
+      dio: _dioWith(_ScriptedAdapter(
+        (_) => ResponseBody.fromBytes(
+          [1, 2, 3],
+          200,
+          headers: {'content-length': ['5']},
+        ),
+      )),
+    );
+
+    await expectLater(
+      transport.getFile('backup.zip', file.path, maxBytes: 8),
+      throwsA(isA<DAVException>()),
+    );
+    expect(await file.readAsString(), 'original');
+    expect(await dir.list().toList(), hasLength(1));
+  });
+
   test('streamed GET writes a complete 206 but rejects partial range', () async {
     final dir = await Directory.systemTemp.createTemp('v2v-dav-range-');
     addTearDown(() => dir.delete(recursive: true));
