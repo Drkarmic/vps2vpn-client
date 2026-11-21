@@ -60,8 +60,46 @@ bool vpsReleaseSelfInstalls(VpsClientRelease release) {
   return url != null && vpsSelfInstallable(_fileName(url));
 }
 
+/// Fetches the installer at [url] and keeps it only when it carries the
+/// release signature and is newer than [current] (see vpsDownloadRelease).
+typedef VpsUpdateFetcher =
+    Future<File> Function(
+      WidgetRef ref,
+      Uri url, {
+      required bool install,
+      required String current,
+      void Function(int received, int total)? onProgress,
+    });
+
+Future<File> _fetchUpdate(
+  WidgetRef ref,
+  Uri url, {
+  required bool install,
+  required String current,
+  void Function(int received, int total)? onProgress,
+}) async {
+  final pins = await ref.read(vpsPanelPinsProvider.future);
+  final dir = Directory(
+    install ? await appPath.updateDirPath : await appPath.downloadDirPath,
+  );
+  await dir.create(recursive: true);
+  return vpsDownloadRelease(
+    url,
+    dir,
+    pinnedSha256: pins,
+    currentVersion: current,
+    onProgress: onProgress,
+  );
+}
+
+/// Replaced in tests: the transfer itself.
+@visibleForTesting
+VpsUpdateFetcher vpsUpdateFetcher = _fetchUpdate;
+
 // Versions fetched automatically in this run: one try each, so a panel that
-// serves a broken or unsigned file is not downloaded again every few hours.
+// serves a broken or unsigned file is not downloaded again every few hours. A
+// transfer that failed (offline, the panel unreachable) is tried again on the
+// next check.
 final _autoTried = <String>{};
 
 @visibleForTesting
@@ -74,8 +112,9 @@ void resetVpsAutoUpdate() => _autoTried.clear();
 /// the panel has no installer for this platform, its release page opens in
 /// the browser instead: a web page is never treated as an installer.
 /// [auto] keeps transfer failures quiet; refusals are always shown, as the
-/// owner has to fix them.
-Future<void> vpsDownloadPanelUpdate(
+/// owner has to fix them. Returns false only when the transfer failed, so a
+/// later try may succeed.
+Future<bool> vpsDownloadPanelUpdate(
   WidgetRef ref,
   VpsClientRelease release, {
   required String current,
@@ -87,7 +126,7 @@ Future<void> vpsDownloadPanelUpdate(
     if (!auto && page != null) {
       await launchUrl(page, mode: LaunchMode.externalApplication);
     }
-    return;
+    return true;
   }
   final install = vpsSelfInstallable(_fileName(url));
   final download = ref.read(updateDownloadStateProvider.notifier);
@@ -97,7 +136,7 @@ Future<void> vpsDownloadPanelUpdate(
   if (install &&
       (pending is UpdateDownloading ||
           (pending is UpdateReady && pending.tag == tag))) {
-    return;
+    return true;
   }
   if (!auto) {
     _banner(
@@ -107,17 +146,12 @@ Future<void> vpsDownloadPanelUpdate(
   }
   if (install) download.value = UpdateDownloading(tag);
   try {
-    final pins = await ref.read(vpsPanelPinsProvider.future);
-    final dir = Directory(
-      install ? await appPath.updateDirPath : await appPath.downloadDirPath,
-    );
-    await dir.create(recursive: true);
     var shown = 0;
-    final file = await vpsDownloadRelease(
+    final file = await vpsUpdateFetcher(
+      ref,
       url,
-      dir,
-      pinnedSha256: pins,
-      currentVersion: current,
+      install: install,
+      current: current,
       onProgress: install
           ? (received, total) {
               // One rebuild per percent, not one per chunk.
@@ -145,7 +179,7 @@ Future<void> vpsDownloadPanelUpdate(
         onTap: () =>
             unawaited(ref.read(commonActionProvider.notifier).installUpdate()),
       );
-      return;
+      return true;
     }
     _banner(
       (c) => tr(
@@ -156,7 +190,8 @@ Future<void> vpsDownloadPanelUpdate(
       ),
       BannerLevel.info,
     );
-    await launchUrl(Uri.file(dir.path));
+    await launchUrl(Uri.file(file.parent.path));
+    return true;
   } on VpsUpdateRejected catch (e) {
     if (install) download.value = null;
     _banner(
@@ -181,6 +216,7 @@ Future<void> vpsDownloadPanelUpdate(
       },
       BannerLevel.warning,
     );
+    return true;
   } catch (error) {
     if (install) download.value = null;
     commonPrint.log(
@@ -193,14 +229,18 @@ Future<void> vpsDownloadPanelUpdate(
         BannerLevel.warning,
       );
     }
+    return false;
   }
 }
 
 /// Asks the panel for a newer client and, when this build installs by itself,
 /// fetches it in the background. Respects the "check for updates" setting.
-Future<void> vpsAutoUpdateCheck(WidgetRef ref) async {
+Future<void> vpsAutoUpdateCheck(
+  WidgetRef ref, {
+  @visibleForTesting String? currentVersion,
+}) async {
   if (!ref.read(appSettingProvider).autoCheckUpdate) return;
-  final current = vpsAppVersion();
+  final current = currentVersion ?? vpsAppVersion();
   if (current == null) return;
   // The member provider disposes itself without a listener.
   final keep = ref.listenManual(vpsMemberProvider, (_, _) {});
@@ -212,7 +252,13 @@ Future<void> vpsAutoUpdateCheck(WidgetRef ref) async {
     if (release == null || !release.newerThan(current)) return;
     if (!vpsReleaseSelfInstalls(release)) return;
     if (!_autoTried.add(release.version)) return;
-    await vpsDownloadPanelUpdate(ref, release, current: current, auto: true);
+    final settled = await vpsDownloadPanelUpdate(
+      ref,
+      release,
+      current: current,
+      auto: true,
+    );
+    if (!settled) _autoTried.remove(release.version);
   } catch (error) {
     commonPrint.log(
       'Client update check failed: ${compactError(error)}',

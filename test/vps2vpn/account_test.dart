@@ -204,6 +204,126 @@ void main() {
     expect(vpsSelfInstallable(apk), isFalse);
   });
 
+  group('the background check', () {
+    final realFetcher = vpsUpdateFetcher;
+    tearDown(() {
+      vpsUpdateFetcher = realFetcher;
+      resetVpsAutoUpdate();
+    });
+
+    // Run [body] with a WidgetRef of an app whose panel offers 1.1.0.
+    Future<void> withRef(
+      WidgetTester tester,
+      Future<void> Function(WidgetRef ref, ProviderContainer c) body,
+    ) async {
+      late WidgetRef captured;
+      final release = VpsClientRelease(
+        version: '1.1.0',
+        url: Uri.parse(
+          'https://example.com/client/vps2vpn-1.1.0-${Platform.operatingSystem}-amd64-setup.exe',
+        ),
+      );
+      await tester.pumpWidget(
+        TestApp(
+          key: UniqueKey(),
+          includeNavigatorKey: false,
+          locale: const Locale('en'),
+          overrides: [
+            vpsMemberProvider.overrideWith(
+              (ref) async => VpsMemberResult(
+                member: VpsMember(name: 'Ann', enabled: true, client: release),
+              ),
+            ),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              captured = ref;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+      await body(
+        captured,
+        ProviderScope.containerOf(tester.element(find.byType(SizedBox))),
+      );
+    }
+
+    testWidgets('fetches a newer signed installer and offers to install it', (
+      tester,
+    ) async {
+      resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+      final fetched = <Uri>[];
+      vpsUpdateFetcher =
+          (ref, url, {required install, required current, onProgress}) async {
+            fetched.add(url);
+            expect((install, current), (true, '1.0.0'));
+            onProgress?.call(100, 100);
+            return File('setup.exe');
+          };
+      await withRef(tester, (ref, c) async {
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(fetched, hasLength(1));
+        final state = c.read(updateDownloadStateProvider);
+        expect(state, isA<UpdateReady>());
+        expect((state as UpdateReady).tag, 'v1.1.0');
+        // Ready: the next check does not fetch it again.
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(fetched, hasLength(1));
+      });
+    });
+
+    testWidgets('a transfer that failed is tried again on the next check', (
+      tester,
+    ) async {
+      resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+      var calls = 0;
+      vpsUpdateFetcher =
+          (ref, url, {required install, required current, onProgress}) async {
+            calls++;
+            throw const SocketException('offline');
+          };
+      await withRef(tester, (ref, c) async {
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(c.read(updateDownloadStateProvider), isNull);
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(calls, 2);
+      });
+    });
+
+    testWidgets('a refused installer is tried once per run', (tester) async {
+      resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+      var calls = 0;
+      vpsUpdateFetcher =
+          (ref, url, {required install, required current, onProgress}) async {
+            calls++;
+            throw const VpsUpdateRejected('unsigned');
+          };
+      await withRef(tester, (ref, c) async {
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(calls, 1);
+        expect(c.read(updateDownloadStateProvider), isNull);
+      });
+    });
+
+    testWidgets('a build that cannot install by itself fetches nothing', (
+      tester,
+    ) async {
+      resolveSelfUpdateAsset = () => null; // portable copy, macOS, Linux
+      var calls = 0;
+      vpsUpdateFetcher =
+          (ref, url, {required install, required current, onProgress}) async {
+            calls++;
+            return File('x');
+          };
+      await withRef(tester, (ref, c) async {
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(calls, 0);
+      });
+    });
+  });
+
   testWidgets('an installed build updates, shows progress and installs', (
     tester,
   ) async {
