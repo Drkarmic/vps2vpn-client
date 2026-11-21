@@ -154,7 +154,7 @@ class DAVTransport {
         '${random.nextInt(1 << 32).toRadixString(16)}'
         '${random.nextInt(1 << 32).toRadixString(16)}';
     final staging = File('$filePath.$pid.$suffix.tmp');
-    IOSink? writer;
+    RandomAccessFile? writer;
     try {
       final declared = int.tryParse(
         response.headers.value(Headers.contentLengthHeader) ?? '',
@@ -168,7 +168,7 @@ class DAVTransport {
         );
       }
       await staging.parent.create(recursive: true);
-      writer = staging.openWrite();
+      writer = await staging.open(mode: FileMode.write);
       var received = 0;
       await for (final chunk in data.stream) {
         if (chunk.length > maxBytes - received) {
@@ -178,12 +178,22 @@ class DAVTransport {
             reasonPhrase: 'backup exceeds download limit',
           );
         }
+        // Wait for disk I/O so a slow disk cannot queue the entire download.
+        await writer.writeFrom(chunk);
         received += chunk.length;
-        writer.add(chunk);
       }
-      await writer.flush();
-      await writer.close();
-      writer = null;
+      // A short 200 must not replace an existing backup with a truncated ZIP.
+      // Compressed responses may report the wire length, not decoded bytes.
+      if (declared != null &&
+          (response.headers.value('content-encoding') ?? 'identity') ==
+              'identity' &&
+          received != declared) {
+        throw DAVException(
+          method: 'GET',
+          path: path,
+          reasonPhrase: 'response length does not match Content-Length',
+        );
+      }
       if (response.statusCode == 206 &&
           !_coversWhole(response.headers.value('content-range'), received)) {
         throw DAVException(
@@ -193,6 +203,9 @@ class DAVTransport {
           reasonPhrase: 'incomplete content range',
         );
       }
+      await writer.flush();
+      await writer.close();
+      writer = null;
       await staging.rename(filePath);
     } catch (_) {
       if (writer != null) {
