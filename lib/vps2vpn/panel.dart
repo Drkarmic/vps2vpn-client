@@ -136,8 +136,30 @@ class VpsClientRelease {
     );
   }
 
-  /// The installer for [platform] when the panel has one, else [url].
-  Uri downloadFor(String platform) => files[platform] ?? url;
+  /// The signed installer to fetch for [platform]: the panel's file for it,
+  /// else [url] when that is itself a versioned installer built for
+  /// [platform] (a panel that only names one link). Null when there is none.
+  Uri? installerFor(String platform) {
+    final file = files[platform];
+    if (file != null) return file;
+    final name = _lastSegment(url).toLowerCase();
+    final forPlatform =
+        name.contains('-$platform-') || name.contains('-$platform.');
+    return forPlatform && vpsUpdateFileVersion(name) != null ? url : null;
+  }
+
+  /// The page the browser opens when there is no installer for [platform]:
+  /// [url], unless that is an installer for another platform (which this
+  /// device cannot use, so there is nothing to open).
+  Uri? pageFor(String platform) {
+    if (installerFor(platform) != null) return null;
+    return vpsUpdateFileVersion(_lastSegment(url).toLowerCase()) == null
+        ? url
+        : null;
+  }
+
+  static String _lastSegment(Uri u) =>
+      u.pathSegments.isEmpty ? '' : u.pathSegments.last;
 
   /// True when this release is newer than [current]; false when either
   /// version is not plain numbers.

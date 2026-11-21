@@ -86,14 +86,58 @@ void main() {
     })!;
     expect(r.notes, isNull);
     expect(r.newerThan('1.2.0'), isTrue);
-    expect(r.downloadFor('android').path, endsWith('android.apk'));
-    expect(r.downloadFor('linux'), r.url);
+    expect(r.installerFor('android')!.path, endsWith('android.apk'));
+    // #67: no Linux installer; the link is the Windows one, nothing to open.
+    expect(r.installerFor('linux'), isNull);
+    expect(r.pageFor('linux'), isNull);
+    expect(r.pageFor('windows'), isNull);
     expect(r.files.containsKey('bad'), isFalse);
     final onlyFiles = VpsClientRelease.fromJson({
       'version': '2.0.0',
       'files': {'windows': 'https://panel/x.exe'},
     })!;
     expect(onlyFiles.url.toString(), 'https://panel/x.exe');
+  });
+
+  test('a release page is opened, never fetched as an installer (#67)', () {
+    final page = VpsClientRelease(
+      version: '1.0.9',
+      url: Uri.parse(
+        'https://github.com/xydadada/vps2vpn-client/releases/latest',
+      ),
+    );
+    for (final os in ['windows', 'android', 'macos', 'linux']) {
+      expect(page.installerFor(os), isNull, reason: os);
+      expect(page.pageFor(os), page.url, reason: os);
+    }
+    // One direct, versioned link (an older panel): an installer for its own
+    // platform only.
+    final direct = VpsClientRelease(
+      version: '1.0.9',
+      url: Uri.parse('https://panel/d/vps2vpn-1.0.9-windows-amd64-setup.exe'),
+    );
+    expect(direct.installerFor('windows'), direct.url);
+    expect(direct.installerFor('android'), isNull);
+    expect(direct.pageFor('android'), isNull);
+    final apk = VpsClientRelease(
+      version: '1.0.9',
+      url: Uri.parse('https://panel/d/vps2vpn-1.0.9-android-arm64-v8a.apk'),
+    );
+    expect(apk.installerFor('android'), apk.url);
+    expect(apk.installerFor('windows'), isNull);
+    // A file map without this platform falls back to a page link.
+    final mixed = VpsClientRelease(
+      version: '1.0.9',
+      url: Uri.parse('https://example.com/download'),
+      files: {
+        'windows': Uri.parse(
+          'https://panel/d/vps2vpn-1.0.9-windows-amd64-setup.exe',
+        ),
+      },
+    );
+    expect(mixed.installerFor('linux'), isNull);
+    expect(mixed.pageFor('linux'), mixed.url);
+    expect(mixed.pageFor('windows'), isNull);
   });
 
   test('names the line kinds the panel knows', () {

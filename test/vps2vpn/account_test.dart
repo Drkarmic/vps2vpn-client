@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:fl_clash/common/app_update.dart';
 import 'package:fl_clash/common/release_asset.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -131,7 +133,9 @@ void main() {
         enabled: true,
         client: VpsClientRelease(
           version: v,
-          url: Uri.parse('https://example.com/setup.exe'),
+          url: Uri.parse(
+            'https://example.com/vps2vpn-$v-${Platform.operatingSystem}-amd64.zip',
+          ),
         ),
       ),
     );
@@ -146,6 +150,39 @@ void main() {
       tester,
       const VpsUpdateCard(currentVersion: '1.2.0'),
       withClient('1.1.0'),
+    );
+    expect(_texts(), findsNothing);
+  });
+
+  testWidgets('a release page opens in the browser; another platform is hidden', (
+    tester,
+  ) async {
+    VpsMemberResult withClient(VpsClientRelease r) => VpsMemberResult(
+      member: VpsMember(name: 'Ann', enabled: true, client: r),
+    );
+    await _pump(
+      tester,
+      const VpsUpdateCard(currentVersion: '1.0.0'),
+      withClient(
+        VpsClientRelease(
+          version: '1.1.0',
+          url: Uri.parse('https://example.com/releases/latest'),
+        ),
+      ),
+    );
+    expect(find.text('Open download page'), findsOneWidget);
+    expect(find.textContaining('download page'), findsWidgets);
+    // Only another platform's installer: nothing this device can use (#67).
+    final other = Platform.isAndroid ? 'windows' : 'android';
+    final file = Uri.parse(
+      'https://example.com/vps2vpn-1.1.0-$other-arm64.${other == 'android' ? 'apk' : 'exe'}',
+    );
+    await _pump(
+      tester,
+      const VpsUpdateCard(currentVersion: '1.0.0'),
+      withClient(
+        VpsClientRelease(version: '1.1.0', url: file, files: {other: file}),
+      ),
     );
     expect(_texts(), findsNothing);
   });

@@ -46,9 +46,19 @@ bool vpsSelfInstallable(String fileName) {
 String _fileName(Uri url) =>
     url.pathSegments.isEmpty ? '' : url.pathSegments.last;
 
-/// The panel's installer for this platform.
-Uri vpsReleaseDownload(VpsClientRelease release) =>
-    release.downloadFor(Platform.operatingSystem);
+/// The panel's signed installer for this platform, or null when it has none.
+Uri? vpsReleaseInstaller(VpsClientRelease release) =>
+    release.installerFor(Platform.operatingSystem);
+
+/// The release page to open instead, when there is no installer to fetch.
+Uri? vpsReleasePage(VpsClientRelease release) =>
+    release.pageFor(Platform.operatingSystem);
+
+/// Whether this build fetches and installs [release] by itself.
+bool vpsReleaseSelfInstalls(VpsClientRelease release) {
+  final url = vpsReleaseInstaller(release);
+  return url != null && vpsSelfInstallable(_fileName(url));
+}
 
 // Versions fetched automatically in this run: one try each, so a panel that
 // serves a broken or unsigned file is not downloaded again every few hours.
@@ -60,7 +70,9 @@ void resetVpsAutoUpdate() => _autoTried.clear();
 /// Downloads [release] from the panel and keeps it only when it carries the
 /// release signature and is newer than [current]. A build that installs by
 /// itself gets it as the pending update (the dashboard and the Settings card
-/// offer "install"); any other opens the folder for a manual install.
+/// offer "install"); any other opens the folder for a manual install. When
+/// the panel has no installer for this platform, its release page opens in
+/// the browser instead: a web page is never treated as an installer.
 /// [auto] keeps transfer failures quiet; refusals are always shown, as the
 /// owner has to fix them.
 Future<void> vpsDownloadPanelUpdate(
@@ -69,7 +81,14 @@ Future<void> vpsDownloadPanelUpdate(
   required String current,
   bool auto = false,
 }) async {
-  final url = vpsReleaseDownload(release);
+  final url = vpsReleaseInstaller(release);
+  if (url == null) {
+    final page = vpsReleasePage(release);
+    if (!auto && page != null) {
+      await launchUrl(page, mode: LaunchMode.externalApplication);
+    }
+    return;
+  }
   final install = vpsSelfInstallable(_fileName(url));
   final download = ref.read(updateDownloadStateProvider.notifier);
   final tag = 'v${release.version}';
@@ -191,7 +210,7 @@ Future<void> vpsAutoUpdateCheck(WidgetRef ref) async {
         .timeout(const Duration(minutes: 1));
     final release = result?.member?.client;
     if (release == null || !release.newerThan(current)) return;
-    if (!vpsSelfInstallable(_fileName(vpsReleaseDownload(release)))) return;
+    if (!vpsReleaseSelfInstalls(release)) return;
     if (!_autoTried.add(release.version)) return;
     await vpsDownloadPanelUpdate(ref, release, current: current, auto: true);
   } catch (error) {
