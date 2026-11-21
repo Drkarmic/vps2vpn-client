@@ -226,7 +226,10 @@ void main() {
       return container;
     }
 
-    testWidgets('reports a file that fails its check', (tester) async {
+    testWidgets('a failed check preserves the last verified installer', (tester) async {
+      final verified = File('${home.path}/update/$asset');
+      verified.createSync(recursive: true);
+      verified.writeAsStringSync('previous verified installer');
       request.releaseDio.httpClientAdapter = _ReleaseAdapter(
         sums: '$digest  ./$asset\n',
         asset: () => ResponseBody.fromBytes(utf8.encode('tampered'), 200),
@@ -245,7 +248,7 @@ void main() {
         findsOneWidget,
       );
       expect(container.read(updateDownloadStateProvider), isNull);
-      expect(File('${home.path}/update/$asset').existsSync(), isFalse);
+      expect(verified.readAsStringSync(), 'previous verified installer');
 
       await tapCancel(tester);
     });
@@ -278,8 +281,14 @@ void main() {
       await tester.pump(const Duration(seconds: 10));
     });
 
-    testWidgets('cancelling the download reports nothing', (tester) async {
-      final partial = '${home.path}/update/$asset';
+    testWidgets('cancelling a staged download preserves the previous installer', (tester) async {
+      final verified = File('${home.path}/update/$asset');
+      verified.createSync(recursive: true);
+      verified.writeAsStringSync('previous verified installer');
+      final updateDir = Directory('${home.path}/update');
+      bool hasStagingFile() => updateDir.existsSync() && updateDir.listSync().whereType<File>().any(
+        (file) => file.uri.pathSegments.last.startsWith('.vps2vpn-'),
+      );
       final body = StreamController<Uint8List>();
       addTearDown(body.close);
       request.releaseDio.httpClientAdapter = _ReleaseAdapter(
@@ -288,7 +297,9 @@ void main() {
       );
 
       final container = await startUpdate(tester);
-      await settleUntil(tester, () => File(partial).existsSync());
+      await settleUntil(tester, hasStagingFile);
+      expect(hasStagingFile(), isTrue, reason: 'download must stage unverified bytes');
+      expect(verified.readAsStringSync(), 'previous verified installer');
       container.read(commonActionProvider.notifier).cancelUpdateDownload();
       await settleUntil(
         tester,
@@ -298,6 +309,8 @@ void main() {
 
       expect(container.read(updateDownloadStateProvider), isNull);
       expect(shows('Update failed'), isFalse);
+      expect(verified.readAsStringSync(), 'previous verified installer');
+      expect(hasStagingFile(), isFalse, reason: 'cancellation must clean staged data');
     });
   });
 

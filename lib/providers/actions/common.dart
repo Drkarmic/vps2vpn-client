@@ -221,7 +221,7 @@ class CommonAction extends _$CommonAction {
     dialogs.showBanner(currentAppLocalizations.updateDownloadStarted);
     try {
       final directory = await appPath.updateDirPath;
-      await clearUpdateDownloads();
+      // Keep the last verified installer until the new one passes its checksum.
       await Directory(directory).create(recursive: true);
       var shown = 0;
       final path = await request.downloadVerifiedRelease(
@@ -249,7 +249,6 @@ class CommonAction extends _$CommonAction {
       );
     } catch (error) {
       download.value = null;
-      await clearUpdateDownloads();
       if (error is DioException && CancelToken.isCancel(error)) {
         return;
       }
