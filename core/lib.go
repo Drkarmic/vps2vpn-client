@@ -381,7 +381,11 @@ func UpdateDns(value string) {
 	handleUpdateDns(value)
 }
 
+// ResetNetwork is what the Android service sends when the default network
+// moves; like the desktop's networkReset it also has the smart groups check
+// their lines at once, so a line the new network cannot reach is left now
+// rather than at the next interval.
 func ResetNetwork() {
 	defer recoverExport("resetNetwork")
-	safeGo("resetNetwork", handleResetNetwork)
+	safeGo("resetNetwork", handleNetworkReset)
 }
