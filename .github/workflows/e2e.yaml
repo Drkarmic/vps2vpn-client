@@ -10,6 +10,10 @@ on:
         description: Release tag that carries the setup .exe
         required: true
         default: v1.0.8
+      from:
+        description: Older release to update from in the app's way (empty = skip)
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -49,4 +53,44 @@ jobs:
         with:
           name: e2e
           path: e2e
+          if-no-files-found: ignore
+
+  upgrade:
+    # The in-app update: an older release running, the new setup started the
+    # way CommonAction.installUpdate starts it (see .github/scripts/upgrade-e2e.ps1).
+    if: ${{ inputs.from != '' }}
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Checkout the test script
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Download both installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          FROM: ${{ inputs.from }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release download -R $env:REPO -p '*-windows-amd64-setup.exe' -D old -- $env:FROM
+          gh release download -R $env:REPO -p '*-windows-amd64-setup.exe' -D new -- $env:TAG
+          Get-ChildItem old, new
+
+      - name: Update in place (end to end)
+        shell: pwsh
+        run: |
+          $old = (Get-ChildItem old -Filter '*-windows-amd64-setup.exe' | Select-Object -First 1).FullName
+          $new = (Get-ChildItem new -Filter '*-windows-amd64-setup.exe' | Select-Object -First 1).FullName
+          ./.github/scripts/upgrade-e2e.ps1 -Old $old -New $new -Out upgrade
+
+      - name: Upload results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: upgrade
+          path: upgrade
           if-no-files-found: ignore
