@@ -339,6 +339,10 @@ class Request {
       if (await fileSha256(staged.path) != expected) {
         throw ReleaseNotVerifiedException(name);
       }
+      // The user may cancel while the asynchronous hash is still running.
+      if (cancelToken?.cancelError case final error?) {
+        throw error;
+      }
       // Publish only verified bytes. If the destination is locked and cannot
       // be replaced, fail without deleting the old verified installer.
       await staged.rename(path);
