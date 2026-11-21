@@ -44,7 +44,6 @@ func newLocalFallback(t *testing.T, name, url string, opt outboundgroup.Fallback
 	return group
 }
 
-
 func TestSmartAIConfigurationOptsIntoIndependentHealth(t *testing.T) {
 	vpsOn(t)
 	raw := vpsTestRaw("MATCH,Proxy")
@@ -53,7 +52,7 @@ func TestSmartAIConfigurationOptsIntoIndependentHealth(t *testing.T) {
 	if ai["url"] == vpsGroup(raw, vpsSmartGroup)["url"] || ai["failure-threshold"] != 3 || ai["recovery-threshold"] != 3 {
 		t.Fatalf("AI health configuration = %v", ai)
 	}
-	if _, err := config.ParseRawConfig(raw); err != nil {
+	if _, err := vpsParse(t, raw); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -86,14 +85,14 @@ func TestSmartReservedNamesLeaveValidNodesAndProvidersUsable(t *testing.T) {
 				} else {
 					raw.ProxyProvider = map[string]map[string]any{reserved: {"type": "inline", "payload": []any{map[string]any{"name": "local", "type": "socks5", "server": "127.0.0.1", "port": 1080}}}}
 				}
-				if _, err := config.ParseRawConfig(raw); err != nil {
+				if _, err := vpsParse(t, raw); err != nil {
 					t.Fatalf("input must be valid: %v", err)
 				}
 				vps2vpnEnhance(raw, 0)
 				if vpsGroup(raw, reserved) != nil {
 					t.Fatalf("generated conflicting group %s", reserved)
 				}
-				if _, err := config.ParseRawConfig(raw); err != nil {
+				if _, err := vpsParse(t, raw); err != nil {
 					t.Fatalf("enhancement rejected valid input: %v", err)
 				}
 			})

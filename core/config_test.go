@@ -28,6 +28,7 @@ import (
 
 func withCurrentConfig(t *testing.T, cfg *config.Config) {
 	t.Helper()
+	waitResolverIdle(t)
 	previous := currentConfig
 	currentConfig = cfg
 	t.Cleanup(func() { currentConfig = previous })
@@ -770,6 +771,7 @@ func TestLoadConfigKeepsTheSystemTimeWriteOnlyWhereItIsAllowed(t *testing.T) {
 
 func withSetupConfig(t *testing.T, apply func(*SetupParams) error) {
 	t.Helper()
+	waitResolverIdle(t)
 	previous := setupConfig
 	setupConfig = apply
 	t.Cleanup(func() { setupConfig = previous })

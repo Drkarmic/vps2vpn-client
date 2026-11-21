@@ -11,6 +11,14 @@ func vpsOn(t *testing.T) {
 	t.Cleanup(func() { vpsSmartEnabled.Store(false) })
 }
 
+// vpsParse validates raw the way the Core does. Parsing rewrites resolver
+// settings, so it waits for lookups left by earlier tests first.
+func vpsParse(t *testing.T, raw *config.RawConfig) (*config.Config, error) {
+	t.Helper()
+	waitResolverIdle(t)
+	return config.ParseRawConfig(raw)
+}
+
 func vpsTestRaw(rules ...string) *config.RawConfig {
 	raw := config.DefaultRawConfig()
 	raw.Proxy = []map[string]any{
@@ -68,7 +76,7 @@ func TestVps2vpnEnhanceAddsSmartAndAI(t *testing.T) {
 	if fp := raw.Proxy[0]["client-fingerprint"]; fp != "chrome" {
 		t.Fatalf("fingerprint %v", fp)
 	}
-	if _, err := config.ParseRawConfig(raw); err != nil {
+	if _, err := vpsParse(t, raw); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 }
