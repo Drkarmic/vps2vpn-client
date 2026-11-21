@@ -899,7 +899,7 @@ Future<File> vpsDownloadRelease(
       throw HttpException('Download failed (HTTP ${res.statusCode})');
     }
 
-    final sink = part.openWrite();
+    final output = await part.open(mode: FileMode.write);
     final digest = _DigestSink();
     final hasher = sha256.startChunkedConversion(digest);
     final elapsed = Stopwatch()..start();
@@ -913,11 +913,12 @@ Future<File> vpsDownloadRelease(
         if (elapsed.elapsed > _releaseTransferTimeout) {
           throw const HttpException('Release download took too long');
         }
-        sink.add(chunk);
+        // Await disk I/O: IOSink.add queues unbounded pending writes on slow disks.
+        await output.writeFrom(chunk);
         hasher.add(chunk);
       }
     } finally {
-      await sink.close();
+      await output.close();
     }
     hasher.close();
     if (size == 0) {
