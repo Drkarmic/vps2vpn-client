@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -135,6 +137,139 @@ void main() {
     expect(
       FlClashHttpOverrides.findProxyFor(container, remote),
       'PROXY 127.0.0.1:7890',
+    );
+  });
+
+  group('local proxy credentials with punctuation (#64)', () {
+    const username = 'user@home';
+    const password = 'p%@:ss';
+    final expected =
+        'Basic ${base64Encode(utf8.encode('$username:$password'))}';
+
+    ProviderContainer withAuth(
+      int port, {
+      String user = username,
+      String pass = password,
+    }) {
+      final container = buildContainer(mixedPort: port);
+      container.read(networkSettingProvider.notifier).value = NetworkProps()
+          .copyWith(
+            authentication: AuthenticationProps(
+              enable: true,
+              username: user,
+              password: pass,
+            ),
+          );
+      return container;
+    }
+
+    test('are carried verbatim in the proxy string', () {
+      expect(
+        FlClashHttpOverrides.findProxyFor(withAuth(7890), remote),
+        'PROXY $username:$password@127.0.0.1:7890',
+      );
+      expect(FlClashHttpOverrides.pacUserInfo('a', 'b;c'), isNull);
+      expect(FlClashHttpOverrides.pacUserInfo('a', ' b'), isNull);
+      expect(FlClashHttpOverrides.pacUserInfo('a', ''), isNull);
+      expect(FlClashHttpOverrides.pacUserInfo('a:b', 'c'), isNull);
+    });
+
+    test('authenticate an HTTPS tunnel', () async {
+      final proxy = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(proxy.close);
+      final head = Completer<String>();
+      proxy.listen((socket) {
+        final buffer = StringBuffer();
+        socket.listen((data) {
+          buffer.write(latin1.decode(data));
+          if (buffer.toString().contains('\r\n\r\n') && !head.isCompleted) {
+            head.complete(buffer.toString());
+            socket.add(
+              latin1.encode(
+                'HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n',
+              ),
+            );
+            unawaited(socket.close());
+          }
+        });
+      });
+      final client = FlClashHttpOverrides(
+        withAuth(proxy.port),
+      ).createHttpClient(null);
+      addTearDown(() => client.close(force: true));
+      await expectLater(
+        client.getUrl(Uri.parse('https://example.invalid/')),
+        throwsA(isA<HttpException>()),
+      );
+      final request = await head.future;
+      expect(request, startsWith('CONNECT example.invalid:443'));
+      expect(
+        request.toLowerCase(),
+        contains('proxy-authorization: ${expected.toLowerCase()}'),
+      );
+    });
+
+    Future<void> streamedPut(
+      ProviderContainer Function(int) container,
+      String expected,
+    ) async {
+      final proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => proxy.close(force: true));
+      var challenges = 0;
+      final received = <String>[];
+      final uploaded = <int>[];
+      proxy.listen((request) async {
+        final credential = request.headers.value(
+          HttpHeaders.proxyAuthorizationHeader,
+        );
+        if (credential == null) {
+          challenges++;
+          request.response
+            ..statusCode = HttpStatus.proxyAuthenticationRequired
+            ..headers.set(
+              HttpHeaders.proxyAuthenticateHeader,
+              'Basic realm="local-test"',
+            );
+        } else {
+          received.add(credential);
+          await for (final chunk in request) {
+            uploaded.addAll(chunk);
+          }
+          request.response.statusCode = credential == expected
+              ? HttpStatus.ok
+              : HttpStatus.forbidden;
+        }
+        await request.response.close();
+      });
+      final client = FlClashHttpOverrides(
+        container(proxy.port),
+      ).createHttpClient(null);
+      addTearDown(() => client.close(force: true));
+      final request = await client.openUrl(
+        'PUT',
+        Uri.parse('http://example.invalid/proxy-check'),
+      );
+      request.add([1, 2, 3, 4, 5]);
+      final response = await request.close();
+      await response.drain<void>();
+      expect(response.statusCode, HttpStatus.ok);
+      expect(challenges, 0);
+      expect(received, [expected]);
+      expect(uploaded, [1, 2, 3, 4, 5]);
+    }
+
+    test('authenticate a streamed plain-HTTP upload up front', () async {
+      await streamedPut(withAuth, expected);
+    });
+
+    test(
+      'the proxy string cannot carry still reach a plain-HTTP proxy',
+      () async {
+        await streamedPut(
+          (port) => withAuth(port, pass: 'semi;colon'),
+          'Basic ${base64Encode(utf8.encode('$username:semi;colon'))}',
+        );
+      },
     );
   });
 

@@ -65,10 +65,24 @@ class FlClashHttpOverrides extends HttpOverrides {
       networkSettingProvider.select((state) => state.authentication),
     );
     final userInfo = authentication.enable && authentication.username.isNotEmpty
-        ? '${Uri.encodeComponent(authentication.username)}:'
-              '${Uri.encodeComponent(authentication.password)}@'
-        : '';
-    return 'PROXY ${userInfo}127.0.0.1:$mixedPort';
+        ? pacUserInfo(authentication.username, authentication.password)
+        : null;
+    return 'PROXY ${userInfo == null ? '' : '$userInfo@'}127.0.0.1:$mixedPort';
+  }
+
+  /// The credentials as Dart's proxy string carries them, or null when it
+  /// cannot. HttpClient reads them verbatim, with no percent-decoding (#64),
+  /// splitting at the last '@' and then the first ':', and it cuts the
+  /// string at ';' and trims spaces. Raw text therefore round-trips unless
+  /// it has a ';', surrounding spaces or an empty password. This is the only
+  /// way to authenticate an HTTPS tunnel (CONNECT): HttpClient ignores
+  /// addProxyCredentials there.
+  static String? pacUserInfo(String username, String password) {
+    bool fits(String v) => v.isNotEmpty && !v.contains(';') && v.trim() == v;
+    if (!fits(username) || !fits(password) || username.contains(':')) {
+      return null;
+    }
+    return '$username:$password';
   }
 
   static bool allowBadCertificate(
@@ -107,7 +121,38 @@ class FlClashHttpOverrides extends HttpOverrides {
     final client = super.createHttpClient(context);
     client.badCertificateCallback = (certificate, host, port) =>
         allowBadCertificate(_container, certificate, host, port);
-    client.findProxy = (url) => findProxyFor(_container, url);
+    String? installed;
+    client.findProxy = (url) {
+      final directive = findProxyFor(_container, url);
+      // Credentials the proxy string cannot carry still reach the proxy for
+      // plain-HTTP requests.
+      final authentication = _container.read(
+        networkSettingProvider.select((state) => state.authentication),
+      );
+      if (directive != 'DIRECT' &&
+          !directive.contains('@') &&
+          authentication.enable &&
+          authentication.username.isNotEmpty) {
+        final port = _container.read(
+          patchClashConfigProvider.select((state) => state.mixedPort),
+        );
+        final key =
+            '$port\n${authentication.username}\n${authentication.password}';
+        if (installed != key) {
+          installed = key;
+          client.addProxyCredentials(
+            '127.0.0.1',
+            port,
+            '',
+            HttpClientBasicCredentials(
+              authentication.username,
+              authentication.password,
+            ),
+          );
+        }
+      }
+      return directive;
+    };
     return client;
   }
 }
