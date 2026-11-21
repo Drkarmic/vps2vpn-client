@@ -138,6 +138,41 @@ func TestLineWatchForgetsAGroupThatIsGone(t *testing.T) {
 	}
 }
 
+func TestLineWatchReloadResetsCooldownForNewFallbackInstance(t *testing.T) {
+	watch, clock := newTestLineWatch()
+	oldGroup := new(int)
+	newGroup := new(int)
+	watch.observe([]lineGroup{smartGroupAt(oldGroup, "hy2")})
+	if moves := watch.observe([]lineGroup{smartGroupAt(oldGroup, "reality", "hy2")}); len(moves) != 1 {
+		t.Fatalf("original group did not fail over: %v", moves)
+	}
+	clock.advance(lineWatchInterval)
+	// The rebuilt Fallback has a different identity and can open fresh
+	// connections on the same line the former instance already left.
+	if moves := watch.observe([]lineGroup{smartGroupAt(newGroup, "hy2")}); len(moves) != 0 {
+		t.Fatalf("reload was mistaken for a line move: %v", moves)
+	}
+	moves := watch.observe([]lineGroup{smartGroupAt(newGroup, "reality", "hy2")})
+	if len(moves) != 1 || moves[0].from != "hy2" || moves[0].to != "reality" {
+		t.Fatalf("new group's failed line was suppressed by prior cooldown: %v", moves)
+	}
+}
+
+func TestLineWatchStopAndRestartResetsCooldown(t *testing.T) {
+	watch, clock := newTestLineWatch()
+	group := new(int)
+	watch.observe([]lineGroup{smartGroupAt(group, "hy2")})
+	if moves := watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")}); len(moves) != 1 {
+		t.Fatalf("original line failover = %v", moves)
+	}
+	clock.advance(lineWatchInterval)
+	watch.observe(nil)
+	watch.observe([]lineGroup{smartGroupAt(group, "hy2")})
+	if moves := watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")}); len(moves) != 1 {
+		t.Fatalf("cooldown leaked from before the stop: %v", moves)
+	}
+}
+
 func TestLineWatchLetsGoOfTheGroupsOnceStopped(t *testing.T) {
 	watch, _ := newTestLineWatch()
 	isRunning.Store(false)
