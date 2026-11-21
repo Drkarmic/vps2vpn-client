@@ -4038,4 +4038,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String subscriptionUpdateKeptLast(Object label) {
     return 'No se pudo actualizar $label; se sigue usando la última configuración que funcionaba';
   }
+
+  @override
+  String get subscriptionTooLarge =>
+      'La suscripción es demasiado grande para cargarla';
 }

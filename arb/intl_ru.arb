@@ -1149,5 +1149,6 @@
   "vSettings": "Настройки",
   "vRouting": "Маршрутизация",
   "subscriptionEmpty": "Подписка вернула пустую конфигурацию",
-  "subscriptionUpdateKeptLast": "Не удалось обновить {label}; используется последняя рабочая конфигурация"
+  "subscriptionUpdateKeptLast": "Не удалось обновить {label}; используется последняя рабочая конфигурация",
+  "subscriptionTooLarge": "Подписка слишком большая для загрузки"
 }

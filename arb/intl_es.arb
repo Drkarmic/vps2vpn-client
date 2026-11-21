@@ -1149,5 +1149,6 @@
   "vSettings": "Ajustes",
   "vRouting": "Enrutamiento",
   "subscriptionEmpty": "La suscripción devolvió una configuración vacía",
-  "subscriptionUpdateKeptLast": "No se pudo actualizar {label}; se sigue usando la última configuración que funcionaba"
+  "subscriptionUpdateKeptLast": "No se pudo actualizar {label}; se sigue usando la última configuración que funcionaba",
+  "subscriptionTooLarge": "La suscripción es demasiado grande para cargarla"
 }

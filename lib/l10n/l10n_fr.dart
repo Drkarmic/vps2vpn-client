@@ -4043,4 +4043,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String subscriptionUpdateKeptLast(Object label) {
     return 'Impossible de mettre à jour $label ; la dernière configuration fonctionnelle reste utilisée';
   }
+
+  @override
+  String get subscriptionTooLarge =>
+      'L\'abonnement est trop volumineux pour être chargé';
 }

@@ -3766,4 +3766,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String subscriptionUpdateKeptLast(Object label) {
     return '$label 更新失败，继续使用上次可用的配置';
   }
+
+  @override
+  String get subscriptionTooLarge => '订阅内容过大，无法加载';
 }

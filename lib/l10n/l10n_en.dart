@@ -3994,4 +3994,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String subscriptionUpdateKeptLast(Object label) {
     return 'Couldn\'t update $label; still using the last working config';
   }
+
+  @override
+  String get subscriptionTooLarge => 'The subscription is too large to load';
 }

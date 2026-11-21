@@ -148,6 +148,8 @@ String userFacingErrorMessage(Object error, AppLocalizations appLocalizations) {
         AgeSecretKeyRequiredException() =>
           appLocalizations.ageSecretKeyRequiredTip,
         ReleaseNotVerifiedException() => appLocalizations.updateNotVerified,
+        SubscriptionTooLargeException() =>
+          appLocalizations.subscriptionTooLarge,
         SystemDownloadException() => appLocalizations.updateDownloadFailed,
         CoreMethodException(code: 'rule_set_empty') =>
           appLocalizations.ruleSetEmptyTip,

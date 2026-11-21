@@ -3890,4 +3890,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String subscriptionUpdateKeptLast(Object label) {
     return '$label을(를) 업데이트하지 못했습니다. 마지막으로 작동한 설정을 계속 사용합니다';
   }
+
+  @override
+  String get subscriptionTooLarge => '구독이 너무 커서 불러올 수 없습니다';
 }

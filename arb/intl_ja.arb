@@ -1149,5 +1149,6 @@
   "vSettings": "設定",
   "vRouting": "ルーティング",
   "subscriptionEmpty": "サブスクリプションが空の設定を返しました",
-  "subscriptionUpdateKeptLast": "{label} を更新できませんでした。前回動作した設定を引き続き使用します"
+  "subscriptionUpdateKeptLast": "{label} を更新できませんでした。前回動作した設定を引き続き使用します",
+  "subscriptionTooLarge": "サブスクリプションが大きすぎて読み込めません"
 }

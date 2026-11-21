@@ -1149,5 +1149,6 @@
   "vSettings": "Réglages",
   "vRouting": "Routage",
   "subscriptionEmpty": "L'abonnement a renvoyé une configuration vide",
-  "subscriptionUpdateKeptLast": "Impossible de mettre à jour {label} ; la dernière configuration fonctionnelle reste utilisée"
+  "subscriptionUpdateKeptLast": "Impossible de mettre à jour {label} ; la dernière configuration fonctionnelle reste utilisée",
+  "subscriptionTooLarge": "L'abonnement est trop volumineux pour être chargé"
 }

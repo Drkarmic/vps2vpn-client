@@ -3989,4 +3989,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String subscriptionUpdateKeptLast(Object label) {
     return 'Не удалось обновить $label; используется последняя рабочая конфигурация';
   }
+
+  @override
+  String get subscriptionTooLarge => 'Подписка слишком большая для загрузки';
 }

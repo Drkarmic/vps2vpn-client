@@ -334,22 +334,47 @@ void main() {
       );
       expect((proxied.calls, direct.calls), (1, 1));
     });
-    test('rejects streamed bytes beyond the cap despite a small header', () async {
+
+    test(
+      'rejects streamed bytes beyond the cap despite a small header',
+      () async {
+        final (:request, :proxied, :direct) = routes(
+          proxied: (_) => ResponseBody(
+            Stream.fromIterable([
+              Uint8List.fromList([1, 2, 3]),
+              Uint8List.fromList([4, 5, 6]),
+            ]),
+            200,
+            headers: {
+              HttpHeaders.contentLengthHeader: ['1'],
+            },
+          ),
+          direct: _status(200, 'must not retry'),
+        );
+
+        await expectLater(
+          request.getSubscriptionResponse(url, maxBytes: 4),
+          throwsA(isA<SubscriptionTooLargeException>()),
+        );
+        expect((proxied.calls, direct.calls), (1, 0));
+      },
+    );
+
+    test('rejects a declared oversized body whatever it streams', () async {
       final (:request, :proxied, :direct) = routes(
         proxied: (_) => ResponseBody(
-          Stream.fromIterable([
-            Uint8List.fromList([1, 2, 3]),
-            Uint8List.fromList([4, 5, 6]),
-          ]),
+          Stream.value(Uint8List(1)),
           200,
-          headers: {HttpHeaders.contentLengthHeader: ['1']},
+          headers: {
+            HttpHeaders.contentLengthHeader: ['5'],
+          },
         ),
         direct: _status(200, 'must not retry'),
       );
 
       await expectLater(
         request.getSubscriptionResponse(url, maxBytes: 4),
-        throwsA(isA<FileSystemException>()),
+        throwsA(isA<SubscriptionTooLargeException>()),
       );
       expect((proxied.calls, direct.calls), (1, 0));
     });
@@ -372,7 +397,10 @@ void main() {
 
       final response = await request.getSubscriptionResponse(url, maxBytes: 4);
       expect(response.data, [1, 2, 3, 4]);
-      expect(response.headers.value('subscription-userinfo'), 'upload=1; download=2');
+      expect(
+        response.headers.value('subscription-userinfo'),
+        'upload=1; download=2',
+      );
       expect((proxied.calls, direct.calls), (1, 0));
     });
 
@@ -384,21 +412,9 @@ void main() {
 
       await expectLater(
         request.getSubscriptionResponse(url, maxBytes: 4),
-        throwsA(isA<FileSystemException>()),
+        throwsA(isA<SubscriptionTooLargeException>()),
       );
       expect((proxied.calls, direct.calls), (1, 1));
-    });
-
-    test('a negative byte limit fails without performing a request', () async {
-      final (:request, :proxied, :direct) = routes(
-        proxied: _status(200),
-        direct: _status(200),
-      );
-      await expectLater(
-        request.getSubscriptionResponse(url, maxBytes: -1),
-        throwsArgumentError,
-      );
-      expect((proxied.calls, direct.calls), (0, 0));
     });
 
     testWidgets('a stalled subscription body releases the stream at timeout', (
@@ -528,7 +544,7 @@ void main() {
 
         expect(
           () => decompressUnlabeled(compressed, maxOutputBytes: 128),
-          throwsA(isA<MessageException>()),
+          throwsA(isA<SubscriptionTooLargeException>()),
         );
       }
     });

@@ -29,3 +29,12 @@ final class ReleaseNotVerifiedException implements Exception {
   @override
   String toString() => 'ReleaseNotVerifiedException: $name';
 }
+
+final class SubscriptionTooLargeException implements Exception {
+  final int limit;
+
+  const SubscriptionTooLargeException(this.limit);
+
+  @override
+  String toString() => 'SubscriptionTooLargeException: over $limit bytes';
+}

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:fl_clash/common/app_localizations.dart';
+import 'package:fl_clash/common/exception.dart';
 import 'package:fl_clash/common/network_error.dart';
 import 'package:fl_clash/common/webdav.dart';
 import 'package:fl_clash/core/desktop/helper_client.dart';
@@ -184,6 +185,16 @@ void main() {
         appLocalizations,
       ),
       'proxy 0: unsupported type',
+    );
+  });
+
+  test('says an oversized subscription is too large', () {
+    expect(
+      userFacingErrorMessage(
+        const SubscriptionTooLargeException(32 << 20),
+        appLocalizations,
+      ),
+      appLocalizations.subscriptionTooLarge,
     );
   });
 

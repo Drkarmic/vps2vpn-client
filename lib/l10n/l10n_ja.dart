@@ -3815,4 +3815,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String subscriptionUpdateKeptLast(Object label) {
     return '$label を更新できませんでした。前回動作した設定を引き続き使用します';
   }
+
+  @override
+  String get subscriptionTooLarge => 'サブスクリプションが大きすぎて読み込めません';
 }

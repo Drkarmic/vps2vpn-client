@@ -7013,6 +7013,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t update {label}; still using the last working config'**
   String subscriptionUpdateKeptLast(Object label);
+
+  /// No description provided for @subscriptionTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The subscription is too large to load'**
+  String get subscriptionTooLarge;
 }
 
 class _AppLocalizationsDelegate

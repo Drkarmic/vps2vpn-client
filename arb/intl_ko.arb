@@ -1149,5 +1149,6 @@
   "vSettings": "설정",
   "vRouting": "라우팅",
   "subscriptionEmpty": "구독이 빈 설정을 반환했습니다",
-  "subscriptionUpdateKeptLast": "{label}을(를) 업데이트하지 못했습니다. 마지막으로 작동한 설정을 계속 사용합니다"
+  "subscriptionUpdateKeptLast": "{label}을(를) 업데이트하지 못했습니다. 마지막으로 작동한 설정을 계속 사용합니다",
+  "subscriptionTooLarge": "구독이 너무 커서 불러올 수 없습니다"
 }
