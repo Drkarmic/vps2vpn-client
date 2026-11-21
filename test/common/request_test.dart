@@ -258,20 +258,13 @@ void main() {
       expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
     });
 
-    test('a verified replacement publishes atomically or preserves old file', () async {
+    test('a verified replacement publishes only after checksum passes', () async {
       final existing = File(join(directory.path, name));
       await existing.writeAsString('old');
       final downloader = requestServing('$digest  ./$name\n', package);
 
-      if (Platform.isWindows) {
-        // File.rename does not necessarily replace a destination on Windows;
-        // a safe failure must still preserve the previously downloaded file.
-        await expectLater(download(downloader), throwsA(isA<FileSystemException>()));
-        expect(await existing.readAsString(), 'old');
-      } else {
-        expect(await download(downloader), existing.path);
-        expect(await existing.readAsBytes(), package);
-      }
+      expect(await download(downloader), existing.path);
+      expect(await existing.readAsBytes(), package);
       expect(directory.listSync().map((f) => f.path).toList(), [existing.path]);
     });
 
