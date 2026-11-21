@@ -260,7 +260,8 @@ Future<void> _extract(String archivePath, String stagingDirPath) async {
         throw const BackupException(BackupFailure.invalid);
       }
       await Directory(dirname(outPath)).create(recursive: true);
-      final output = OutputFileStream(outPath);
+      // No more than the archive declares (checked against the budget above).
+      final output = _BoundedOutputFileStream(outPath, file.size);
       try {
         file.writeContent(output);
       } finally {
@@ -274,6 +275,35 @@ Future<void> _extract(String archivePath, String stagingDirPath) async {
     }
   } finally {
     await input.close();
+  }
+}
+
+/// Refuses to write more than [limit] bytes. The pinned archive package
+/// decodes an entry past the size the zip declares for it, so a crafted
+/// backup could otherwise fill the disk before the length check after it
+/// (#66).
+class _BoundedOutputFileStream extends OutputFileStream {
+  _BoundedOutputFileStream(String path, this.limit)
+    : super.withFileHandle(FileHandle(path, mode: FileAccess.write));
+
+  final int limit;
+
+  void _reserve(int count) {
+    if (count > limit - length) {
+      throw const BackupException(BackupFailure.invalid);
+    }
+  }
+
+  @override
+  void writeByte(int value) {
+    _reserve(1);
+    super.writeByte(value);
+  }
+
+  @override
+  void writeBytes(List<int> bytes, {int? length}) {
+    _reserve(length ?? bytes.length);
+    super.writeBytes(bytes, length: length);
   }
 }
 

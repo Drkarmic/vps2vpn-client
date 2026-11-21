@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
 import 'package:drift/native.dart';
@@ -740,6 +741,37 @@ void main() {
         );
       },
     );
+
+    test('an entry that inflates past its declared size is cut off', () async {
+      final archivePath = await zipOf({
+        configJsonName: utf8.encode(json.encode({'version': 1})),
+        'big.bin': List.filled(1 << 20, 0),
+      });
+      // Claim 16 bytes for the 1 MiB entry, in the local and central headers.
+      final bytes = File(archivePath).readAsBytesSync();
+      final data = ByteData.sublistView(bytes);
+      final name = utf8.encode('big.bin');
+      var patched = 0;
+      bool named(int at) =>
+          List.generate(name.length, (i) => bytes[at + i]).join(',') ==
+          name.join(',');
+      for (var i = 0; i + 46 < bytes.length; i++) {
+        final sig = data.getUint32(i, Endian.little);
+        if (sig == 0x04034b50 && named(i + 30)) {
+          data.setUint32(i + 22, 16, Endian.little);
+          patched++;
+        } else if (sig == 0x02014b50 && named(i + 46)) {
+          data.setUint32(i + 24, 16, Endian.little);
+          patched++;
+        }
+      }
+      expect(patched, 2);
+      File(archivePath).writeAsBytesSync(bytes);
+
+      await expectLater(restore(archivePath), failsWith(BackupFailure.invalid));
+      final out = File(join(staging.path, 'big.bin'));
+      expect(!out.existsSync() || out.lengthSync() <= 16, isTrue);
+    });
 
     test('an archive without a config document is rejected', () async {
       final archivePath = await zipOf({'unrelated.txt': utf8.encode('x')});
