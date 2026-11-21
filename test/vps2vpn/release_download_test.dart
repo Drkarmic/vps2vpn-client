@@ -3,9 +3,26 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:fl_clash/vps2vpn/panel.dart';
+import 'package:fl_clash/vps2vpn/update_signing.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _SocketOverrides extends HttpOverrides {}
+
+// A throwaway Ed25519 key (not the release key) and its openssl signatures of
+// "release payload" under each file name the server below serves.
+const _testKey =
+    'f5be85b6ef9f1a0df2c79f83de5af4b290597411d85f7271acddf4a547a9dc78';
+const _signatures = {
+  'client.exe':
+      'G5QI07sAi5a2w/J4GFlvHm/SNWMXKuNmOeRNG5yzKS5hw1O6BLokkf4joib/agWrvRzrhpEAhfClZkKqijx9Bw==',
+  'CLIENT.EXE':
+      'GJvQw/RubmgtTeqGzkylasT3O99Ves/+o8Nf6dxL+dC6W+7hXPjjLYN/gQqrb9C2prE2cUFW8LK/Gak7I78zAQ==',
+  'vps2vpn-1.0.9-windows-amd64-setup.exe':
+      'bbD6sNdlQp50rGP2o5n3AbqubRpAyEu8G+9iw7nw6Z6+BjX6PgVJB5lM3VKfKilITHzrjUYxUZlHtpVUoSfEDQ==',
+  // signed for another file: valid base64, wrong signature here
+  'vps2vpn-1.0.9-windows-amd64-portable.zip':
+      'G5QI07sAi5a2w/J4GFlvHm/SNWMXKuNmOeRNG5yzKS5hw1O6BLokkf4joib/agWrvRzrhpEAhfClZkKqijx9Bw==',
+};
 
 Future<T> _localSocket<T>(Future<T> Function() call) =>
     HttpOverrides.runWithHttpOverrides(call, _SocketOverrides());
@@ -37,7 +54,17 @@ void main() {
       context,
     );
     server.listen((request) async {
-      request.response.write('release payload');
+      final name = request.uri.pathSegments.last;
+      if (name.endsWith('.sig')) {
+        final sig = _signatures[name.substring(0, name.length - 4)];
+        if (sig == null) {
+          request.response.statusCode = HttpStatus.notFound;
+        } else {
+          request.response.writeln(sig);
+        }
+      } else {
+        request.response.write('release payload');
+      }
       await request.response.close();
     }, onError: (Object _) {});
   });
@@ -60,6 +87,7 @@ void main() {
           Uri.parse('https://127.0.0.1:${server.port}/client.exe'),
           dir,
           pinnedSha256: {fingerprint},
+          publicKeyHex: _testKey,
         ),
       );
 
@@ -76,11 +104,21 @@ void main() {
     final url = Uri.parse('https://127.0.0.1:${server.port}/client.exe');
 
     final first = _localSocket(
-      () => vpsDownloadRelease(url, dir, pinnedSha256: {fingerprint}),
+      () => vpsDownloadRelease(
+        url,
+        dir,
+        pinnedSha256: {fingerprint},
+        publicKeyHex: _testKey,
+      ),
     );
     await expectLater(
       _localSocket(
-        () => vpsDownloadRelease(url, dir, pinnedSha256: {fingerprint}),
+        () => vpsDownloadRelease(
+          url,
+          dir,
+          pinnedSha256: {fingerprint},
+          publicKeyHex: _testKey,
+        ),
       ),
       throwsA(isA<HttpException>()),
     );
@@ -105,7 +143,12 @@ void main() {
       Future<Object> download(Directory dir) async {
         try {
           return await _localSocket(
-            () => vpsDownloadRelease(url, dir, pinnedSha256: {fingerprint}),
+            () => vpsDownloadRelease(
+              url,
+              dir,
+              pinnedSha256: {fingerprint},
+              publicKeyHex: _testKey,
+            ),
           );
         } catch (e) {
           return e;
@@ -141,6 +184,7 @@ void main() {
               Uri.parse('https://127.0.0.1:${server.port}/$name'),
               dir,
               pinnedSha256: {fingerprint},
+              publicKeyHex: _testKey,
             ),
           );
         } catch (e) {
@@ -195,6 +239,7 @@ void main() {
         Uri.parse('https://127.0.0.1:${server.port}/client.exe'),
         dir,
         pinnedSha256: {fingerprint},
+        publicKeyHex: _testKey,
       ),
     );
     expect(saved.path, out.path);
@@ -213,7 +258,12 @@ void main() {
 
       await expectLater(
         _localSocket(
-          () => vpsDownloadRelease(url, dir, pinnedSha256: {'00' * 32}),
+          () => vpsDownloadRelease(
+            url,
+            dir,
+            pinnedSha256: {'00' * 32},
+            publicKeyHex: _testKey,
+          ),
         ),
         throwsA(anything),
       );
@@ -222,4 +272,78 @@ void main() {
       expect(dir.listSync().whereType<Directory>(), isEmpty);
     },
   );
+
+  group('update signature', () {
+    Uri link(String name) =>
+        Uri.parse('https://127.0.0.1:${server.port}/s/token/download/$name');
+
+    test('a signed, newer installer is kept', () async {
+      final dir = await Directory.systemTemp.createTemp('v2v-release-sig-');
+      addTearDown(() => dir.delete(recursive: true));
+      final saved = await _localSocket(
+        () => vpsDownloadRelease(
+          link('vps2vpn-1.0.9-windows-amd64-setup.exe'),
+          dir,
+          pinnedSha256: {fingerprint},
+          currentVersion: '1.0.8',
+          publicKeyHex: _testKey,
+        ),
+      );
+      expect(await saved.readAsString(), 'release payload');
+    });
+
+    Future<void> refused(
+      String name,
+      String reason, {
+      String current = '1.0.8',
+      String key = _testKey,
+    }) async {
+      final dir = await Directory.systemTemp.createTemp('v2v-release-bad-');
+      addTearDown(() => dir.delete(recursive: true));
+      final previous = File('${dir.path}${Platform.pathSeparator}$name');
+      await previous.writeAsString('previous version');
+      await expectLater(
+        _localSocket(
+          () => vpsDownloadRelease(
+            link(name),
+            dir,
+            pinnedSha256: {fingerprint},
+            currentVersion: current,
+            publicKeyHex: key,
+          ),
+        ),
+        throwsA(
+          isA<VpsUpdateRejected>().having((e) => e.reason, 'reason', reason),
+        ),
+      );
+      // nothing of the refused download is left, the old file is untouched
+      expect(await previous.readAsString(), 'previous version');
+      expect(dir.listSync().whereType<Directory>(), isEmpty);
+    }
+
+    test('a wrong signature is refused', () async {
+      await refused('vps2vpn-1.0.9-windows-amd64-portable.zip', 'badSignature');
+    });
+
+    test('a signature by another key is refused', () async {
+      await refused(
+        'vps2vpn-1.0.9-windows-amd64-setup.exe',
+        'badSignature',
+        key: vpsUpdatePublicKeyHex,
+      );
+    });
+
+    test('an unsigned installer is refused', () async {
+      await refused('vps2vpn-1.0.9-android-arm64.apk', 'unsigned');
+    });
+
+    test('an installer that is not newer is refused before download', () async {
+      await refused(
+        'vps2vpn-1.0.9-windows-amd64-setup.exe',
+        'notNewer',
+        current: '1.0.9',
+      );
+      await refused('client.exe', 'notNewer');
+    });
+  });
 }

@@ -352,6 +352,7 @@ class VpsUpdateCard extends ConsumerWidget {
                   context,
                   ref,
                   release.downloadFor(Platform.operatingSystem),
+                  current,
                 ),
               ),
             ),
@@ -362,9 +363,16 @@ class VpsUpdateCard extends ConsumerWidget {
   }
 
   /// Downloads inside the app with the panel's pinned certificate (a
-  /// self-signed panel would trip the browser), then shows the folder.
-  /// Falls back to the browser when that does not work.
-  Future<void> _download(BuildContext context, WidgetRef ref, Uri url) async {
+  /// self-signed panel would trip the browser) and keeps the installer only
+  /// when it carries the release signature, then shows the folder. There is
+  /// no browser fallback: a browser download could not be checked, and a
+  /// panel that fails the check on purpose must not get one.
+  Future<void> _download(
+    BuildContext context,
+    WidgetRef ref,
+    Uri url,
+    String current,
+  ) async {
     dialogs.showBanner(
       tr(context, '正在下载新版本…', 'Downloading the new version…'),
       level: BannerLevel.info,
@@ -373,46 +381,50 @@ class VpsUpdateCard extends ConsumerWidget {
       final pins = await ref.read(vpsPanelPinsProvider.future);
       final dir = Directory(await appPath.downloadDirPath);
       await dir.create(recursive: true);
-      final file = await vpsDownloadRelease(url, dir, pinnedSha256: pins);
+      final file = await vpsDownloadRelease(
+        url,
+        dir,
+        pinnedSha256: pins,
+        currentVersion: current,
+      );
       if (!context.mounted) return;
       dialogs.showBanner(
         tr(
           context,
-          '已下载到 ${file.path}，关闭 vps2vpn 后运行它即可升级',
-          'Saved to ${file.path}. Quit vps2vpn, then run it to upgrade',
+          '已下载并校验签名：${file.path}，关闭 vps2vpn 后运行它即可升级',
+          'Downloaded and signature checked: ${file.path}. Quit vps2vpn, '
+              'then run it to upgrade',
         ),
         level: BannerLevel.info,
       );
       await launchUrl(Uri.file(dir.path));
+    } on VpsUpdateRejected catch (e) {
+      if (!context.mounted) return;
+      dialogs.showBanner(switch (e.reason) {
+        'unsigned' => tr(
+          context,
+          '这个安装包没有签名，已拒绝。请让管理员把发布页上同名的 .sig 文件一起放到面板上',
+          'This installer is not signed and was refused. Ask the owner to '
+              'put the matching .sig file from the release on the panel',
+        ),
+        'notNewer' => tr(
+          context,
+          '面板提供的安装包不比当前版本新，已拒绝',
+          'The installer on the panel is not newer than this version; refused',
+        ),
+        _ => tr(
+          context,
+          '安装包签名不对，可能被篡改，已删除。请联系管理员',
+          "The installer's signature is wrong (it may have been tampered "
+              'with) and it was deleted. Contact the owner',
+        ),
+      }, level: BannerLevel.warning);
     } catch (_) {
-      if (context.mounted) await _openDownload(context, url);
-    }
-  }
-
-  Future<void> _openDownload(BuildContext context, Uri url) async {
-    try {
-      final opened = await launchUrl(url, mode: LaunchMode.externalApplication);
-      if (!opened && context.mounted) {
-        dialogs.showBanner(
-          tr(
-            context,
-            '无法打开下载链接，请手动在浏览器中访问',
-            'Could not open the download link',
-          ),
-          level: BannerLevel.warning,
-        );
-      }
-    } catch (_) {
-      if (context.mounted) {
-        dialogs.showBanner(
-          tr(
-            context,
-            '无法打开下载链接，请手动在浏览器中访问',
-            'Could not open the download link',
-          ),
-          level: BannerLevel.warning,
-        );
-      }
+      if (!context.mounted) return;
+      dialogs.showBanner(
+        tr(context, '下载失败，请稍后再试', 'The download failed; try again later'),
+        level: BannerLevel.warning,
+      );
     }
   }
 }

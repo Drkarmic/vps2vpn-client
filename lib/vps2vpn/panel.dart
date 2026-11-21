@@ -19,6 +19,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/line_watch.dart';
+import 'package:fl_clash/vps2vpn/update_signing.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 export 'line_watch.dart' show VpsLineHealth;
@@ -140,24 +141,49 @@ class VpsClientRelease {
 
   /// True when this release is newer than [current]; false when either
   /// version is not plain numbers.
-  bool newerThan(String current) {
-    List<int>? parse(String v) {
-      final parts = v.split('+').first.split('.');
-      final nums = parts.map(int.tryParse).toList();
-      return nums.contains(null) ? null : nums.cast<int>();
-    }
+  bool newerThan(String current) => vpsVersionNewer(version, current);
+}
 
-    final a = parse(version);
-    final b = parse(current);
-    if (a == null || b == null) return false;
-    final n = math.max(a.length, b.length);
-    for (var i = 0; i < n; i++) {
-      final x = i < a.length ? a[i] : 0;
-      final y = i < b.length ? b[i] : 0;
-      if (x != y) return x > y;
-    }
-    return false;
+/// True when version [a] is newer than [b]; false when either is not plain
+/// numbers (a build suffix after `+` is ignored).
+bool vpsVersionNewer(String a, String b) {
+  List<int>? parse(String v) {
+    final parts = v.split('+').first.split('.');
+    final nums = parts.map(int.tryParse).toList();
+    return nums.contains(null) ? null : nums.cast<int>();
   }
+
+  final x = parse(a);
+  final y = parse(b);
+  if (x == null || y == null) return false;
+  final n = math.max(x.length, y.length);
+  for (var i = 0; i < n; i++) {
+    final p = i < x.length ? x[i] : 0;
+    final q = i < y.length ? y[i] : 0;
+    if (p != q) return p > q;
+  }
+  return false;
+}
+
+/// The downloaded installer is not a signed, newer release: it was deleted.
+class VpsUpdateRejected implements Exception {
+  const VpsUpdateRejected(this.reason);
+
+  /// unsigned | badSignature | notNewer
+  final String reason;
+
+  @override
+  String toString() => 'VpsUpdateRejected($reason)';
+}
+
+class _DigestSink implements Sink<Digest> {
+  Digest? value;
+
+  @override
+  void add(Digest data) => value = data;
+
+  @override
+  void close() {}
 }
 
 class VpsMember {
@@ -813,13 +839,18 @@ const _maxReleaseBytes = 512 * 1024 * 1024;
 const _releaseTransferTimeout = Duration(minutes: 8);
 final _activeReleaseDownloads = <String>{};
 
-/// Download a release only over verified or explicitly pinned HTTPS.
+/// Download a release only over verified or explicitly pinned HTTPS, and keep
+/// it only when `<url>.sig` is the release key's signature for it (see
+/// update_signing.dart) and, given [currentVersion], its file name carries a
+/// newer version. Otherwise [VpsUpdateRejected] and nothing is kept.
 /// Staging is isolated, and overlapping downloads to the same destination
 /// are rejected even when callers spell that destination differently.
 Future<File> vpsDownloadRelease(
   Uri url,
   Directory dir, {
   Set<String> pinnedSha256 = const {},
+  String? currentVersion,
+  String publicKeyHex = vpsUpdatePublicKeyHex,
 }) async {
   if (!url.isScheme('https')) {
     throw const HttpException('Release link is not HTTPS');
@@ -829,6 +860,14 @@ Future<File> vpsDownloadRelease(
       name.endsWith('.') ||
       _reservedReleaseName.hasMatch(name)) {
     throw const HttpException('Unexpected release file name');
+  }
+  if (currentVersion != null) {
+    // The signature covers the file name, so its version cannot be faked: an
+    // older signed installer cannot be passed off as an update.
+    final version = vpsUpdateFileVersion(name);
+    if (version == null || !vpsVersionNewer(version, currentVersion)) {
+      throw const VpsUpdateRejected('notNewer');
+    }
   }
 
   final out = File('${dir.path}${Platform.pathSeparator}$name');
@@ -861,6 +900,8 @@ Future<File> vpsDownloadRelease(
     }
 
     final sink = part.openWrite();
+    final digest = _DigestSink();
+    final hasher = sha256.startChunkedConversion(digest);
     final elapsed = Stopwatch()..start();
     var size = 0;
     try {
@@ -873,12 +914,25 @@ Future<File> vpsDownloadRelease(
           throw const HttpException('Release download took too long');
         }
         sink.add(chunk);
+        hasher.add(chunk);
       }
     } finally {
       await sink.close();
     }
+    hasher.close();
     if (size == 0) {
       throw const HttpException('Release file was empty');
+    }
+    final signature = await _fetchSignature(client, url, name);
+    if (signature == null) throw const VpsUpdateRejected('unsigned');
+    if (!vpsVerifyUpdate(
+      fileName: name,
+      sha256Hex: digest.value.toString(),
+      size: size,
+      signatureText: signature,
+      publicKeyHex: publicKeyHex,
+    )) {
+      throw const VpsUpdateRejected('badSignature');
     }
     // Never delete a previously verified release before this rename.
     return await part.rename(out.path);
@@ -892,4 +946,25 @@ Future<File> vpsDownloadRelease(
       _activeReleaseDownloads.remove(targetKey);
     }
   }
+}
+
+/// `<installer>.sig` next to the download, or null when there is none.
+Future<String?> _fetchSignature(HttpClient client, Uri url, String name) async {
+  final sigUrl = url.replace(
+    pathSegments: [
+      ...url.pathSegments.take(url.pathSegments.length - 1),
+      '$name.sig',
+    ],
+  );
+  final req = await client.getUrl(sigUrl).timeout(const Duration(seconds: 15));
+  req.followRedirects = false;
+  final res = await req.close().timeout(const Duration(seconds: 15));
+  if (res.statusCode != HttpStatus.ok) {
+    if (res.statusCode == HttpStatus.notFound) return null;
+    throw HttpException('Signature download failed (HTTP ${res.statusCode})');
+  }
+  return _readBoundedUtf8(
+    res,
+    maxBytes: 4096,
+  ).timeout(const Duration(seconds: 15));
 }
