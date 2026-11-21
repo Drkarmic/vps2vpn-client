@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -9,6 +10,7 @@ class _ScriptedAdapter implements HttpClientAdapter {
 
   final ResponseBody Function(RequestOptions options) _responses;
   final List<RequestOptions> requests = [];
+  final List<List<int>> requestBodies = [];
 
   @override
   Future<ResponseBody> fetch(
@@ -17,6 +19,13 @@ class _ScriptedAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requests.add(options);
+    if (requestStream != null) {
+      final bytes = <int>[];
+      await for (final chunk in requestStream) {
+        bytes.addAll(chunk);
+      }
+      requestBodies.add(bytes);
+    }
     return _responses(options);
   }
 
@@ -335,5 +344,134 @@ void main() {
       partialTransport('bytes 0-3/10').get('backup.zip'),
       throwsA(isA<DAVException>()),
     );
+  });
+
+  test('file PUT retries a fresh stream after Digest challenge', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-dav-put-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/backup.zip');
+    await file.writeAsBytes([1, 2, 3, 4, 5]);
+    var calls = 0;
+    final adapter = _ScriptedAdapter((_) {
+      calls++;
+      if (calls == 1) {
+        return ResponseBody.fromString(
+          '',
+          401,
+          headers: {
+            'www-authenticate': [
+              'Digest realm="test", nonce="abcdef", qop="auth"',
+            ],
+          },
+        );
+      }
+      return ResponseBody.fromString('', 201);
+    });
+    final transport = DAVTransport(
+      uri: 'https://origin.example/base',
+      user: 'user',
+      password: 'pass',
+      dio: _dioWith(adapter),
+    );
+
+    await transport.putFile('backup.zip', file.path);
+
+    expect(calls, 2);
+    expect(adapter.requestBodies, [
+      [1, 2, 3, 4, 5],
+      [1, 2, 3, 4, 5],
+    ]);
+    expect(adapter.requests[1].headers['authorization'], startsWith('Digest '));
+    expect(adapter.requests[1].headers[Headers.contentLengthHeader], 5);
+  });
+
+  test('streamed GET rejects unknown-length overflow and retains the old file', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-dav-cap-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/backup.zip');
+    await file.writeAsString('original');
+    final adapter = _ScriptedAdapter(
+      (_) => ResponseBody(
+        Stream<Uint8List>.fromIterable([
+          Uint8List.fromList([1, 2, 3]),
+          Uint8List.fromList([4, 5, 6]),
+        ]),
+        200,
+      ),
+    );
+    final transport = DAVTransport(
+      uri: 'https://origin.example/base',
+      user: 'user',
+      password: 'pass',
+      dio: _dioWith(adapter),
+    );
+
+    await expectLater(
+      transport.getFile('backup.zip', file.path, maxBytes: 4),
+      throwsA(isA<DAVException>()),
+    );
+    expect(await file.readAsString(), 'original');
+    expect(await dir.list().toList(), hasLength(1));
+  });
+
+  test('streamed GET rejects oversized declared length before writing', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-dav-length-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/backup.zip');
+    await file.writeAsString('original');
+    final adapter = _ScriptedAdapter(
+      (_) => ResponseBody.fromBytes(
+        [1, 2, 3],
+        200,
+        headers: {'content-length': ['999999999']},
+      ),
+    );
+    final transport = DAVTransport(
+      uri: 'https://origin.example/base',
+      user: 'user',
+      password: 'pass',
+      dio: _dioWith(adapter),
+    );
+
+    await expectLater(
+      transport.getFile('backup.zip', file.path, maxBytes: 4),
+      throwsA(isA<DAVException>()),
+    );
+    expect(await file.readAsString(), 'original');
+    expect(await dir.list().toList(), hasLength(1));
+  });
+
+  test('streamed GET writes a complete 206 but rejects partial range', () async {
+    final dir = await Directory.systemTemp.createTemp('v2v-dav-range-');
+    addTearDown(() => dir.delete(recursive: true));
+    final file = File('${dir.path}/backup.zip');
+    await file.writeAsString('original');
+    var calls = 0;
+    final adapter = _ScriptedAdapter((_) {
+      calls++;
+      return ResponseBody.fromBytes(
+        [1, 2, 3, 4],
+        206,
+        headers: {
+          'content-range': [calls == 1 ? 'bytes 0-3/8' : 'bytes 0-3/4'],
+        },
+      );
+    });
+    final transport = DAVTransport(
+      uri: 'https://origin.example/base',
+      user: 'user',
+      password: 'pass',
+      dio: _dioWith(adapter),
+    );
+
+    await expectLater(
+      transport.getFile('backup.zip', file.path, maxBytes: 8),
+      throwsA(isA<DAVException>()),
+    );
+    expect(await file.readAsString(), 'original');
+    expect(await dir.list().toList(), hasLength(1));
+
+    await transport.getFile('backup.zip', file.path, maxBytes: 8);
+    expect(await file.readAsBytes(), [1, 2, 3, 4]);
   });
 }
