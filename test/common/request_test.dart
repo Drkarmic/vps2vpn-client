@@ -231,7 +231,7 @@ void main() {
     test('a failed retry does not destroy an already verified installer', () async {
       final existing = File(join(directory.path, name));
       await existing.writeAsBytes(package);
-      final corrupt = requestServing('$digest  ./$name\\n', utf8.encode('corrupt'));
+      final corrupt = requestServing('$digest  ./$name\n', utf8.encode('corrupt'));
 
       await expectLater(
         download(corrupt),
@@ -248,7 +248,7 @@ void main() {
       final downloader = Request()
         ..releaseDio.httpClientAdapter = _PathAdapter({
           '/$repository/releases/download/v1.2.3/${updateChecksumsName('v1.2.3')}':
-              () => ResponseBody.fromString('$digest  ./$name\\n', 200),
+              () => ResponseBody.fromString('$digest  ./$name\n', 200),
           '/$repository/releases/download/v1.2.3/$name': () =>
               ResponseBody.fromString('offline', 503),
         });
@@ -261,7 +261,7 @@ void main() {
     test('a verified replacement publishes atomically or preserves old file', () async {
       final existing = File(join(directory.path, name));
       await existing.writeAsString('old');
-      final downloader = requestServing('$digest  ./$name\\n', package);
+      final downloader = requestServing('$digest  ./$name\n', package);
 
       if (Platform.isWindows) {
         // File.rename does not necessarily replace a destination on Windows;
