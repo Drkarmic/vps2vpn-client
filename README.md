@@ -45,7 +45,7 @@
 - **账户信息**：设置页显示已用流量、到期时间、停用原因；订阅链接被更换时会提醒你。
 - **服务器视角**：检测页显示服务器自己打开 AI 网站的结果，一眼看出是网络问题还是服务器 IP 被封。
 - **线路故障自动上报**：连接后每 4 分钟悄悄测一次，连续失败才告诉管理员，恢复后再报一次。
-- **更新提醒**：管理员在面板放上新版本后，设置页会出现“有新版本”和下载按钮（不会自动安装）。
+- **自动更新**：启动后和每 6 小时向面板检查一次新版本（设置里“检查更新”可关）。安装版会在后台下载、校验发布签名，然后一键“安装并重启”；便携版保留手动下载。签名不对或版本不新的安装包一律拒绝。
 - **干净卸载**：卸载时清掉残留的系统代理，只删除 vps2vpn 自己的数据，不碰其他软件。
 
 ## 配套服务端
@@ -99,7 +99,7 @@ dart tool/package.dart windows --env stable
   - account usage and expiry
   - the server's own view of the AI sites
   - automatic line-failure reports
-  - update notices
+  - updates: the installed app downloads a newer version in the background, checks its release signature and installs it with one tap ("Install & restart")
 - **Clean uninstall.** It clears its system proxy and removes only its own data.
 
 Download the installer from [Releases](https://github.com/xydadada/vps2vpn-client/releases/latest). The project is licensed under GPL-3.0.
