@@ -140,12 +140,14 @@ class VpsClientRelease {
   /// else [url] when that is itself a versioned installer built for
   /// [platform] (a panel that only names one link). Null when there is none.
   Uri? installerFor(String platform) {
-    final file = files[platform];
-    if (file != null) return file;
-    final name = _lastSegment(url).toLowerCase();
-    final forPlatform =
-        name.contains('-$platform-') || name.contains('-$platform.');
-    return forPlatform && vpsUpdateFileVersion(name) != null ? url : null;
+    final candidate = files[platform] ?? url;
+    final name = _lastSegment(candidate).toLowerCase();
+    // Check the filename, not just the map key or a later OS-like substring.
+    final actualOs = RegExp(r'-(windows|android|macos|linux)(?:-|\.)')
+        .firstMatch(name)?.group(1);
+    return actualOs == platform && vpsUpdateFileVersion(name) != null
+        ? candidate
+        : null;
   }
 
   /// The page the browser opens when there is no installer for [platform]:
