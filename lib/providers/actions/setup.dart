@@ -384,8 +384,11 @@ class SetupAction extends _$SetupAction {
         await _restartCoreAfterAuthorization();
         return;
       }
+      // The UAC prompt can wait on the user; send what is set now, not what
+      // was set when it opened.
+      final latest = ref.read(patchClashConfigProvider);
       final networkSetting = ref.read(networkSettingProvider);
-      final params = _effectivePatchConfig(patchConfig).toUpdateParams(
+      final params = _effectivePatchConfig(latest).toUpdateParams(
         authentication: networkSetting.authentication.credentials,
         options: ref.read(coreOptionsProvider),
       );

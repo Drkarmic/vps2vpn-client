@@ -130,9 +130,13 @@ class _CoreContainerState extends ConsumerState<CoreManager>
   }
 
   /// Checks a few seconds after TUN is asked for on a running, reachable
-  /// Core; switching TUN off forgets the retry, so the next enable gets one.
+  /// Core; switching TUN off or disconnecting forgets the retry, so the next
+  /// enable or connect gets one.
   void _syncTunSelfCheck() {
-    if (!ref.read(patchClashConfigProvider).tun.enable) {
+    // A disconnect ends the session too: a check under way then must not
+    // switch the stack, and the next connect is checked again.
+    if (!ref.read(patchClashConfigProvider).tun.enable ||
+        !ref.read(isStartProvider)) {
       _tunSelfCheck.reset();
       return;
     }

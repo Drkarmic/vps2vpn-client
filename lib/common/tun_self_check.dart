@@ -101,29 +101,43 @@ class TunSelfCheck {
   Timer? _timer;
   var _retried = false;
   var _gaveUp = false;
+  // A run still reading the status when the TUN goes off (or the check is
+  // disposed) belongs to that session: it must not switch the stack after.
+  var _generation = 0;
+  var _disposed = false;
 
   void schedule() {
+    if (_disposed) return;
     _timer?.cancel();
     _timer = Timer(delay, () => unawaited(run()));
   }
 
   void reset() {
+    _generation++;
     _timer?.cancel();
     _timer = null;
     _retried = false;
     _gaveUp = false;
   }
 
-  void dispose() => _timer?.cancel();
+  void dispose() {
+    _disposed = true;
+    _generation++;
+    _timer?.cancel();
+    _timer = null;
+  }
 
   Future<void> run() async {
+    if (_disposed) return;
     _timer = null;
+    final generation = _generation;
     final TunStatus? status;
     try {
       status = await readStatus();
     } catch (_) {
       return;
     }
+    if (_disposed || generation != _generation) return;
     final stack = currentStack();
     final decision = decideTunCheck(
       health: tunHealthOf(status),

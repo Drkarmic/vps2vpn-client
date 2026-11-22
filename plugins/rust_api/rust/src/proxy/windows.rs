@@ -84,6 +84,12 @@ fn stop_locked() -> bool {
 /// what normally turns the system proxy off.
 fn clear_stale() -> Result<usize, ()> {
     let _settings = lock_settings();
+    // This process set it: the startup sweep runs on its own thread and can
+    // come after a connect made before the Core listens. Only another run's
+    // leftover is stale.
+    if APPLIED.load(Ordering::SeqCst) {
+        return Ok(0);
+    }
     let mut released = HashMap::new();
     let mut count = 0;
     let cleared = for_each_connection(|connection| {

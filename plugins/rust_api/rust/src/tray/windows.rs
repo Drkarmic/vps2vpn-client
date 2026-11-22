@@ -26,9 +26,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     PostMessageW, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow, SetTimer,
     TrackPopupMenu, TranslateMessage, HICON, HMENU, IMAGE_ICON, LR_LOADFROMFILE, MF_CHECKED,
     MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, MF_UNCHECKED, MSG, PBT_APMRESUMEAUTOMATIC,
-    PBT_APMRESUMESUSPEND, SM_CXSMICON, SM_CYSMICON, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RETURNCMD,
-    TPM_RIGHTBUTTON, WM_APP, WM_LBUTTONUP, WM_NULL, WM_POWERBROADCAST, WM_RBUTTONUP,
-    WM_SETTINGCHANGE, WM_TIMER, WNDCLASSW, WS_OVERLAPPED,
+    SM_CXSMICON, SM_CYSMICON, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON,
+    WM_APP, WM_LBUTTONUP, WM_NULL, WM_POWERBROADCAST, WM_RBUTTONUP, WM_SETTINGCHANGE, WM_TIMER,
+    WNDCLASSW, WS_OVERLAPPED,
 };
 
 const WM_TRAY: u32 = WM_APP + 1;
@@ -223,10 +223,10 @@ unsafe extern "system" fn window_proc(
                 flush();
             }
         }
-        WM_POWERBROADCAST
-            if wparam == PBT_APMRESUMEAUTOMATIC as usize
-                || wparam == PBT_APMRESUMESUSPEND as usize =>
-        {
+        // Every resume sends PBT_APMRESUMEAUTOMATIC; PBT_APMRESUMESUSPEND
+        // follows only once someone uses the machine, possibly much later,
+        // and would reset the network a second time.
+        WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC as usize => {
             restore(window);
             crate::network::resumed();
         }

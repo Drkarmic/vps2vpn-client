@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_clash/common/tun_self_check.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -133,6 +135,25 @@ void main() {
       );
 
       await failing.run();
+
+      expect(stack, TunStack.mips);
+      expect(notices, isEmpty);
+    });
+
+    test('a check under way when the TUN goes off changes nothing', () async {
+      final answer = Completer<TunStatus?>();
+      final slow = TunSelfCheck(
+        readStatus: () => answer.future,
+        currentStack: () => stack,
+        switchStack: (next) => stack = next,
+        notify: (step, from, to) => notices.add((step, from, to)),
+      );
+      addTearDown(slow.dispose);
+
+      final run = slow.run();
+      slow.reset();
+      answer.complete(_down);
+      await run;
 
       expect(stack, TunStack.mips);
       expect(notices, isEmpty);
