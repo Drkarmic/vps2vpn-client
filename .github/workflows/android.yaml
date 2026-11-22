@@ -23,6 +23,7 @@ env:
   FLUTTER_VERSION: '3.50.0'
   GO_VERSION: '1.27.4'
   RUST_VERSION: '1.99.0'
+  NDK_VERSION: r28c
 
 jobs:
   build:
@@ -68,6 +69,14 @@ jobs:
             plugins/rust_api/rust
             services/helper
 
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+          link-to-sdk: true
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -109,6 +118,8 @@ jobs:
         run: flutter test test/vps2vpn
 
       - name: Package
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
         run: dart tool/package.dart android --arch universal --env stable -v
 
       - name: Name the APK for the panel
