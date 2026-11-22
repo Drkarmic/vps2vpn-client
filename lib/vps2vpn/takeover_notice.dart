@@ -71,8 +71,35 @@ class _VpsTakeoverNoticeState extends ConsumerState<VpsTakeoverNotice> {
         }
         if (r.stillRunning.isNotEmpty) {
           warn = true;
-          zh.add('${r.stillRunning.join('、')} 未能关闭（可能以管理员身份运行），请手动退出');
-          en.add('${r.stillRunning.join(', ')} did not close; quit it by hand');
+          zh.add(
+            '${r.stillRunning.join('、')} 未能关闭（可能以管理员身份或服务模式运行），'
+            '请在它的设置里关闭服务模式后手动退出',
+          );
+          en.add(
+            '${r.stillRunning.join(', ')} did not close (it may run as '
+            'administrator or as a service); turn its service mode off and '
+            'quit it by hand',
+          );
+        }
+        if (r.respawned.isNotEmpty) {
+          warn = true;
+          zh.add(
+            '${r.respawned.join('、')} 关闭后又被自动重新启动（守护进程、服务模式或开机自启），'
+            '会和 vps2vpn 争抢网络。请在它的设置里关闭这些功能，或将它卸载',
+          );
+          en.add(
+            '${r.respawned.join(', ')} keeps starting again after it is closed '
+            '(a watchdog, service mode or autostart) and fights vps2vpn over '
+            'the network; turn those off in its settings, or uninstall it',
+          );
+        }
+        if (r.contender != null) {
+          warn = true;
+          zh.add('${r.contender} 在和 vps2vpn 争抢系统代理，请退出它或关闭它的系统代理功能');
+          en.add(
+            '${r.contender} keeps taking the system proxy from vps2vpn; quit '
+            'it or turn its system proxy off',
+          );
         }
         if (r.running.isNotEmpty) {
           warn = true;

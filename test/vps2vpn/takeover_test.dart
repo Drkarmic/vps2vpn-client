@@ -25,6 +25,62 @@ void main() {
     expect(rivalNames(rivals), ['Clash Verge', 'FlClash']);
   });
 
+  test('knows the newer Clash apps and the bare mihomo builds', () {
+    final rivals = parseRivals(
+      '"clash-verge-service.exe","100","Services","0","9 K"\r\n'
+      '"clash-party.exe","101","Console","1","9 K"\r\n'
+      '"mihomo-windows-amd64.exe","102","Console","1","9 K"\r\n',
+    );
+    expect(rivalNames(rivals), ['Clash Party', 'Clash Verge', 'mihomo']);
+  });
+
+  group('who holds the system proxy', () {
+    const netstat =
+        '\r\nActive Connections\r\n\r\n'
+        '  Proto  Local Address          Foreign Address        State           PID\r\n'
+        '  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING       1000\r\n'
+        '  TCP    127.0.0.1:17890        0.0.0.0:0              LISTENING       2000\r\n'
+        '  TCP    127.0.0.1:7897         0.0.0.0:0              LISTENING       3000\r\n'
+        '  TCP    127.0.0.1:7897         127.0.0.1:50000        ESTABLISHED     4000\r\n';
+
+    test('reads the listening PID, never a connection to the port', () {
+      expect(parseListeningPid(netstat, 7897), 3000);
+      expect(parseListeningPid(netstat, 17890), 2000);
+      expect(parseListeningPid(netstat, 7890), isNull);
+    });
+
+    test('takes the port only of a proxy on this machine', () {
+      VpsSystemProxy proxy(String server, {bool enabled = true}) =>
+          VpsSystemProxy(enabled: enabled, server: server);
+      expect(loopbackProxyPort(proxy('127.0.0.1:7897')), 7897);
+      expect(
+        loopbackProxyPort(proxy('http=127.0.0.1:7897;https=127.0.0.1:7897')),
+        7897,
+      );
+      expect(loopbackProxyPort(proxy('10.0.0.2:3128')), isNull);
+      expect(
+        loopbackProxyPort(proxy('127.0.0.1:7897', enabled: false)),
+        isNull,
+      );
+      expect(loopbackProxyPort(null), isNull);
+    });
+
+    test('names the owner by its product name, or its image', () async {
+      Future<ProcessResult> run(String exe, List<String> args) async {
+        if (exe == 'netstat') return _ok(netstat);
+        return _ok(
+          args[1] == 'PID eq 3000'
+              ? '"verge-mihomo.exe","3000","Console","1","9 K"\r\n'
+              : '"AirportClient.exe","2000","Console","1","9 K"\r\n',
+        );
+      }
+
+      expect(await portOwner(7897, run: run), 'Clash Verge');
+      expect(await portOwner(17890, run: run), 'AirportClient.exe');
+      expect(await portOwner(7890, run: run), isNull);
+    });
+  });
+
   test('ignores lines that are not process rows', () {
     expect(parseRivals('INFO: No tasks are running\r\n'), isEmpty);
     expect(parseRivals(''), isEmpty);

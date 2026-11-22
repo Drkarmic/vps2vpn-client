@@ -26,8 +26,17 @@ const vpsRivalImages = <String, String>{
   'clash verge.exe': 'Clash Verge',
   'verge-mihomo.exe': 'Clash Verge',
   'verge-mihomo-alpha.exe': 'Clash Verge',
+  'clash-verge-service.exe': 'Clash Verge',
   'clash-nyanpasu.exe': 'Clash Nyanpasu',
   'mihomo-party.exe': 'Mihomo Party',
+  'clash-party.exe': 'Clash Party',
+  'sparkle.exe': 'Sparkle',
+  'gui.for.clash.exe': 'GUI.for.Clash',
+  'gui.for.singbox.exe': 'GUI.for.SingBox',
+  'mihomo-windows-amd64.exe': 'mihomo',
+  'mihomo-windows-amd64-compatible.exe': 'mihomo',
+  'mihomo-windows-amd64-v3.exe': 'mihomo',
+  'throne.exe': 'Throne',
   'clash for windows.exe': 'Clash for Windows',
   'clash-win64.exe': 'Clash for Windows',
   'clash.exe': 'Clash',
@@ -255,6 +264,8 @@ class VpsTakeoverReport {
     this.portTo,
     this.clearedProxy = false,
     this.dryRun = false,
+    this.respawned = const [],
+    this.contender,
   });
 
   /// Other proxy apps seen and left alone (takeover off, or safe mode).
@@ -274,12 +285,35 @@ class VpsTakeoverReport {
   /// Safe-mode build: detection only.
   final bool dryRun;
 
+  /// Apps a watchdog, service or autostart started again after a close.
+  final List<String> respawned;
+
+  final String? contender;
+
   bool get isEmpty =>
       running.isEmpty &&
       closed.isEmpty &&
       stillRunning.isEmpty &&
       portTo == null &&
-      !clearedProxy;
+      !clearedProxy &&
+      respawned.isEmpty &&
+      contender == null;
+
+  VpsTakeoverReport withGuardFindings({
+    List<String>? respawned,
+    List<String>? stillRunning,
+    String? contender,
+  }) => VpsTakeoverReport(
+    running: running,
+    closed: closed,
+    stillRunning: stillRunning ?? this.stillRunning,
+    portFrom: portFrom,
+    portTo: portTo,
+    clearedProxy: clearedProxy,
+    dryRun: dryRun,
+    respawned: respawned ?? this.respawned,
+    contender: contender ?? this.contender,
+  );
 }
 
 final vpsTakeoverReport = ValueNotifier<VpsTakeoverReport>(
@@ -288,6 +322,12 @@ final vpsTakeoverReport = ValueNotifier<VpsTakeoverReport>(
 
 Timer? _guard;
 int _takeoverRevision = 0;
+
+/// Apps closed a second time during this connection; a third start is a
+/// watchdog's, and fighting it would only flap the network.
+final _closedAgain = <String>{};
+
+final _contenders = <String, int>{};
 
 /// `flutter test` must never close the developer's own proxy apps or touch
 /// the real port and system proxy, whatever the test drives.
@@ -336,17 +376,28 @@ Future<void> vpsBeforeConnect(Ref ref) async {
   int? from;
   int? to;
   var cleared = false;
-  if (canAct()) {
+  // Moving our own port changes nothing of another app's, so it also runs
+  // with the takeover off: a held port would leave the Core unable to listen.
+  bool canMove() =>
+      ref.mounted &&
+      revision == _takeoverRevision &&
+      !safeModeBuild &&
+      ref.read(isStartProvider);
+  if (canMove()) {
     final port = ref.read(patchClashConfigProvider).mixedPort;
     final next = await pickPort(port);
-    if (canAct() && next != port) {
+    if (canMove() && next != port) {
       from = port;
       to = next;
       ref
           .read(patchClashConfigProvider.notifier)
           .update((s) => s.copyWith(mixedPort: next));
     }
-    if (canAct() && !ref.read(networkSettingProvider).systemProxy) {
+  }
+  _closedAgain.clear();
+  _contenders.clear();
+  if (canAct()) {
+    if (!ref.read(networkSettingProvider).systemProxy) {
       cleared = await clearStaleSystemProxy();
     }
   }
@@ -397,18 +448,18 @@ Future<void> vpsScanOnly() async {
   );
 }
 
-/// While connected in system-proxy mode, puts our proxy back if another
-/// app takes it.
+/// While connected: puts our proxy back if another app takes it, closes once
+/// more an app that came back, and names what keeps coming back.
 void _startGuard(Ref ref) {
   _guard?.cancel();
   final revision = _takeoverRevision;
-  bool isCurrent() =>
+  bool canAct() =>
       ref.mounted &&
       revision == _takeoverRevision &&
       !safeModeBuild &&
       ref.read(appSettingProvider).takeover &&
-      ref.read(proxyStateProvider).isStart &&
-      ref.read(proxyStateProvider).systemProxy;
+      ref.read(proxyStateProvider).isStart;
+  bool isCurrent() => canAct() && ref.read(proxyStateProvider).systemProxy;
   if (safeModeBuild || !ref.read(appSettingProvider).takeover) return;
   var reading = false;
   _guard = Timer.periodic(const Duration(seconds: 20), (timer) async {
@@ -423,19 +474,112 @@ void _startGuard(Ref ref) {
       timer.cancel();
       return;
     }
-    if (!state.systemProxy || reading) return;
+    if (reading) return;
     reading = true;
     try {
+      await _recheckRivals(canAct);
+      if (!state.systemProxy || !isCurrent()) return;
       final proxy = await readSystemProxy();
       if (!isCurrent()) return;
       final needsRefresh = state.pacScript != null
           ? (proxy == null || !proxy.active || (proxy.pac ?? '').isEmpty)
           : (proxy != null && !proxy.isOurs(state.port));
       if (needsRefresh) {
+        await _noteContender(proxy);
         await systemProxyQueue?.refresh(isCurrent: isCurrent);
       }
     } finally {
       reading = false;
     }
   });
+}
+
+Future<void> _recheckRivals(bool Function() canAct) async {
+  final rivals = await scanRivals();
+  if (rivals.isEmpty || !canAct()) return;
+  final fresh = [
+    for (final r in rivals)
+      if (!_closedAgain.contains(r.name)) r,
+  ];
+  final back = rivalNames([
+    for (final r in rivals)
+      if (_closedAgain.contains(r.name)) r,
+  ]);
+  _closedAgain.addAll(rivalNames(fresh));
+  final still = await quitRivals(fresh, isCurrent: canAct);
+  if (!canAct()) return;
+  final last = vpsTakeoverReport.value;
+  final respawned = {...last.respawned, ...back}.toList()..sort();
+  final stillRunning = {...last.stillRunning, ...still}.toList()..sort();
+  if (respawned.length == last.respawned.length &&
+      stillRunning.length == last.stillRunning.length) {
+    return;
+  }
+  vpsTakeoverReport.value = last.withGuardFindings(
+    respawned: respawned,
+    stillRunning: stillRunning,
+  );
+}
+
+Future<void> _noteContender(VpsSystemProxy? proxy) async {
+  final port = loopbackProxyPort(proxy);
+  final owner = port == null ? null : await portOwner(port);
+  if (owner == null) return;
+  final times = _contenders[owner] = (_contenders[owner] ?? 0) + 1;
+  if (times == 2) {
+    vpsTakeoverReport.value = vpsTakeoverReport.value.withGuardFindings(
+      contender: owner,
+    );
+  }
+}
+
+int? loopbackProxyPort(VpsSystemProxy? proxy) {
+  if (proxy == null || !proxy.enabled) return null;
+  for (final entry in (proxy.server ?? '').split(';')) {
+    final hostPort = entry.split('=').last.trim();
+    final uri = Uri.tryParse(
+      hostPort.contains('://') ? hostPort : 'http://$hostPort',
+    );
+    if (uri != null &&
+        uri.hasPort &&
+        const ['127.0.0.1', 'localhost', '::1'].contains(uri.host)) {
+      return uri.port;
+    }
+  }
+  return null;
+}
+
+int? parseListeningPid(String netstat, int port) {
+  final pattern = RegExp(
+    r'^\s*TCP\s+(?:127\.0\.0\.1|0\.0\.0\.0|\[::1?\]):(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$',
+    multiLine: true,
+  );
+  for (final m in pattern.allMatches(netstat)) {
+    if (int.parse(m[1]!) == port) return int.parse(m[2]!);
+  }
+  return null;
+}
+
+Future<String?> portOwner(int port, {VpsRun run = _run}) async {
+  if (!Platform.isWindows && identical(run, _run)) return null;
+  try {
+    final listening = await run('netstat', ['-ano', '-p', 'TCP']);
+    final pid = parseListeningPid('${listening.stdout}', port);
+    if (pid == null || pid == 0 || pid == 4) return null;
+    final r = await run('tasklist', [
+      '/FI',
+      'PID eq $pid',
+      '/FO',
+      'CSV',
+      '/NH',
+    ]);
+    final image = RegExp(
+      r'^"([^"]+)"',
+      multiLine: true,
+    ).firstMatch('${r.stdout}');
+    if (image == null) return null;
+    return vpsRivalImages[image[1]!.toLowerCase()] ?? image[1];
+  } catch (_) {
+    return null;
+  }
 }
