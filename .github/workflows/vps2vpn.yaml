@@ -89,6 +89,14 @@ jobs:
       - name: Package
         run: dart tool/package.dart windows --env stable -v
 
+      - name: Check DLL load flags
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist -Filter 'vps2vpn-*-windows-amd64-portable.zip' | Select-Object -First 1
+          if (-not $zip) { throw 'No Windows amd64 portable zip found in dist/' }
+          python -I tool/check_load_flags.py $zip.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'A System32-only binary imports a DLL that ships only with the app' }
+
       - name: Name the installer for the panel
         shell: pwsh
         run: |
