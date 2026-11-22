@@ -1,5 +1,104 @@
 # Changelog
 
+## v1.0.15
+
+**Fixes**
+
+- **proxy** With the takeover off, a port such as 7890 already held by another app (e.g. FlClash or Clash Verge) no longer prevents vps2vpn from connecting; it moves to a free port without altering other apps' settings.
+- **proxy** While connected, a proxy app restarted by its watchdog, service mode, or autostart is closed once more; if it keeps coming back, vps2vpn stops fighting it and prompts you to disable those options in that app.
+- **proxy** When another program keeps taking the system proxy, including an unrecognized airport client, the notice names the program.
+- **proxy** More proxy apps are recognized: Clash Verge's service mode, Clash Party, Sparkle, GUI.for.Clash, Throne, and a bare mihomo core.
+
+## v1.0.14
+
+*(v1.0.13 was skipped; its fixes are included in this release.)*
+
+**Security Fixes**
+
+- **windows** Background helper service (running as SYSTEM) loads DLLs from the system directory only and statically links the C runtime; `dwrite.dll`, `tasklist`, `taskkill`, and `reg` are called from the system directory only.
+- **core** Core no longer opens TLS, unix socket, or named pipe control listeners.
+- **updates** Panel-pinned download addresses apply only to the panel's own host and port.
+- **logging** Core/App message parse failures log only message size rather than content, preventing subscription or node secrets from appearing in logs.
+- **rules** Rule-set downloads are capped at 64 MiB.
+- **linux** Installer calls `id` and `systemctl` from `/usr/bin` and `/bin` only.
+
+**Fixes**
+
+- **tun** Core no longer reports TUN as active after stopping; on Android, TUN is reported active only after established.
+- **proxy** Local server stops serving old PAC scripts after the system proxy is disabled.
+- **network** Egress IP detection no longer treats NAT64 addresses as public egress.
+- **updates** Background update checks no longer consume the single retry while the same version is downloading; manual downloads can retry after failure.
+- **installer** Installer properly terminates App processes running as SYSTEM.
+
+## v1.0.12
+
+**Security Fixes**
+
+- **core** Elevated Core only reads/writes in a real `responses` folder, refuses any link/junction, and only deletes the link itself when clearing.
+- **core** Oversized replies (over 64 MiB) that cannot be written to a temp file return a clear error instead of dropping the Core/App connection.
+
+**Fixes**
+
+- **subscriptions** Changing subscription URL while the first download is still running queues updates properly so the new URL and content are preserved.
+
+## v1.0.11
+
+**Fixes**
+
+- **core** Connect now re-applies config and fails with Core's reason if rejected at startup, instead of showing "connected" with nothing proxied; auto-connect at startup also recognizes rejected config properly.
+- **share** Hysteria2 share links keep the colon unencoded (`user:secret@` instead of `%3A`).
+
+## v1.0.10
+
+**Fixes**
+
+- **routing** Auto-switch watches all fallback groups; delayed switches during the 30s cooldown are applied after cooldown; "智能线路" skips "直连"-first "国内" group; scoped IPv6 addresses (e.g. `fe80::1%eth0`) are no longer treated as public egress IP.
+- **updates** Truncated downloads are retried as normal failures; connection timeout added; verified updates preserved on failure; concurrent download tracking; folder-open failure no longer marks download failed; Windows antivirus lock retry; panel cert fingerprint scoped to panel domain.
+- **panel** Line report tries direct connection first; proxy username/password sent verbatim; subscription requests include `x-vps2vpn-pin` fingerprint.
+- **windows** Startup proxy cleanup no longer clears a proxy just set by the app.
+
+## v1.0.9
+
+**Features**
+
+- **updates** Background self-updates: checks panel for updates every 6 hours, downloads and verifies signatures, and supports one-tap "Install & restart" (silent install on Windows).
+- **panel** Panel integration: vps2vpn server 0.2.11 fetches the newest signed client from GitHub automatically.
+
+**Fixes**
+
+- **updates** Added "Open download page" fallback (#67) and fixed cancelling update download during checksum check.
+- **backup** Added backup restore size check (#66).
+- **proxy** Fixed local proxy auth punctuation handling (#64).
+
+## v1.0.8
+
+**Features**
+
+- **updates** Signed updates with Ed25519 signature verification (`<installer>.sig`) and streaming hash with backpressure.
+- **backup** WebDAV streaming upload/download up to 512 MiB, rejecting truncated downloads (#55).
+
+**Fixes**
+
+- **routing** Smart failover cooldown reset on recreated group (#61); AI routing `DOMAIN-WILDCARD` rule priority (#58).
+- **core** Go race test fix for lingering DNS lookup (#60).
+
+## v1.0.7
+
+**Features**
+
+- **subscriptions** Reads `profile-title`, `announce`, `profile-web-page-url`, and `support-url` headers; `profile-update-interval` no longer overrides user interval; handles usage > 2^53 bytes and extreme expiry dates.
+
+**Fixes**
+
+- **android** Smart groups re-check lines on Wi-Fi/mobile switch; line watch panic recovery; deep links cleanup.
+- **core** MITM module staging files no longer swept while writing; full test suite passes on Windows.
+
+## v1.0.6
+
+**Security Fixes**
+
+- **security** Security hardening (#46, #49, #51, #52): subscription and file downloads capped at 32 MiB while streaming and after gzip/zlib inflation; WebDAV ignores Digest challenges from redirected foreign origins and refuses cross-origin redirects for `MKCOL`, `PUT`, and `GET`.
+
 ## v0.9.4 (2026-11-19)
 
 **Features**
