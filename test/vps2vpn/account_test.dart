@@ -408,7 +408,7 @@ void main() {
           client: VpsClientRelease(
             version: '1.1.0',
             url: Uri.parse(
-              'https://example.com/client/vps2vpn-1.1.0-windows-amd64-setup.exe',
+              'https://example.com/client/vps2vpn-1.1.0-${Platform.operatingSystem}-amd64-setup.exe',
             ),
           ),
         ),
