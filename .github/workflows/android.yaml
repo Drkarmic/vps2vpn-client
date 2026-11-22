@@ -139,9 +139,10 @@ jobs:
         run: |
           set -euo pipefail
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          "$apksigner" verify --print-certs "release/vps2vpn-$VERSION-android-universal.apk" | grep -E 'Signer #1 certificate (DN|SHA-256)'
-          "$apksigner" verify --print-certs "release/vps2vpn-$VERSION-android-universal.apk" | grep -q 'CN=vps2vpn' \
-            || { echo 'the APK is not signed with the vps2vpn release key' >&2; exit 1; }
+          out=$("$apksigner" verify --verbose --print-certs "release/vps2vpn-$VERSION-android-universal.apk")
+          printf '%s\n' "$out" | grep -E 'Verified using|certificate (DN|SHA-256)' || true
+          grep -q 'CN=vps2vpn' <<< "$out" \
+            || { echo 'the APK is not signed with the vps2vpn release key' >&2; printf '%s\n' "$out" | head -20 >&2; exit 1; }
 
       - name: Remove the signing key
         if: always()
