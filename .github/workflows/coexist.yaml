@@ -1,0 +1,57 @@
+name: vps2vpn coexistence check
+
+# A built release next to the official FlClash and Clash Verge Rev releases,
+# connecting through a CI-local upstream proxy (.github/scripts/coexist-e2e.ps1).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag that carries the setup .exe
+        required: true
+        default: v1.0.14
+      rounds:
+        description: Restart rounds
+        required: false
+        default: '3'
+
+permissions:
+  contents: read
+
+jobs:
+  coexist:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout the test scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Download vps2vpn, FlClash and Clash Verge Rev
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release download -R $env:REPO -p '*-windows-amd64-setup.exe' -D apps/vps2vpn -- $env:TAG
+          gh release download -R chen08209/FlClash -p '*-windows-amd64-portable.zip' -D apps/flclash
+          gh release download -R clash-verge-rev/clash-verge-rev -p '*_x64-setup.exe' -D apps/verge
+          Get-ChildItem apps -Recurse -File | ForEach-Object { "$($_.Name) $((Get-FileHash $_.FullName).Hash)" }
+
+      - name: Coexist and connect (end to end)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem apps/vps2vpn -Filter '*-setup.exe' | Select-Object -First 1).FullName
+          $flclash = (Get-ChildItem apps/flclash -Filter '*.zip' | Select-Object -First 1).FullName
+          $verge = (Get-ChildItem apps/verge -Filter '*-setup.exe' | Select-Object -First 1).FullName
+          ./.github/scripts/coexist-e2e.ps1 -Setup $setup -FlClashZip $flclash -VergeSetup $verge -Out coexist -Rounds ${{ inputs.rounds }}
+
+      - name: Upload results
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: coexist
+          path: coexist
+          if-no-files-found: ignore
