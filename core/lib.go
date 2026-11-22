@@ -118,6 +118,7 @@ var (
 // interface-name, routing-mark and tfo, as it always has under CMFA.
 // A refused protect never fails the dial: the socket waits for the next VPN.
 func init() {
+	androidTunUp = func() bool { return activeTunHandler.Load() != nil }
 	dialer.DefaultSocketHook = func(network, address string, conn syscall.RawConn) error {
 		if platform.ShouldBlockConnection() {
 			return errBlocked

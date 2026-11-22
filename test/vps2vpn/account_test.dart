@@ -361,6 +361,28 @@ void main() {
       });
     });
 
+    testWidgets('a download of this version under way leaves it for later', (
+      tester,
+    ) async {
+      resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+      var calls = 0;
+      vpsUpdateFetcher =
+          (ref, url, {required install, required current, onProgress}) async {
+            calls++;
+            return File('setup.exe');
+          };
+      await withRef(tester, (ref, c) async {
+        final state = c.read(updateDownloadStateProvider.notifier);
+        // A manual download of 1.1.0 runs, then fails.
+        state.value = const UpdateDownloading('v1.1.0');
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(calls, 0);
+        state.value = null;
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(calls, 1);
+      });
+    });
+
     testWidgets('a refused installer is tried once per run', (tester) async {
       resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
       var calls = 0;
@@ -435,5 +457,25 @@ void main() {
     await tester.pump();
     expect(find.text('Update'), findsOneWidget);
     download.value = null;
+  });
+
+  test('panel pins vouch only for the panel host and port', () {
+    final panel = vpsApiBase('https://panel.example:8443/s/abcdefghijklmnop')!;
+    expect(
+      vpsSameOrigin(panel, Uri.parse('https://panel.example:8443/c/a.exe')),
+      isTrue,
+    );
+    expect(
+      vpsSameOrigin(panel, Uri.parse('https://PANEL.example:8443/c/a.exe')),
+      isTrue,
+    );
+    expect(
+      vpsSameOrigin(panel, Uri.parse('https://panel.example/c/a.exe')),
+      isFalse,
+    );
+    expect(
+      vpsSameOrigin(panel, Uri.parse('https://other.example:8443/c/a.exe')),
+      isFalse,
+    );
   });
 }

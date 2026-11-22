@@ -175,6 +175,11 @@ var nonPublicProbePrefixes = []netip.Prefix{
 	// RFC 3849 documentation and RFC 5180 benchmarking.
 	netip.MustParsePrefix("2001:db8::/32"),
 	netip.MustParsePrefix("2001:2::/48"),
+	// RFC 6052 and RFC 8215 NAT64 translation prefixes and the deprecated
+	// IPv4-compatible ::/96: an IPv4 address in IPv6 form, never an exit.
+	netip.MustParsePrefix("64:ff9b::/96"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("::/96"),
 }
 
 // HTTP status and a random public-IP token are not enough. The Dart side

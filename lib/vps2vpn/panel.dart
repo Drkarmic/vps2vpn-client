@@ -367,6 +367,11 @@ String _normHost(String host) {
 /// One host, whatever its case or IPv6 brackets.
 bool vpsSameHost(String a, String b) => _normHost(a) == _normHost(b);
 
+/// Same host and same effective port: the panel's pins vouch for the panel's
+/// own listener, not for another service on that machine.
+bool vpsSameOrigin(Uri a, Uri b) =>
+    a.scheme == b.scheme && vpsSameHost(a.host, b.host) && a.port == b.port;
+
 String? _normFingerprint(Object? value) {
   if (value is! String) return null;
   final clean = value.trim().replaceAll(':', '').toLowerCase();

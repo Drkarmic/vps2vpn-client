@@ -63,7 +63,10 @@ pub fn start(port: u32, bypass_domain: &[String], pac_script: Option<&str>) -> b
 }
 
 pub fn stop() -> bool {
-    platform::stop()
+    let stopped = platform::stop();
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+    pac::clear();
+    stopped
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", windows))]

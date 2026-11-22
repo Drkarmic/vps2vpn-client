@@ -352,3 +352,11 @@ func TestPublicEgressIpRefusesAZonedAddress(t *testing.T) {
 		t.Fatal("a public address was refused")
 	}
 }
+
+func TestPublicEgressIpRefusesNat64AndIpv4CompatibleAddresses(t *testing.T) {
+	for _, addr := range []string{"64:ff9b::808:808", "64:ff9b:1::1", "::808:808"} {
+		if publicEgressIp(addr) {
+			t.Errorf("%s counted as a public exit IP", addr)
+		}
+	}
+}

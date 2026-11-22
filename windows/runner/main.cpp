@@ -67,12 +67,21 @@ void ForwardLinks(HWND window) {
 // is cleared: another proxy app that is running keeps its setting. A port in
 // use is looked at again for up to two seconds, hence the thread; in Rust the
 // clear and the app's own proxy changes take the same lock.
-void ClearStaleProxyInBackground() {
+std::thread ClearStaleProxyInBackground() {
   const auto clear_stale_proxy =
       RustApiFunction<bool (*)()>("flclash_clear_stale_proxy");
-  if (clear_stale_proxy == nullptr) return;
-  std::thread([clear_stale_proxy] { clear_stale_proxy(); }).detach();
+  if (clear_stale_proxy == nullptr) return {};
+  return std::thread([clear_stale_proxy] { clear_stale_proxy(); });
 }
+
+// Joined on every way out of wWinMain, so the clear never runs on while the
+// process tears down the runtime it calls into.
+struct JoinOnExit {
+  std::thread thread;
+  ~JoinOnExit() {
+    if (thread.joinable()) thread.join();
+  }
+};
 
 void ActivateWindow(HWND window) {
   if (const auto activate_window =
@@ -98,7 +107,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // After the single-instance check: a second launch leaves the running
   // instance's proxy alone.
-  ClearStaleProxyInBackground();
+  JoinOnExit stale_proxy_clear{ClearStaleProxyInBackground()};
 
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.

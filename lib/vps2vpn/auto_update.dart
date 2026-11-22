@@ -81,7 +81,7 @@ Future<File> _fetchUpdate(
   // The panel's own certificate pins vouch for the panel alone, not for a
   // download it links to on another host.
   final panel = vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
-  final pins = panel != null && vpsSameHost(panel.host, url.host)
+  final pins = panel != null && vpsSameOrigin(panel, url)
       ? await ref.read(vpsPanelPinsProvider.future)
       : const <String>{};
   final dir = Directory(
@@ -140,8 +140,9 @@ Future<bool> vpsDownloadPanelUpdate(
   final pending = download.value;
   if (install && pending is UpdateReady && pending.tag == tag) return true;
   if (install && pending is UpdateDownloading) {
-    // Another version's download is no try of this one.
-    return pending.tag == tag;
+    // Another download, even one of this version, is no try of this one:
+    // it may still fail, and the next check has to be free to try again.
+    return false;
   }
   // What a failed download puts back: an update already verified stays
   // installable.

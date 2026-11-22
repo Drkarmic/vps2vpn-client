@@ -73,6 +73,15 @@ pub fn serve(script: String) -> Option<String> {
     Some(format!("http://{address}{PAC_PATH}?v={revision}"))
 }
 
+/// Forgets the script once the system proxy is off: the listener stays up for
+/// the life of the process and would otherwise keep handing out the rules.
+pub fn clear() {
+    SCRIPT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .update(String::new());
+}
+
 fn listener_address() -> Option<SocketAddr> {
     static ADDRESS: Mutex<Option<SocketAddr>> = Mutex::new(None);
     let mut guard = ADDRESS
@@ -167,7 +176,7 @@ fn is_loopback_host(value: &str) -> bool {
         Some(port) => {
             !port.is_empty()
                 && port.bytes().all(|b| b.is_ascii_digit())
-                && port.parse::<u16>().is_ok()
+                && port.parse::<u16>().is_ok_and(|port| port != 0)
         }
         None => false,
     }
@@ -308,6 +317,13 @@ mod tests {
             "function x() {}",
         ));
         assert!(evil.starts_with("HTTP/1.1 403 Forbidden\r\n"));
+    }
+
+    #[test]
+    fn port_zero_is_no_loopback_host() {
+        assert!(is_loopback_host("127.0.0.1:7890"));
+        assert!(!is_loopback_host("127.0.0.1:0"));
+        assert!(!is_loopback_host("127.0.0.1:65536"));
     }
 
     #[test]

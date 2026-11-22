@@ -76,6 +76,10 @@ type TunStatus struct {
 	Stack     string `json:"stack"`
 }
 
+// androidTunUp is set on Android, where the TUN is the VpnService's and
+// listener.GetTunConf never reports it.
+var androidTunUp func() bool
+
 // Holding configMu waits out an update or setup still creating the TUN, so
 // the answer is the settled state, not one taken halfway through.
 func handleTunStatus() TunStatus {
@@ -89,6 +93,10 @@ func handleTunStatus() TunStatus {
 	// StopListener closes the TUN but leaves its last conf (Enable=true)
 	// behind, so a stopped Core must not report it as up.
 	status.Up = status.Running && tun.Enable
+	if androidTunUp != nil {
+		// Android's VpnService owns the TUN; mihomo's listener never does.
+		status.Up = status.Running && androidTunUp()
+	}
 	status.Stack = tun.Stack.String()
 	return status
 }
