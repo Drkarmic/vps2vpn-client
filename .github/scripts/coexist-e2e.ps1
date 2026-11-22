@@ -178,7 +178,9 @@ rules:
   $env:VPS2VPN_IMPORT_URL = "http://127.0.0.1:$subPort/sub.yaml"
   Start-Process $exe | Out-Null
   $profiles = Join-Path $env:APPDATA 'vps2vpn\vps2vpn\profiles'
-  Check (Wait-Until 60 { Get-ChildItem $profiles -File -ErrorAction SilentlyContinue }) 'subscription imported on first run'
+  Check (Wait-Until 60 { Get-ChildItem $profiles -File -Filter '*.yaml' -ErrorAction SilentlyContinue }) 'subscription imported on first run'
+  # The file lands before the profile record; give the app time to save both.
+  Start-Sleep 10
   Stop-App
   Remove-Item Env:VPS2VPN_IMPORT_URL
   Check (Test-Path $prefs) 'settings file created on first run'
