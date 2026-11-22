@@ -71,8 +71,12 @@ begin
   begin
     try
       Exec(PowerShellPath,
-        '-NoProfile -NonInteractive -Command "Get-Process -Name vps2vpn,vps2vpnCore,vps2vpnHelperService -ErrorAction SilentlyContinue | ' +
-        'Where-Object { $_.Path -and $_.Path.StartsWith($env:VPS2VPN_APP_DIR, [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue"',
+        // Win32_Process sees the path of SYSTEM processes (the Helper and the
+        // Core it starts), which Get-Process leaves empty on PowerShell 5.1.
+        '-NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | ' +
+        'Where-Object { @(''vps2vpn.exe'',''vps2vpnCore.exe'',''vps2vpnHelperService.exe'') -contains $_.Name -and $_.ExecutablePath -and ' +
+        '$_.ExecutablePath.StartsWith($env:VPS2VPN_APP_DIR, [StringComparison]::OrdinalIgnoreCase) } | ' +
+        'ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"',
         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     finally
       SetEnvironmentVariable('VPS2VPN_APP_DIR', '');

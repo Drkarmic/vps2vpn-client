@@ -97,8 +97,12 @@ func handleCompileRuleSet(params CompileRuleSetParams) (*RuleSetInfo, error) {
 	return info, nil
 }
 
+// maxRuleSetBytes caps a rule-set download; a bigger body is cut short and
+// then fails to parse instead of filling memory.
+const maxRuleSetBytes = 64 << 20
+
 func downloadRuleSet(url string, path string) ([]byte, error) {
-	buf, _, err := resource.NewHTTPVehicle(url, path, "", nil, resource.DefaultHttpTimeout, 0).
+	buf, _, err := resource.NewHTTPVehicle(url, path, "", nil, resource.DefaultHttpTimeout, maxRuleSetBytes).
 		Read(context.Background(), utils.HashType{})
 	if err != nil {
 		if methodErr := requestMethodError(err, map[string]any{}); methodErr != nil {

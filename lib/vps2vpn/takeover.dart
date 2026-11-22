@@ -152,7 +152,15 @@ typedef VpsRun =
     Future<ProcessResult> Function(String executable, List<String> args);
 
 Future<ProcessResult> _run(String executable, List<String> args) =>
-    Process.run(executable, args);
+    Process.run(_system32(executable), args);
+
+/// Windows tools by their System32 path, so a tasklist.exe or reg.exe in the
+/// working directory or earlier on PATH is never run instead.
+String _system32(String tool) {
+  if (!Platform.isWindows) return tool;
+  final root = Platform.environment['SystemRoot'] ?? r'C:\Windows';
+  return '$root\\System32\\$tool.exe';
+}
 
 /// Other proxy apps running now. Empty off Windows or when tasklist fails.
 Future<List<VpsRival>> scanRivals({VpsRun run = _run}) async {

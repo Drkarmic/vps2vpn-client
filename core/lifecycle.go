@@ -86,7 +86,9 @@ func handleTunStatus() TunStatus {
 		status.Requested = currentConfig.General.Tun.Enable
 	}
 	tun := listener.GetTunConf()
-	status.Up = tun.Enable
+	// StopListener closes the TUN but leaves its last conf (Enable=true)
+	// behind, so a stopped Core must not report it as up.
+	status.Up = status.Running && tun.Enable
 	status.Stack = tun.Stack.String()
 	return status
 }

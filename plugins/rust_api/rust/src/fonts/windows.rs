@@ -3,7 +3,9 @@ use std::mem::transmute_copy;
 use std::ptr::{null_mut, NonNull};
 
 use windows_sys::core::{BOOL, GUID, HRESULT};
-use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+use windows_sys::Win32::System::LibraryLoader::{
+    GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
+};
 
 const DWRITE_FACTORY_TYPE_SHARED: i32 = 0;
 const IID_IDWRITE_FACTORY: GUID = GUID::from_u128(0xb859ee5a_d838_4b5b_a2e8_1adc7d93db48);
@@ -54,7 +56,9 @@ pub fn families() -> Result<Vec<String>, String> {
     let dll = wide("dwrite.dll");
     // SAFETY: slots and signatures follow dwrite.h for each interface.
     unsafe {
-        let module = LoadLibraryW(dll.as_ptr());
+        // System32 only: a dwrite.dll next to the app or in the working
+        // directory must never be picked up.
+        let module = LoadLibraryExW(dll.as_ptr(), null_mut(), LOAD_LIBRARY_SEARCH_SYSTEM32);
         if module.is_null() {
             return Err("dwrite.dll is not available".to_owned());
         }

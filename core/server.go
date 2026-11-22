@@ -222,7 +222,8 @@ func serve(dialed ipcConn) {
 
 		call := &MethodCall{}
 		if err := json.Unmarshal(data, call); err != nil {
-			logError("server unmarshal error: %v (data: %q)", err, data)
+			// The payload can hold subscription keys and proxy passwords.
+			logError("server unmarshal error: %v (%d bytes)", err, len(data))
 			continue
 		}
 
