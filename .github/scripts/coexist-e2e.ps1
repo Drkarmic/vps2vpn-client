@@ -121,7 +121,7 @@ rules:
 
   $p = Start-Process $VergeSetup -ArgumentList '/S' -Wait -PassThru
   Check ($p.ExitCode -eq 0) "Clash Verge Rev installer exit code 0 (got $($p.ExitCode))"
-  $verge = Get-ChildItem "$env:ProgramFiles\Clash Verge", "$env:LOCALAPPDATA\Programs\Clash Verge" -Filter 'clash-verge.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+  $verge = Get-ChildItem "$env:ProgramFiles\Clash Verge", "$env:LOCALAPPDATA\Clash Verge", "$env:LOCALAPPDATA\Programs\Clash Verge" -Filter 'clash-verge.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
   Check ([bool]$verge) 'clash-verge.exe installed'
   $flclashDir = Join-Path $work 'FlClash'
   Expand-Archive $FlClashZip $flclashDir -Force
