@@ -10,6 +10,7 @@ Map<String, String> trimmedPathEnvironment({
   required String checkoutDir,
   required String toolchainDir,
   required String targetTriple,
+  List<String> extraRustflags = const [],
   Map<String, String>? environment,
 }) {
   final env = environment ?? Platform.environment;
@@ -20,6 +21,7 @@ Map<String, String> trimmedPathEnvironment({
   );
   return {
     ..._rustflags(env, targetTriple, [
+      ...extraRustflags,
       for (final (from, to) in prefixes) '--remap-path-prefix=$from=$to',
     ]),
     if (!targetTriple.endsWith('-msvc'))

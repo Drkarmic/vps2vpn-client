@@ -46,6 +46,11 @@ class RustBuilder {
         checkoutDir: rootDir,
         toolchainDir: _helperPath,
         targetTriple: triple,
+        // The Helper loads its imports from System32 only (build.rs), which
+        // has no vcruntime140.dll on a PC without the VC++ redistributable.
+        extraRustflags: [
+          if (triple.endsWith('-windows-msvc')) '-Ctarget-feature=+crt-static',
+        ],
       ),
     };
 

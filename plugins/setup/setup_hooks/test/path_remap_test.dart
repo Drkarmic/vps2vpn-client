@@ -67,6 +67,26 @@ void main() {
     );
   });
 
+  test('puts extra flags ahead of the path remaps', () {
+    final env = trimmedPathEnvironment(
+      checkoutDir: checkout,
+      toolchainDir: Directory.current.path,
+      targetTriple: 'aarch64-apple-darwin',
+      extraRustflags: ['-Ctarget-feature=+crt-static'],
+      environment: {'HOME': home, 'RUSTFLAGS': '-C a'},
+    );
+
+    expect(
+      rustflags(env),
+      containsAllInOrder([
+        '-C',
+        'a',
+        '-Ctarget-feature=+crt-static',
+        '--remap-path-prefix=$home=~',
+      ]),
+    );
+  });
+
   test('leaves C flags alone for MSVC', () {
     expect(environment('x86_64-pc-windows-msvc').keys, [
       'CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS',

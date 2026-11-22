@@ -1,8 +1,12 @@
 fn main() {
-    // The Helper runs as SYSTEM: let the loader resolve its imported DLLs from
-    // System32 only, never from the install directory (DLL planting).
+    // The Helper runs as SYSTEM: its imports load from System32 only, never
+    // from the install directory (DLL planting). A dynamic CRT is the
+    // vcruntime140.dll beside it, which that would leave unloadable.
+    let static_crt = std::env::var("CARGO_CFG_TARGET_FEATURE")
+        .is_ok_and(|features| features.split(',').any(|f| f == "crt-static"));
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
         && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+        && static_crt
     {
         println!("cargo:rustc-link-arg-bins=/DEPENDENTLOADFLAG:0x800");
     }
