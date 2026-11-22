@@ -66,6 +66,17 @@ function Test-Through($port, $what) {
   $seen = Wait-Until 5 { (Get-UpstreamCount) -gt $before }
   Check ($code -eq '204') "$what`: curl through port $port answers 204 (got $code)"
   Check $seen "$what`: the request went out through the CI upstream proxy"
+  if (-not $seen) { Show-Route }
+}
+
+function Show-Route {
+  "upstream proxy listening: $([bool](Get-Listener $upstreamPort)); last upstream lines:"
+  Get-Content $upstreamLog -Tail 5 -ErrorAction SilentlyContinue
+  $running = Join-Path $env:APPDATA 'vps2vpn\vps2vpn\config.yaml'
+  if (Test-Path $running) {
+    Select-String $running -Pattern '^(mode|mixed-port|tun|  enable):|^  - (MATCH|GEO|DOMAIN|IP-CIDR|RULE-SET)' |
+      Select-Object -First 20 | ForEach-Object { "config: $($_.Line)" }
+  }
 }
 
 $prefs = Join-Path $env:APPDATA 'vps2vpn\vps2vpn\shared_preferences.json'
@@ -92,7 +103,7 @@ function Start-App($what) {
   Start-Process $exe | Out-Null
   $up = Wait-Until 60 { (Get-ListenerName (Get-AppPort)) -eq 'vps2vpnCore' }
   $port = Get-AppPort
-  Check $up "$what`: vps2vpnCore listens on its mixed port $port"
+  Check $up "$what`: vps2vpnCore listens on its mixed port $port" | Out-Host
   $port
 }
 
