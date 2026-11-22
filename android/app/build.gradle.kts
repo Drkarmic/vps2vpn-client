@@ -33,7 +33,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.follow.clash"
+        // Its own id, so it installs next to FlClash instead of over it.
+        applicationId = "com.vps2vpn.client"
         minSdk = flutter.minSdkVersion
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = flutter.versionCode
