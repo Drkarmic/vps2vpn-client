@@ -215,6 +215,30 @@ void main() {
       await setupFuture;
       expect(completed, isTrue);
     });
+
+    test('setupConfig with a preload fails with the setup error itself', () {
+      const params = SetupParams(
+        selectedMap: {},
+        options: CoreOptions(testUrl: 'http://x.com'),
+      );
+      when(() => mock.setupConfig(params)).thenAnswer(
+        (_) async => throw const CoreMethodException(
+          code: 'config_rejected',
+          message: 'invalid hosts',
+        ),
+      );
+
+      expect(
+        controller.setupConfig(params: params, preloadInvoke: () async {}),
+        throwsA(
+          isA<CoreMethodException>().having(
+            (error) => error.code,
+            'code',
+            'config_rejected',
+          ),
+        ),
+      );
+    });
   });
 
   group('proxy methods', () {

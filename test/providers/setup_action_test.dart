@@ -2005,6 +2005,74 @@ void main() {
       },
     );
 
+    test(
+      'a connect after a rejected startup config pushes it again and fails '
+      'without opening the listeners while the Core still rejects it',
+      () async {
+        final profile = Profile.normal(label: 'p');
+        final core = _MockCoreHandlerInterface();
+        var rejecting = true;
+        when(
+          () => core.getProfileBase(any()),
+        ).thenAnswer((_) async => const ProfileBase(config: {}, digest: 'd'));
+        when(() => core.getExternalProviders()).thenAnswer((_) async => []);
+        when(
+          () => core.getProxies(),
+        ).thenAnswer((_) async => const ProxiesData(all: [], proxies: {}));
+        when(() => core.setupConfig(any())).thenAnswer((_) async {
+          if (rejecting) {
+            throw const CoreMethodException(
+              code: 'config_rejected',
+              message: 'invalid hosts',
+            );
+          }
+        });
+        when(() => core.startListener()).thenAnswer((_) async {});
+        when(() => core.stopListener()).thenAnswer((_) async {});
+        when(() => core.resetTraffic()).thenAnswer((_) async {});
+        final scoped = ProviderContainer(
+          overrides: [
+            profilesProvider.overrideWith(() => TestProfiles([profile])),
+            currentProfileIdProvider.overrideWithBuild((_, _) => profile.id),
+            setupStateProvider.overrideWith(
+              (_, profileId) =>
+                  nullProfileSetupState.copyWith(profileId: profileId),
+            ),
+            coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+            commonActionProvider.overrideWith(TestCommonAction.new),
+            setupActionProvider.overrideWith(SetupAction.new),
+          ],
+        );
+        addTearDown(scoped.dispose);
+        final setupAction = scoped.read(setupActionProvider.notifier);
+
+        expect(await setupAction.setRunning(true, initialize: true), isFalse);
+        expect(scoped.read(isStartProvider), isFalse);
+        scoped.read(initProvider.notifier).value = true;
+        clearInteractions(core);
+
+        await expectLater(
+          setupAction.setRunning(true),
+          throwsA(
+            isA<MessageException>().having(
+              (error) => error.message,
+              'message',
+              'invalid hosts',
+            ),
+          ),
+        );
+        verify(() => core.setupConfig(any())).called(1);
+        verifyNever(() => core.startListener());
+        expect(scoped.read(isStartProvider), isFalse);
+
+        rejecting = false;
+        expect(await setupAction.setRunning(true), isTrue);
+        verify(() => core.setupConfig(any())).called(1);
+        verify(() => core.startListener()).called(1);
+        await setupAction.setRunning(false);
+      },
+    );
+
     test('a custom profile declares only the proxies and providers it names, '
         'without a profile file', () async {
       final profile = Profile.custom(label: 'p');

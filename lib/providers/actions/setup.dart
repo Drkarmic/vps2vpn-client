@@ -44,6 +44,8 @@ class SetupAction extends _$SetupAction {
   var _resumeOnRestart = false;
   ({String digest, Set<String> names})? _outboundNames;
   _SetupInputs? _appliedInputs;
+  // Why the Core refused the last config push, until a push succeeds.
+  String? _rejectedReason;
   var _lastPushDuration = Duration.zero;
   var _pendingForceApply = false;
   // The mode the Core runs, from the last config push or update.
@@ -238,6 +240,19 @@ class SetupAction extends _$SetupAction {
         await globalState.safeRun(() => setRunning(false));
       }
       return applied;
+    }
+
+    if (_rejectedReason != null) {
+      // A rejected push leaves the Core on its built-in default, which has no
+      // proxies and so sends everything DIRECT, or on a graph older inputs made.
+      await applyProfile(force: true);
+      if (!_isCurrent(request)) {
+        return false;
+      }
+      if (_rejectedReason case final reason?) {
+        _rollbackRunning(request);
+        throw MessageException(reason);
+      }
     }
 
     if (ref.read(patchClashConfigProvider).mixedPort != portBefore) {
@@ -930,6 +945,7 @@ class SetupAction extends _$SetupAction {
             if (error.code != 'config_rejected') {
               rethrow;
             }
+            _rejectedReason = error.message;
             globalState.lastConfigCounts = configCountsOf(const {});
             await globalState.safeRun(() => onUpdated?.call());
             throw MessageException(error.message);
@@ -944,6 +960,7 @@ class SetupAction extends _$SetupAction {
         globalState.lastConfigMd5 = yamlMd5;
         globalState.lastConfigCounts = realProfile.counts;
         _appliedInputs = inputs;
+        _rejectedReason = null;
         if (system.isAndroid) {
           await preferences.saveAppliedConfigMd5(yamlMd5);
         }

@@ -163,7 +163,16 @@ extension type CoreController._(CoreHandlerInterface _interface)
     if (preloadInvoke == null) {
       return _interface.setupConfig(params);
     }
-    await (_interface.setupConfig(params), preloadInvoke()).wait;
+    try {
+      await (_interface.setupConfig(params), preloadInvoke()).wait;
+    } on ParallelWaitError<(void, void), (AsyncError?, AsyncError?)> catch (
+      error
+    ) {
+      // Callers tell a rejected config apart by the setup error's own type.
+      final (setup, preload) = error.errors;
+      final first = (setup ?? preload)!;
+      Error.throwWithStackTrace(first.error, first.stackTrace);
+    }
   }
 
   Future<List<Group>> getProxiesGroups({
