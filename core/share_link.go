@@ -434,7 +434,13 @@ func encodeHysteria2(f proxyFields) string {
 	}
 	var user *url.Userinfo
 	if password := f.str("password"); password != "" {
-		user = url.User(password)
+		// Importers read the auth back with Userinfo.String, which keeps an
+		// escaped ':' escaped, so userpass auth keeps its colon as is.
+		if name, secret, ok := strings.Cut(password, ":"); ok {
+			user = url.UserPassword(name, secret)
+		} else {
+			user = url.User(password)
+		}
 	}
 	query := url.Values{}
 	setIf(query, "sni", f.str("sni"))

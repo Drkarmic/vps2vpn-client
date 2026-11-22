@@ -217,6 +217,14 @@ func TestShareLinksReadBackThroughTheConverter(t *testing.T) {
 		},
 		{
 			proxy: map[string]any{
+				"name": "hy2 userpass", "type": "hysteria2", "server": "g.example", "port": 443,
+				"password": "u1:secret",
+			},
+			prefix: "hysteria2://u1:secret@g.example:443",
+			want:   map[string]string{"password": "u1:secret"},
+		},
+		{
+			proxy: map[string]any{
 				"name": "tuic", "type": "tuic", "server": "h.example", "port": 443,
 				"uuid": "u-3", "password": "pw", "congestion-controller": "bbr",
 				"udp-relay-mode": "quic", "alpn": []string{"h3"},
