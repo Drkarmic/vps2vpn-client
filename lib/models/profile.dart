@@ -188,18 +188,8 @@ extension ProfileExtension on Profile {
 
   String get updatingKey => 'profile_$id';
 
-  Future<Profile?> checkAndUpdateAndCopy({
-    required ValidateConfig validate,
-  }) async {
-    if (type != ProfileType.url) {
-      return null;
-    }
-    final mFile = await _getFile(false);
-    if (await mFile.exists()) {
-      return null;
-    }
-    return update(validate: validate);
-  }
+  Future<bool> get waitsForFirstDownload async =>
+      type == ProfileType.url && !await (await _getFile(false)).exists();
 
   Future<File> _getFile([bool autoCreate = true]) async {
     final path = await appPath.getProfilePath(id.toString());

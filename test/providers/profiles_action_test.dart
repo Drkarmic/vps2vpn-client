@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -39,6 +40,22 @@ class _RouteAdapter implements HttpClientAdapter {
     calls++;
     return answer();
   }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _UrlAdapter implements HttpClientAdapter {
+  _UrlAdapter(this.answer);
+
+  final Future<String> Function(String uri) answer;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async => ResponseBody.fromString(await answer(options.uri.toString()), 200);
 
   @override
   void close({bool force = false}) {}
@@ -241,6 +258,49 @@ void main() {
       expect(container.read(profilesProvider), isEmpty);
       verifyNever(() => core.validateConfig(any()));
     });
+  });
+
+  test('a first download a setup asks for waits behind a URL change and '
+      'keeps it', () async {
+    final answers = <String, Completer<String>>{
+      'https://sub.example.com/new': Completer(),
+    };
+    final fetched = <String>[];
+    final adapter = _UrlAdapter((uri) {
+      fetched.add(uri);
+      return answers[uri]!.future;
+    });
+    final clashAdapter = request.clashDio.httpClientAdapter;
+    final directAdapter = request.directDio.httpClientAdapter;
+    addTearDown(() {
+      request.clashDio.httpClientAdapter = clashAdapter;
+      request.directDio.httpClientAdapter = directAdapter;
+    });
+    request
+      ..attach(container.read)
+      ..clashDio.httpClientAdapter = adapter
+      ..directDio.httpClientAdapter = adapter;
+    final action = container.read(profilesActionProvider.notifier);
+    final first = Profile.normal(
+      label: 'Sub',
+      url: 'https://sub.example.com/old',
+    );
+    container.read(profilesProvider.notifier).put(first);
+
+    final edit = action.updateProfile(
+      first.copyWith(url: 'https://sub.example.com/new'),
+    );
+    await pumpEventQueue();
+    final setup = action.downloadMissingProfile(first);
+    answers['https://sub.example.com/new']!.complete('proxies: [new]');
+    await edit;
+    final used = await setup;
+
+    expect(fetched, ['https://sub.example.com/new']);
+    expect(used?.url, 'https://sub.example.com/new');
+    final saved = container.read(profilesProvider).getProfile(first.id)!;
+    expect(saved.url, 'https://sub.example.com/new');
+    expect(await (await saved.file).readAsString(), 'proxies: [new]');
   });
 
   group('autoUpdateProfiles', () {

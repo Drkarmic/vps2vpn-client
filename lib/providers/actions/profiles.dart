@@ -251,6 +251,42 @@ class ProfilesAction extends _$ProfilesAction {
     }();
   }
 
+  /// A setup's first download, queued so a URL changed meanwhile wins.
+  Future<Profile?> downloadMissingProfile(Profile profile) async {
+    if (!await profile.waitsForFirstDownload) {
+      return null;
+    }
+    final previous = _profileUpdates[profile.id];
+    final completer = Completer<void>();
+    _profileUpdates[profile.id] = completer.future;
+    try {
+      if (previous != null) {
+        await previous.catchError((Object _) {});
+      }
+      final target = ref.read(profilesProvider).getProfile(profile.id);
+      if (target == null || !await target.waitsForFirstDownload) {
+        return target;
+      }
+      final updated = await target.update(
+        validate: (path, key) => _core.validateProfile(path, key),
+      );
+      final latest = ref.read(profilesProvider).getProfile(target.id);
+      if (latest == null ||
+          latest.url != target.url ||
+          latest.ageSecretKey != target.ageSecretKey) {
+        return latest;
+      }
+      final newProfile = latest.withUpdate(target: target, updated: updated);
+      ref.read(profilesProvider.notifier).put(newProfile);
+      return newProfile;
+    } finally {
+      if (identical(_profileUpdates[profile.id], completer.future)) {
+        unawaited(_profileUpdates.remove(profile.id));
+      }
+      completer.complete();
+    }
+  }
+
   Future<void> addProfileFormFile() async {
     final platformFile = await globalState.safeRun(picker.pickerFile);
     if (platformFile == null) return;

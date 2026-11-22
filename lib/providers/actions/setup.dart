@@ -853,15 +853,17 @@ class SetupAction extends _$SetupAction {
     FutureOr Function()? onUpdated,
   }) async {
     var profile = ref.read(currentProfileProvider) ?? recoverMissingProfile();
+    final missing = profile;
     // A refresh failure is surfaced by safeRun; setup keeps the old profile.
-    final nextProfile = await globalState.safeRun(
-      () => profile?.checkAndUpdateAndCopy(
-        validate: (path, key) => _core.validateProfile(path, key),
-      ),
-    );
+    final nextProfile = missing == null
+        ? null
+        : await globalState.safeRun(
+            () => ref
+                .read(profilesActionProvider.notifier)
+                .downloadMissingProfile(missing),
+          );
     if (nextProfile != null) {
       profile = nextProfile;
-      ref.read(profilesProvider.notifier).put(nextProfile);
     }
     commonPrint.log('setup ===> ${profile?.realLabel}');
     final patchConfig = ref.read(patchClashConfigProvider);
