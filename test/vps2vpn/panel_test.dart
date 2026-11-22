@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -228,6 +229,83 @@ void main() {
     });
   });
 
+  test(
+    'a report the panel cannot take directly goes through our proxy',
+    () async {
+      // Nothing listens on the panel's port, as when its address is blocked.
+      final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final deadPort = closed.port;
+      await closed.close();
+      final proxy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => proxy.close(force: true));
+      final seen = <(String, String?, Object?)>[];
+      proxy.listen((req) async {
+        seen.add((
+          '${req.uri}',
+          req.headers.value(HttpHeaders.proxyAuthorizationHeader),
+          jsonDecode(await utf8.decodeStream(req)),
+        ));
+        req.response.statusCode = HttpStatus.ok;
+        await req.response.close();
+      });
+      final base = vpsApiBase(
+        'http://127.0.0.1:$deadPort/s/$_tok',
+      )!.replace(scheme: 'http');
+
+      expect(
+        await reportLine(base, line: 'reality', ok: false, host: '1.2.3.4'),
+        isFalse,
+      );
+      expect(
+        await reportLine(
+          base,
+          line: 'reality',
+          ok: false,
+          host: '1.2.3.4',
+          proxyPort: proxy.port,
+          // Sent as typed: the proxy never percent-decodes it.
+          proxyAuth: 'u@home:p%@:ss',
+        ),
+        isTrue,
+      );
+      expect(seen, hasLength(1));
+      expect(seen.single.$1, 'http://127.0.0.1:$deadPort/s/$_tok/api/report');
+      expect(
+        seen.single.$2,
+        'Basic ${base64Encode(utf8.encode('u@home:p%@:ss'))}',
+      );
+      expect(seen.single.$3, {
+        'line': 'reality',
+        'ok': false,
+        'host': '1.2.3.4',
+      });
+    },
+  );
+
+  test('a subscription with no Hysteria entry still pins the panel', () {
+    final pin = 'ab' * 32;
+    final other = 'cd' * 32;
+    // A disabled account: no proxies, only the panel's own pin.
+    expect(
+      vpsPinsFromProfile(
+        '{"x-vps2vpn-pin": "$pin", "proxies": [], "rules": ["MATCH,REJECT"]}',
+        'panel.example',
+      ),
+      {pin},
+    );
+    // Entries count only on the panel's host; junk pins are ignored.
+    expect(
+      vpsPinsFromProfile('''
+x-vps2vpn-pin: not-a-pin
+proxies:
+  - {name: a, type: hysteria2, server: Panel.Example, fingerprint: "$other"}
+  - {name: b, type: hysteria2, server: elsewhere.example, fingerprint: "${'ef' * 32}"}
+''', 'panel.example'),
+      {other},
+    );
+    expect(vpsPinsFromProfile(': not yaml : [', 'panel.example'), isEmpty);
+  });
+
   test('token rotation is only trusted over HTTPS', () {
     final base = Uri.parse('https://panel.invalid/s/$_tok/api/');
     final body = jsonEncode({'service': 'vps2vpn', 'error': 'token_invalid'});
@@ -262,6 +340,36 @@ void main() {
   });
 
   test(
+    'a download cut short is a failed transfer, not a bad signature',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('v2v-release');
+      addTearDown(() => dir.delete(recursive: true));
+      final transport = _ShortRelease();
+      await HttpOverrides.runZoned(() async {
+        await expectLater(
+          vpsDownloadRelease(
+            Uri.parse(
+              'https://panel.invalid/s/$_tok/download/vps2vpn-1.0.3-windows-amd64-setup.exe',
+            ),
+            dir,
+            currentVersion: '1.0.2',
+          ),
+          throwsA(
+            isA<HttpException>().having(
+              (e) => e.message,
+              'message',
+              contains('cut short'),
+            ),
+          ),
+        );
+      }, createHttpClient: (_) => _ShortReleaseClient(transport));
+      // The signature is never asked for a file that did not arrive whole.
+      expect(transport.urls, hasLength(1));
+      expect(dir.listSync(), isEmpty);
+    },
+  );
+
+  test(
     'a release is only downloaded over HTTPS with a plain file name',
     () async {
       final dir = await Directory.systemTemp.createTemp('v2v-release');
@@ -285,4 +393,59 @@ void main() {
       expect(dir.listSync(), isEmpty);
     },
   );
+}
+
+/// Declares 10 bytes and sends 4, as a connection that drops part way.
+class _ShortRelease {
+  final urls = <Uri>[];
+}
+
+class _ShortReleaseClient implements HttpClient {
+  _ShortReleaseClient(this.transport);
+  final _ShortRelease transport;
+
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) async {
+    transport.urls.add(url);
+    return _ShortReleaseRequest();
+  }
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class _ShortReleaseRequest implements HttpClientRequest {
+  @override
+  Future<HttpClientResponse> close() async => _ShortReleaseResponse();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class _ShortReleaseResponse extends Stream<List<int>>
+    implements HttpClientResponse {
+  @override
+  int get statusCode => HttpStatus.ok;
+
+  @override
+  int get contentLength => 10;
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int>)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) => Stream.value([1, 2, 3, 4]).listen(
+    onData,
+    onError: onError,
+    onDone: onDone,
+    cancelOnError: cancelOnError,
+  );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

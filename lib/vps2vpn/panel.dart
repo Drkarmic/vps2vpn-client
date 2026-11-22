@@ -12,6 +12,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:fl_clash/common/constant.dart';
+import 'package:fl_clash/common/http.dart';
 import 'package:fl_clash/common/path.dart';
 import 'package:fl_clash/common/yaml.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -20,6 +21,7 @@ import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/vps2vpn/flags.dart';
 import 'package:fl_clash/vps2vpn/line_watch.dart';
 import 'package:fl_clash/vps2vpn/update_signing.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 export 'line_watch.dart' show VpsLineHealth;
@@ -143,8 +145,9 @@ class VpsClientRelease {
     final candidate = files[platform] ?? url;
     final name = _lastSegment(candidate).toLowerCase();
     // Check the filename, not just the map key or a later OS-like substring.
-    final actualOs = RegExp(r'-(windows|android|macos|linux)(?:-|\.)')
-        .firstMatch(name)?.group(1);
+    final actualOs = RegExp(
+      r'-(windows|android|macos|linux)(?:-|\.)',
+    ).firstMatch(name)?.group(1);
     return actualOs == platform && vpsUpdateFileVersion(name) != null
         ? candidate
         : null;
@@ -361,6 +364,9 @@ String _normHost(String host) {
   return h;
 }
 
+/// One host, whatever its case or IPv6 brackets.
+bool vpsSameHost(String a, String b) => _normHost(a) == _normHost(b);
+
 String? _normFingerprint(Object? value) {
   if (value is! String) return null;
   final clean = value.trim().replaceAll(':', '').toLowerCase();
@@ -377,6 +383,32 @@ void _collectPin(
   if (fp != null) out.add(fp);
 }
 
+/// The certificate pins a subscription gives for the panel at [host]: its own
+/// `x-vps2vpn-pin` (vps2vpn 0.2.13+; a REALITY-only or disabled account's
+/// subscription has no Hysteria2/TUIC entry to carry one) and those of its
+/// entries on that host.
+@visibleForTesting
+Set<String> vpsPinsFromProfile(String text, String host) {
+  final targetHost = _normHost(host);
+  final pins = <String>{};
+  final Object? doc;
+  try {
+    doc = loadPlainYaml(text);
+  } catch (_) {
+    return pins;
+  }
+  if (doc is! Map) return pins;
+  final own = _normFingerprint(doc['x-vps2vpn-pin']);
+  if (own != null) pins.add(own);
+  final proxies = doc['proxies'];
+  if (proxies is List) {
+    for (final item in proxies) {
+      if (item is Map) _collectPin(item, targetHost, pins);
+    }
+  }
+  return pins;
+}
+
 Future<Set<String>> _pinnedFromProfileFile(
   int? profileId,
   DateTime? updatedAt,
@@ -389,22 +421,19 @@ Future<Set<String>> _pinnedFromProfileFile(
   if (targetHost.isEmpty) return const {};
   final key = (profileId, updatedAt, targetHost);
   if (_pinCacheKey == key) return _pinCacheValue;
-  final pins = <String>{};
+  final Set<String> pins;
   try {
     final path = await appPath.getProfilePath(profileId.toString());
     final file = File(path);
-    if (await file.exists() && await file.length() <= _maxPinProfileBytes) {
-      final doc = loadPlainYaml(await file.readAsString());
-      if (doc is Map) {
-        final proxies = doc['proxies'];
-        if (proxies is List) {
-          for (final item in proxies) {
-            if (item is Map) _collectPin(item, targetHost, pins);
-          }
-        }
-      }
-    }
-  } catch (_) {}
+    pins = await file.exists() && await file.length() <= _maxPinProfileBytes
+        ? vpsPinsFromProfile(await file.readAsString(), targetHost)
+        : const {};
+  } catch (_) {
+    // A read that failed (the file being rewritten, say) is not cached: the
+    // next request reads it again instead of going without pins until the
+    // profile next updates.
+    return const {};
+  }
   final result = Set<String>.unmodifiable(pins);
   _pinCacheKey = key;
   _pinCacheValue = result;
@@ -481,9 +510,26 @@ HttpClient _client({
     }
     ..connectionTimeout = const Duration(seconds: 6)
     ..idleTimeout = const Duration(seconds: 2);
-  final userInfo = proxyAuth != null && proxyAuth.isNotEmpty
-      ? '$proxyAuth@'
-      : '';
+  // Dart sends the proxy string's user:pass verbatim (it never
+  // percent-decodes it), and only that reaches an HTTPS tunnel. What the string
+  // cannot carry goes in as credentials, which plain HTTP still answers with.
+  var userInfo = '';
+  final colon = proxyAuth?.indexOf(':') ?? -1;
+  if (proxyPort != null && proxyAuth != null && colon > 0) {
+    final user = proxyAuth.substring(0, colon);
+    final pass = proxyAuth.substring(colon + 1);
+    final raw = FlClashHttpOverrides.pacUserInfo(user, pass);
+    if (raw != null) {
+      userInfo = '$raw@';
+    } else {
+      c.addProxyCredentials(
+        localhost,
+        proxyPort,
+        'Basic',
+        HttpClientBasicCredentials(user, pass),
+      );
+    }
+  }
   c.findProxy = (_) =>
       proxyPort == null ? 'DIRECT' : 'PROXY ${userInfo}127.0.0.1:$proxyPort';
   return c;
@@ -572,26 +618,42 @@ Future<VpsMemberResult?> fetchMember(
   return const VpsMemberResult(problem: VpsPanelProblem.unreachable);
 }
 
-/// Always direct: the line being reported is the one that is down.
+/// Direct first. When the panel cannot be reached directly (its server's
+/// address blocked on this network, say) and [proxyPort] is given, through our
+/// own proxy, whose fallback groups have already left the line that is down.
 Future<bool> reportLine(
   Uri base, {
   required String line,
   required bool ok,
   required String host,
+  int? proxyPort,
+  String? proxyAuth,
   VpsRequestScope? scope,
   Set<String> pinnedSha256 = const {},
 }) async {
-  try {
-    final (code, _) = await _send(
-      base.resolve('report'),
-      body: {'line': line, 'ok': ok, 'host': host},
-      scope: scope,
-      pinnedSha256: pinnedSha256,
-    );
-    return code == HttpStatus.ok;
-  } catch (_) {
-    return false;
+  for (final port in [null, ?proxyPort]) {
+    if (scope?.closed == true) return false;
+    try {
+      final (code, _) = await _send(
+        base.resolve('report'),
+        body: {'line': line, 'ok': ok, 'host': host},
+        proxyPort: port,
+        proxyAuth: port == null ? null : proxyAuth,
+        scope: scope,
+        pinnedSha256: pinnedSha256,
+      );
+      // The panel answered: another route would get the same answer.
+      return code == HttpStatus.ok;
+    } catch (_) {}
   }
+  return false;
+}
+
+/// user:pass for our own mixed port, as typed, when it asks for one. The
+/// username cannot hold ':' (the settings page drops it).
+String? _localProxyAuth(AuthenticationProps auth) {
+  if (!auth.enable || auth.username.isEmpty) return null;
+  return '${auth.username}:${auth.password}';
 }
 
 /// reality | hy2 | tuic for a node definition, else null.
@@ -662,14 +724,9 @@ final vpsMemberProvider = FutureProvider.autoDispose<VpsMemberResult?>((
       ? ref.watch(patchClashConfigProvider.select((p) => p.mixedPort))
       : null;
   final proxyAuth = on
-      ? () {
-          final auth = ref.watch(
-            networkSettingProvider.select((s) => s.authentication),
-          );
-          if (!auth.enable || auth.username.isEmpty) return null;
-          return '${Uri.encodeComponent(auth.username)}:'
-              '${Uri.encodeComponent(auth.password)}';
-        }()
+      ? _localProxyAuth(
+          ref.watch(networkSettingProvider.select((s) => s.authentication)),
+        )
       : null;
   final scope = VpsRequestScope();
   Timer? timer;
@@ -826,6 +883,10 @@ final vpsLineWatchProvider = Provider.autoDispose<void>((ref) {
       line: line.kind,
       ok: ok,
       host: line.host,
+      proxyPort: ref.read(patchClashConfigProvider).mixedPort,
+      proxyAuth: _localProxyAuth(
+        ref.read(networkSettingProvider).authentication,
+      ),
       scope: scope,
       pinnedSha256: pinnedSha256,
     ),
@@ -916,7 +977,7 @@ Future<File> vpsDownloadRelease(
     // prevents following a pre-existing symlink to an unrelated user file.
     staging = await dir.createTemp('.vps2vpn-release-');
     final part = File('${staging.path}${Platform.pathSeparator}$name.part');
-    final req = await client.getUrl(url);
+    final req = await client.getUrl(url).timeout(const Duration(seconds: 15));
     req.followRedirects = false;
     final res = await req.close().timeout(const Duration(seconds: 15));
     if (res.statusCode != HttpStatus.ok) {
@@ -951,6 +1012,11 @@ Future<File> vpsDownloadRelease(
     if (size == 0) {
       throw const HttpException('Release file was empty');
     }
+    // A connection that dropped part way is a failed transfer to try again,
+    // not a file whose signature is wrong.
+    if (total > 0 && size != total) {
+      throw const HttpException('Release download was cut short');
+    }
     final signature = await _fetchSignature(client, url, name);
     if (signature == null) throw const VpsUpdateRejected('unsigned');
     if (!vpsVerifyUpdate(
@@ -962,8 +1028,17 @@ Future<File> vpsDownloadRelease(
     )) {
       throw const VpsUpdateRejected('badSignature');
     }
-    // Never delete a previously verified release before this rename.
-    return await part.rename(out.path);
+    // Never delete a previously verified release before this rename. On
+    // Windows an antivirus scan of the installer it replaces can hold that
+    // file for a moment.
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await part.rename(out.path);
+      } on FileSystemException {
+        if (!Platform.isWindows || attempt >= 5) rethrow;
+        await Future<void>.delayed(Duration(milliseconds: 200 * attempt));
+      }
+    }
   } finally {
     client?.close(force: true);
     try {

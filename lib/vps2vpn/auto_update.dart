@@ -78,7 +78,12 @@ Future<File> _fetchUpdate(
   required String current,
   void Function(int received, int total)? onProgress,
 }) async {
-  final pins = await ref.read(vpsPanelPinsProvider.future);
+  // The panel's own certificate pins vouch for the panel alone, not for a
+  // download it links to on another host.
+  final panel = vpsApiBase(ref.read(currentProfileProvider)?.url ?? '');
+  final pins = panel != null && vpsSameHost(panel.host, url.host)
+      ? await ref.read(vpsPanelPinsProvider.future)
+      : const <String>{};
   final dir = Directory(
     install ? await appPath.updateDirPath : await appPath.downloadDirPath,
   );
@@ -133,11 +138,14 @@ Future<bool> vpsDownloadPanelUpdate(
   final tag = 'v${release.version}';
   // One download at a time; a ready older version gives way to this one.
   final pending = download.value;
-  if (install &&
-      (pending is UpdateDownloading ||
-          (pending is UpdateReady && pending.tag == tag))) {
-    return true;
+  if (install && pending is UpdateReady && pending.tag == tag) return true;
+  if (install && pending is UpdateDownloading) {
+    // Another version's download is no try of this one.
+    return pending.tag == tag;
   }
+  // What a failed download puts back: an update already verified stays
+  // installable.
+  final before = pending is UpdateReady ? pending : null;
   if (!auto) {
     _banner(
       (c) => tr(c, '正在下载新版本…', 'Downloading the new version…'),
@@ -190,10 +198,14 @@ Future<bool> vpsDownloadPanelUpdate(
       ),
       BannerLevel.info,
     );
-    await launchUrl(Uri.file(file.parent.path));
+    try {
+      await launchUrl(Uri.file(file.parent.path));
+    } catch (_) {
+      // The banner already names the file.
+    }
     return true;
   } on VpsUpdateRejected catch (e) {
-    if (install) download.value = null;
+    if (install) download.value = before;
     _banner(
       (c) => switch (e.reason) {
         'unsigned' => tr(
@@ -218,7 +230,7 @@ Future<bool> vpsDownloadPanelUpdate(
     );
     return true;
   } catch (error) {
-    if (install) download.value = null;
+    if (install) download.value = before;
     commonPrint.log(
       'Client update download failed: ${compactError(error)}',
       logLevel: LogLevel.warning,

@@ -205,16 +205,17 @@ void main() {
       'https://example.com/vps2vpn-1.1.0-android-arm64-windows-setup.exe',
     );
     expect(
-      VpsClientRelease(version: '1.1.0', url: misleading)
-          .installerFor('windows'),
+      VpsClientRelease(
+        version: '1.1.0',
+        url: misleading,
+      ).installerFor('windows'),
       isNull,
     );
     final windows = Uri.parse(
       'https://example.com/vps2vpn-1.1.0-windows-amd64-setup.exe',
     );
     expect(
-      VpsClientRelease(version: '1.1.0', url: windows)
-          .installerFor('windows'),
+      VpsClientRelease(version: '1.1.0', url: windows).installerFor('windows'),
       windows,
     );
   });
@@ -320,6 +321,43 @@ void main() {
         expect(c.read(updateDownloadStateProvider), isNull);
         await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
         expect(calls, 2);
+      });
+    });
+
+    testWidgets('a failed download keeps an update already verified', (
+      tester,
+    ) async {
+      resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+      vpsUpdateFetcher =
+          (ref, url, {required install, required current, onProgress}) async {
+            throw const SocketException('offline');
+          };
+      await withRef(tester, (ref, c) async {
+        const ready = UpdateReady('v1.0.5', 'old-setup.exe');
+        c.read(updateDownloadStateProvider.notifier).value = ready;
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(c.read(updateDownloadStateProvider), ready);
+      });
+    });
+
+    testWidgets('another download under way does not use up this try', (
+      tester,
+    ) async {
+      resolveSelfUpdateAsset = () => _asset(ReleaseOs.windows);
+      var calls = 0;
+      vpsUpdateFetcher =
+          (ref, url, {required install, required current, onProgress}) async {
+            calls++;
+            return File('setup.exe');
+          };
+      await withRef(tester, (ref, c) async {
+        final state = c.read(updateDownloadStateProvider.notifier);
+        state.value = const UpdateDownloading('v1.0.5');
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(calls, 0);
+        state.value = null;
+        await vpsAutoUpdateCheck(ref, currentVersion: '1.0.0');
+        expect(calls, 1);
       });
     });
 
