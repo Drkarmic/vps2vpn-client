@@ -26,7 +26,6 @@ var (
 )
 
 const (
-	maxIPCFrameSize  = 64 * 1024 * 1024
 	ipcWriteTimeout  = 10 * time.Second
 	maxIPCWriteStall = 60 * time.Second
 )

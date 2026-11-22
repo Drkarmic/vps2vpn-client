@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -100,5 +101,85 @@ func TestClearSpilledResponsesKeepsTheDirectory(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Errorf("entries = %v, want none left", entries)
+	}
+}
+
+// linkDir makes link lead to target: a symlink, or a junction on Windows,
+// which any user can create there.
+func linkDir(t *testing.T, target, link string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		if out, err := exec.Command("cmd", "/c", "mklink", "/J", filepath.Clean(link), filepath.Clean(target)).CombinedOutput(); err != nil {
+			t.Fatalf("mklink /J: %v: %s", err, out)
+		}
+		return
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+}
+
+func TestSpillNeverWritesOrDeletesThroughALinkedResponseDirectory(t *testing.T) {
+	home := withSpillHome(t, 64)
+	elsewhere := t.TempDir()
+	kept := filepath.Join(elsewhere, "kept.json")
+	if err := os.WriteFile(kept, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	linkDir(t, elsewhere, filepath.Join(home, spilledResponseDirName))
+
+	frame := handleMethodCall(getConfigCall(t, "10"))
+	clearSpilledResponses()
+
+	var envelope MethodResponse
+	if err := json.Unmarshal(frame, &envelope); err != nil || envelope.File != "" || envelope.Result == nil {
+		t.Errorf("reply = %s, want the result inline", frame)
+	}
+	entries, _ := os.ReadDir(elsewhere)
+	if len(entries) != 1 || entries[0].Name() != "kept.json" {
+		t.Errorf("link target holds %v, want only kept.json", entries)
+	}
+}
+
+func TestClearSpilledResponsesRemovesALinkNotWhatItLeadsTo(t *testing.T) {
+	home := withSpillHome(t, 64)
+	dir := filepath.Join(home, spilledResponseDirName)
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := t.TempDir()
+	kept := filepath.Join(elsewhere, "kept.json")
+	if err := os.WriteFile(kept, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	linkDir(t, elsewhere, filepath.Join(dir, "link"))
+
+	clearSpilledResponses()
+
+	if _, err := os.Lstat(filepath.Join(dir, "link")); !os.IsNotExist(err) {
+		t.Errorf("lstat link = %v, want it removed", err)
+	}
+	if _, err := os.Stat(kept); err != nil {
+		t.Errorf("stat link target file = %v, want it kept", err)
+	}
+}
+
+func TestAnOversizedReplyThatCannotSpillIsAnError(t *testing.T) {
+	home := withSpillHome(t, 64)
+	previousLimit := inlineResponseLimit
+	inlineResponseLimit = 64
+	t.Cleanup(func() { inlineResponseLimit = previousLimit })
+	if err := os.WriteFile(filepath.Join(home, spilledResponseDirName), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	frame := handleMethodCall(getConfigCall(t, "11"))
+
+	var envelope MethodResponse
+	if err := json.Unmarshal(frame, &envelope); err != nil {
+		t.Fatalf("reply is not valid JSON: %v", err)
+	}
+	if envelope.ID != "11" || envelope.Error == nil || envelope.Error.Code != "response_too_large" {
+		t.Errorf("reply = %s, want a response_too_large error for call 11", frame)
 	}
 }

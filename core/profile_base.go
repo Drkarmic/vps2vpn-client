@@ -80,16 +80,9 @@ func handleBuildProfile(base *SetupBase) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir, err := makeSpilledResponseDir()
-	if err != nil {
-		return "", err
-	}
-	path, err := writeDocumentFile(dir, "*.yaml", document)
-	if err != nil {
-		return "", err
-	}
-	scheduleReclaimOwnership()
-	return path, nil
+	return writeSpilledFile(".yaml", func(file *os.File) error {
+		return writeDocument(file, document)
+	})
 }
 
 // Mirrors Rule.parse in Dart, which reads the type from the first field.
@@ -427,15 +420,12 @@ func writeConfigDocument(path string, document *yaml.Node) error {
 }
 
 func writeDocumentFile(dir, pattern string, document *yaml.Node) (string, error) {
-	inlineAliases(document)
 	file, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return "", err
 	}
-	writer := bufio.NewWriterSize(file, 1<<20)
 	err = errors.Join(
-		encodeConfigMapping(writer, document.Content[0]),
-		writer.Flush(),
+		writeDocument(file, document),
 		handOverPrivate(file),
 		file.Close(),
 	)
@@ -444,6 +434,12 @@ func writeDocumentFile(dir, pattern string, document *yaml.Node) (string, error)
 		return "", err
 	}
 	return file.Name(), nil
+}
+
+func writeDocument(file *os.File, document *yaml.Node) error {
+	inlineAliases(document)
+	writer := bufio.NewWriterSize(file, 1<<20)
+	return errors.Join(encodeConfigMapping(writer, document.Content[0]), writer.Flush())
 }
 
 // One Encode call keeps every event it emitted until it returns, several times
