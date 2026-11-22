@@ -8,7 +8,7 @@ use std::fs;
 use std::future::Future;
 use std::io::{Error, ErrorKind};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::{Command, Stdio};
 use std::task::{Context as TaskContext, Poll};
@@ -114,7 +114,7 @@ fn invoking_owner() -> Result<Owner> {
 }
 
 fn invoking_gid(uid: u32) -> Result<String> {
-    let output = Command::new("id")
+    let output = Command::new(system_bin("id")?)
         .args(["-g", &uid.to_string()])
         .output()
         .context("query the invoking user")?;
@@ -262,20 +262,22 @@ fn uninstall_service() -> Result<()> {
     run_systemctl(&["daemon-reload"])
 }
 
-fn systemctl_bin() -> &'static str {
-    if Path::new("/usr/bin/systemctl").exists() {
-        "/usr/bin/systemctl"
-    } else if Path::new("/bin/systemctl").exists() {
-        "/bin/systemctl"
-    } else {
-        "systemctl"
-    }
+/// Not through PATH: the installer runs as root in the invoking user's environment.
+fn system_bin(name: &str) -> Result<PathBuf> {
+    ["/usr/bin", "/bin"]
+        .into_iter()
+        .map(|dir| Path::new(dir).join(name))
+        .find(|path| path.is_file())
+        .with_context(|| format!("{name} is in neither /usr/bin nor /bin"))
 }
 
 /// A package removal runs this twice, so the second `disable` reporting a unit
 /// that is already gone is expected rather than something to print.
 fn silence_systemctl(arguments: &[&str]) {
-    let _ = Command::new(systemctl_bin())
+    let Ok(systemctl) = system_bin("systemctl") else {
+        return;
+    };
+    let _ = Command::new(systemctl)
         .args(arguments)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -283,7 +285,7 @@ fn silence_systemctl(arguments: &[&str]) {
 }
 
 fn run_systemctl(arguments: &[&str]) -> Result<()> {
-    let status = Command::new(systemctl_bin())
+    let status = Command::new(system_bin("systemctl")?)
         .args(arguments)
         .status()
         .with_context(|| format!("run systemctl {}", arguments.join(" ")))?;
@@ -400,6 +402,13 @@ mod tests {
         assert!(!protected_mode(1000, 0o755));
         assert!(!protected_mode(0, 0o775));
         assert!(!protected_mode(0, 0o1777));
+    }
+
+    #[test]
+    fn finds_system_binaries_only_in_system_directories() {
+        let id = system_bin("id").unwrap();
+        assert!(id == Path::new("/usr/bin/id") || id == Path::new("/bin/id"));
+        assert!(system_bin("vps2vpn-no-such-binary").is_err());
     }
 
     #[test]
