@@ -70,12 +70,21 @@ function Test-Through($port, $what) {
 }
 
 function Show-Route {
-  "upstream proxy listening: $([bool](Get-Listener $upstreamPort)); last upstream lines:"
-  Get-Content $upstreamLog -Tail 5 -ErrorAction SilentlyContinue
-  $running = Join-Path $env:APPDATA 'vps2vpn\vps2vpn\config.yaml'
+  "route: upstream listening=$([bool](Get-Listener $upstreamPort)) lines=$(Get-UpstreamCount)"
+  Get-Content $upstreamLog -Tail 3 -ErrorAction SilentlyContinue | ForEach-Object { "route: upstream saw $_" }
+  $home_ = Join-Path $env:APPDATA 'vps2vpn\vps2vpn'
+  Get-ChildItem (Join-Path $home_ 'profiles') -File -ErrorAction SilentlyContinue |
+    ForEach-Object { "route: profile $($_.Name) $($_.Length) bytes" }
+  $running = Join-Path $home_ 'config.yaml'
   if (Test-Path $running) {
-    Select-String $running -Pattern '^(mode|mixed-port|tun|  enable):|^  - (MATCH|GEO|DOMAIN|IP-CIDR|RULE-SET)' |
-      Select-Object -First 20 | ForEach-Object { "config: $($_.Line)" }
+    $text = Get-Content $running -Raw
+    "route: running config $($text.Length) bytes, ci-upstream=$($text.Contains('ci-upstream')) MATCH=$($text.Contains('MATCH'))"
+    Select-String $running -Pattern '^\s*-?\s*(mode|mixed-port|allow-lan|bind-address):' |
+      ForEach-Object { "route: $($_.Line.Trim())" }
+    Select-String $running -Pattern 'MATCH|ci-upstream' | Select-Object -First 6 |
+      ForEach-Object { "route: $($_.Line.Trim())" }
+  } else {
+    'route: no running config'
   }
 }
 
@@ -154,7 +163,7 @@ rules:
     $owner = Get-ListenerName $port
     if ($owner) { "port $port held by $owner" } else {
       $holders += Start-Tracked 'powershell' @('-NoProfile', '-Command',
-        "`$l=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any,$port);`$l.Start();Start-Sleep 1800")
+        "`$l=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,$port);`$l.Start();Start-Sleep 1800")
       Check (Wait-Until 20 { Get-Listener $port }) "port $port held by a stand-in"
     }
   }
