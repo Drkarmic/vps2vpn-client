@@ -66,6 +66,14 @@ func (th *TunHandler) start(fd int, stack, address, dns, options string) bool {
 	return false
 }
 
+// The handler is active from before t.Start; only a listener means the TUN
+// came up.
+func (th *TunHandler) listening() bool {
+	th.mu.RLock()
+	defer th.mu.RUnlock()
+	return th.listener != nil
+}
+
 func (th *TunHandler) close() {
 	th.mu.Lock()
 	defer th.mu.Unlock()
@@ -118,7 +126,10 @@ var (
 // interface-name, routing-mark and tfo, as it always has under CMFA.
 // A refused protect never fails the dial: the socket waits for the next VPN.
 func init() {
-	androidTunUp = func() bool { return activeTunHandler.Load() != nil }
+	androidTunUp = func() bool {
+		th := activeTunHandler.Load()
+		return th != nil && th.listening()
+	}
 	dialer.DefaultSocketHook = func(network, address string, conn syscall.RawConn) error {
 		if platform.ShouldBlockConnection() {
 			return errBlocked
