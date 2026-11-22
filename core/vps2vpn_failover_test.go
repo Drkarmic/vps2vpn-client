@@ -108,6 +108,47 @@ func TestLineWatchClosesOncePerCooldownForAFlappingLine(t *testing.T) {
 	}
 }
 
+// Connections opened on hy2 while it was briefly back are closed once the
+// cooldown ends, instead of being left on it after the group moved on.
+func TestLineWatchClosesAHeldBackMoveWhenTheCooldownEnds(t *testing.T) {
+	watch, clock := newTestLineWatch()
+	group := new(int)
+	watch.observe([]lineGroup{smartGroupAt(group, "hy2")})
+	watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")})
+	clock.advance(lineWatchInterval)
+	watch.observe([]lineGroup{smartGroupAt(group, "hy2")})
+	clock.advance(lineWatchInterval)
+	if moves := watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")}); len(moves) != 0 {
+		t.Fatalf("a flap inside the cooldown closed again: %v", moves)
+	}
+	clock.advance(lineWatchInterval)
+	if moves := watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")}); len(moves) != 0 {
+		t.Fatalf("closed before the cooldown ended: %v", moves)
+	}
+	clock.advance(lineWatchCooldown)
+	moves := watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")})
+	if len(moves) != 1 || moves[0] != (lineMove{group: vpsSmartGroup, from: "hy2", to: "reality"}) {
+		t.Fatalf("the held-back move = %v", moves)
+	}
+	clock.advance(lineWatchCooldown)
+	if moves := watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")}); len(moves) != 0 {
+		t.Fatalf("a held-back move was closed twice: %v", moves)
+	}
+}
+
+func TestLineWatchDropsAHeldBackMoveOnceTheLineWorks(t *testing.T) {
+	watch, clock := newTestLineWatch()
+	group := new(int)
+	watch.observe([]lineGroup{smartGroupAt(group, "hy2")})
+	watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")})
+	watch.observe([]lineGroup{smartGroupAt(group, "hy2")})
+	watch.observe([]lineGroup{smartGroupAt(group, "reality", "hy2")})
+	clock.advance(lineWatchCooldown)
+	if moves := watch.observe([]lineGroup{smartGroupAt(group, "reality")}); len(moves) != 0 {
+		t.Fatalf("closed connections on a line that works again: %v", moves)
+	}
+}
+
 func TestLineWatchCooldownIsPerLine(t *testing.T) {
 	watch, clock := newTestLineWatch()
 	group := new(int)
@@ -238,6 +279,42 @@ func TestLineWatchFollowsARealFallbackOffADeadLine(t *testing.T) {
 	}
 	if groups[0].alive("gone") != true {
 		t.Fatal("a line the group no longer has was taken for a dead one")
+	}
+}
+
+// A vps2vpn panel with several servers routes AI sites through a select group
+// whose choice is one server's own fallback group, and the app adds no AI
+// group then. That server losing a protocol must not leave an AI stream on it.
+func TestLineWatchFollowsAPanelServerGroupTheAIRouteUses(t *testing.T) {
+	const url = "http://line-watch.invalid/server"
+	const server = "Tokyo"
+	members := []constant.Proxy{namedProxy("tokyo-hy2"), namedProxy("tokyo-reality")}
+	fallback := newLocalFallback(t, server, url, outboundgroup.FallbackOption{}, members)
+	tunnel.UpdateProxies(map[string]constant.Proxy{
+		server:      adapter.NewProxy(fallback),
+		"AI":        selectorGroup(t, "AI", server),
+		"tokyo-hy2": members[0],
+	}, nil)
+	t.Cleanup(func() { tunnel.UpdateProxies(nil, nil) })
+
+	watch, _ := newTestLineWatch()
+	groups := currentLineGroups()
+	if len(groups) != 1 || groups[0].name != server || groups[0].now != "tokyo-hy2" {
+		t.Fatalf("groups = %+v, want the server group on tokyo-hy2", groups)
+	}
+	watch.observe(groups)
+
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _ = members[0].URLTest(dead, url, nil)
+	moves := watch.observe(currentLineGroups())
+	if len(moves) != 1 || moves[0] != (lineMove{group: server, from: "tokyo-hy2", to: "tokyo-reality"}) {
+		t.Fatalf("moves = %v", moves)
+	}
+	stream := &fakeLineConn{chains: []string{"tokyo-hy2", server, "AI"}}
+	other := &fakeLineConn{chains: []string{"tokyo-reality", server, "AI"}}
+	if closed := closeOnMovedLines([]lineConn{stream, other}, moves); closed != 1 || stream.closed != 1 {
+		t.Fatalf("closed %d, stream closed %d times", closed, stream.closed)
 	}
 }
 

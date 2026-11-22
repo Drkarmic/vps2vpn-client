@@ -302,7 +302,9 @@ func publicEgressIp(s string) bool {
 		return false
 	}
 	addr = addr.Unmap()
-	if !addr.IsGlobalUnicast() || addr.IsPrivate() {
+	// A zone names a local interface, and netip.Prefix.Contains is false for
+	// any zoned address, so one would slip past the prefixes below.
+	if addr.Zone() != "" || !addr.IsGlobalUnicast() || addr.IsPrivate() {
 		return false
 	}
 	for _, prefix := range nonPublicProbePrefixes {

@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"sort"
 	"sync"
 	"time"
 
@@ -14,9 +15,9 @@ import (
 // mihomo's fallback group moves to the next line without telling anyone, and a
 // connection already open on the line it left stays there: an AI stream or a
 // websocket on a dead line hangs until TCP gives up. Like sing-box url-test's
-// interrupt_exist_connections, the watch closes the connections a smart group
-// sent out over the line it left, and only those, so the app reopens them on
-// the line in use now.
+// interrupt_exist_connections, the watch closes the connections a fallback
+// group sent out over the line it left, and only those, so the app reopens
+// them on the line in use now.
 //
 // It only acts when the line left behind is down. A group that moves back to
 // a preferred line that recovered leaves the connections on the line it moves
@@ -28,7 +29,10 @@ const (
 	lineWatchCooldown = 30 * time.Second
 )
 
-var lineWatchGroups = []string{vpsSmartGroup, vpsAIGroup}
+// Every fallback group is watched, not only the two the app adds: a vps2vpn
+// panel's subscription routes AI sites through its own per-server fallback
+// groups (one server's protocols, so the exit IP stays put), and the app then
+// adds no AI group of its own.
 
 type lineGroup struct {
 	name string
@@ -55,6 +59,10 @@ type lineWatch struct {
 	clock    func() time.Time
 	seen     map[string]lineSeen
 	closed   map[[2]string]time.Time
+	// Moves off a line the cooldown held back. Connections opened on that line
+	// since it was last closed would otherwise stay on it once the group has
+	// moved on; they are closed when the cooldown ends if it is still down.
+	deferred map[[2]string]bool
 }
 
 func newLineWatch(cooldown time.Duration, clock func() time.Time) *lineWatch {
@@ -63,6 +71,7 @@ func newLineWatch(cooldown time.Duration, clock func() time.Time) *lineWatch {
 		clock:    clock,
 		seen:     map[string]lineSeen{},
 		closed:   map[[2]string]time.Time{},
+		deferred: map[[2]string]bool{},
 	}
 }
 
@@ -76,6 +85,11 @@ func (w *lineWatch) observe(groups []lineGroup) []lineMove {
 		for key := range w.closed {
 			if key[0] == name {
 				delete(w.closed, key)
+			}
+		}
+		for key := range w.deferred {
+			if key[0] == name {
+				delete(w.deferred, key)
 			}
 		}
 	}
@@ -96,10 +110,29 @@ func (w *lineWatch) observe(groups []lineGroup) []lineMove {
 		}
 		key := [2]string{group.name, last.now}
 		if closedAt, ok := w.closed[key]; ok && at.Sub(closedAt) < w.cooldown {
+			w.deferred[key] = true
 			continue
 		}
 		w.closed[key] = at
+		delete(w.deferred, key)
 		moves = append(moves, lineMove{group: group.name, from: last.now, to: group.now})
+	}
+	for _, group := range groups {
+		for key := range w.deferred {
+			if key[0] != group.name {
+				continue
+			}
+			if closedAt, ok := w.closed[key]; ok && at.Sub(closedAt) < w.cooldown {
+				continue
+			}
+			delete(w.deferred, key)
+			// Back on that line, or it works again: what is on it is fine.
+			if group.now == key[1] || group.alive == nil || group.alive(key[1]) {
+				continue
+			}
+			w.closed[key] = at
+			moves = append(moves, lineMove{group: group.name, from: key[1], to: group.now})
+		}
 	}
 	for name := range w.seen {
 		if !present[name] {
@@ -182,8 +215,13 @@ func currentLineGroups() []lineGroup {
 	selectMu.Lock()
 	defer selectMu.Unlock()
 	proxies := tunnel.AllProxies()
-	groups := make([]lineGroup, 0, len(lineWatchGroups))
-	for _, name := range lineWatchGroups {
+	names := make([]string, 0, len(proxies))
+	for name := range proxies {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var groups []lineGroup
+	for _, name := range names {
 		group, ok := adapterAs[*outboundgroup.Fallback](proxies[name])
 		if !ok {
 			continue

@@ -420,7 +420,9 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 		"lazy":             false,
 	})
 	result.addedGroups++
-	// Offer it first in the main selector.
+	// Offer it first in the main selector: the first select group whose own
+	// first choice is a proxy. One that starts with DIRECT or REJECT (a
+	// "domestic" or "ads" group) would otherwise send that traffic out.
 	for i, g := range raw.ProxyGroup[:groupCount] {
 		if strings.ToLower(fmt.Sprint(g["type"])) != "select" {
 			continue
@@ -435,6 +437,9 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 				members = append(members, name)
 			}
 		default:
+			continue
+		}
+		if len(members) > 0 && vpsBuiltinOutbound(fmt.Sprint(members[0])) {
 			continue
 		}
 		g["proxies"] = append([]any{vpsSmartGroup}, members...)
@@ -471,4 +476,13 @@ func vps2vpnEnhanceResult(raw *config.RawConfig, userRules int) vpsEnhanceResult
 	raw.Rule = append(rules, raw.Rule[subStart:]...)
 	result.addedRules = len(vpsAIDomains)
 	return result
+}
+
+// mihomo's built-in outbounds, which are no proxy line.
+func vpsBuiltinOutbound(name string) bool {
+	switch strings.ToUpper(strings.TrimSpace(name)) {
+	case "DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE":
+		return true
+	}
+	return false
 }

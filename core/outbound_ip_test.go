@@ -60,13 +60,13 @@ func TestHandleOutboundIpSkipsAnAnswerWithoutAnAddress(t *testing.T) {
 
 func TestMentionsIpNeedsAWholeAddress(t *testing.T) {
 	cases := map[string]bool{
-		"fl=12f\nip=8.8.4.4\nloc=US\nts=1700000000.1": true,
-		`{"ip":"2001:4860:4860::8888","country":"JP"}`:     true,
-		`{"ip":"::ffff:8.8.4.4","cc":"US"}`:             true,
-		`a::after{content:""}`:                    false,
-		`div::before,li::marker{color:#fff}`:      false,
-		`::-webkit-scrollbar{width:0}`:            false,
-		`<a href="http://127.0.0.1/login">`:       false,
+		"fl=12f\nip=8.8.4.4\nloc=US\nts=1700000000.1":  true,
+		`{"ip":"2001:4860:4860::8888","country":"JP"}`: true,
+		`{"ip":"::ffff:8.8.4.4","cc":"US"}`:            true,
+		`a::after{content:""}`:                         false,
+		`div::before,li::marker{color:#fff}`:           false,
+		`::-webkit-scrollbar{width:0}`:                 false,
+		`<a href="http://127.0.0.1/login">`:            false,
 	}
 	for body, want := range cases {
 		if got := mentionsIp(body); got != want {
@@ -117,32 +117,31 @@ func TestOutboundIpSkipsDocumentationAddressAndUsesLaterPublicAnswer(t *testing.
 	})
 	result := handleOutboundIp(&OutboundIpParams{
 		ProxyName: "node-a",
-		Urls: []string{reserved.URL, public.URL},
-		Timeout: 4000,
+		Urls:      []string{reserved.URL, public.URL},
+		Timeout:   4000,
 	})
 	if result.Error != "" || result.Url != public.URL || result.Body != "ip=8.8.8.8\nloc=US" {
 		t.Fatalf("reserved address won probe race: %+v", result)
 	}
 }
 
-
 func TestMentionsIpRejectsErrorDocumentsEvenWithPublicAddresses(t *testing.T) {
 	cases := map[string]bool{
 		"<html><body>Rate limit; contact 8.8.8.8</body></html>": false,
-		`{"error":"blocked","help_server":"1.1.1.1"}`:       false,
-		`{"error":"blocked","ip":"8.8.8.8","country":"US"}`: false,
-		`{"success":false,"ip":"8.8.8.8","country":"US"}`: false,
-		`{"status":"fail","ip":"8.8.8.8","country":"US"}`: false,
-		`{"ip":"8.8.8.8","country":42}`:                false,
-		`{"ip":"8.8.8.8","country":""}`:                false,
-		`{"ip":"8.8.8.8","help_server":"1.1.1.1"}`:    false,
-		"Message: contact 8.8.8.8 or see ip=1.1.1.1": false,
-		"ip=8.8.8.8": false,
-		`{"ip":"8.8.8.8","country":"US"}`:                true,
-		`{"ip":"8.8.8.8","country_code":"US"}`:           true,
-		`{"ip":"8.8.8.8","cc":"US"}`:                     true,
+		`{"error":"blocked","help_server":"1.1.1.1"}`:           false,
+		`{"error":"blocked","ip":"8.8.8.8","country":"US"}`:     false,
+		`{"success":false,"ip":"8.8.8.8","country":"US"}`:       false,
+		`{"status":"fail","ip":"8.8.8.8","country":"US"}`:       false,
+		`{"ip":"8.8.8.8","country":42}`:                         false,
+		`{"ip":"8.8.8.8","country":""}`:                         false,
+		`{"ip":"8.8.8.8","help_server":"1.1.1.1"}`:              false,
+		"Message: contact 8.8.8.8 or see ip=1.1.1.1":            false,
+		"ip=8.8.8.8":                                        false,
+		`{"ip":"8.8.8.8","country":"US"}`:                   true,
+		`{"ip":"8.8.8.8","country_code":"US"}`:              true,
+		`{"ip":"8.8.8.8","cc":"US"}`:                        true,
 		`{"ip":"8.8.8.8","location":{"country_code":"US"}}`: true,
-		"ip=8.8.8.8\nloc=US\nts=1700000000": true,
+		"ip=8.8.8.8\nloc=US\nts=1700000000":                 true,
 	}
 	for input, want := range cases {
 		if got := mentionsIp(input); got != want {
@@ -162,8 +161,8 @@ func TestOutboundIpIgnoresPublicIpInHttp200ErrorPage(t *testing.T) {
 	})
 	answer := handleOutboundIp(&OutboundIpParams{
 		ProxyName: "node-a",
-		Urls: []string{bad.URL, good.URL},
-		Timeout: 3000,
+		Urls:      []string{bad.URL, good.URL},
+		Timeout:   3000,
 	})
 	if answer.Error != "" || answer.Url != good.URL || answer.Body != `{"ip":"1.1.1.1","country":"US"}` {
 		t.Fatalf("HTTP-200 error page won probe race: %+v", answer)
@@ -342,5 +341,14 @@ func TestHandleOutboundIpRejectsAnEmptySourceList(t *testing.T) {
 	result := handleOutboundIp(&OutboundIpParams{ProxyName: "node-a", Timeout: 1000})
 	if result.Error != probeErrorFailed {
 		t.Errorf("error = %q, want %q", result.Error, probeErrorFailed)
+	}
+}
+
+func TestPublicEgressIpRefusesAZonedAddress(t *testing.T) {
+	if publicEgressIp("2001:db8::1%eth0") || publicEgressIp("2606:4700::1%1") {
+		t.Fatal("a zoned address counted as a public exit IP")
+	}
+	if !publicEgressIp("2606:4700::1") {
+		t.Fatal("a public address was refused")
 	}
 }

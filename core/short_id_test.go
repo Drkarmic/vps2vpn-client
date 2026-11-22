@@ -1,8 +1,10 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -75,5 +77,23 @@ func TestHandleGetConfigLeavesProfilesWithoutShortIDsToMihomo(t *testing.T) {
 	}
 	if raw.MixedPort != 7899 || raw.Mode.String() == "" {
 		t.Errorf("raw config = port %d mode %q, want 7899 and the default mode", raw.MixedPort, raw.Mode)
+	}
+}
+
+func TestShortIDConfigRefusesAnAliasBomb(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("short-id: x\na0: &a0 [x, x, x, x, x, x, x, x, x, x]\n")
+	for i := 1; i < 9; i++ {
+		fmt.Fprintf(&b, "a%d: &a%d [", i, i)
+		for j := 0; j < 10; j++ {
+			if j > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "*a%d", i-1)
+		}
+		b.WriteString("]\n")
+	}
+	if _, err := unmarshalRawConfig([]byte(b.String())); err == nil {
+		t.Fatal("an alias bomb was decoded")
 	}
 }

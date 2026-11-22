@@ -171,3 +171,23 @@ func TestVps2vpnEnhanceOffByDefault(t *testing.T) {
 		t.Fatal("changed while switched off")
 	}
 }
+
+// A "domestic" group listed first (DIRECT, then the proxy) is no main
+// selector: offering the smart line first there would send that traffic out.
+func TestVps2vpnEnhanceSkipsADirectFirstSelectGroup(t *testing.T) {
+	vpsOn(t)
+	raw := vpsTestRaw("GEOIP,CN,Domestic", "MATCH,Proxy")
+	raw.ProxyGroup = append([]map[string]any{
+		{"name": "Domestic", "type": "select", "proxies": []any{"DIRECT", "Proxy"}},
+	}, raw.ProxyGroup...)
+	vps2vpnEnhance(raw, 0)
+
+	domestic := vpsGroup(raw, "Domestic")["proxies"].([]any)
+	if len(domestic) != 2 || domestic[0] != "DIRECT" {
+		t.Fatalf("domestic group = %v, want it untouched", domestic)
+	}
+	proxy := vpsGroup(raw, "Proxy")["proxies"].([]any)
+	if len(proxy) == 0 || proxy[0] != vpsSmartGroup {
+		t.Fatalf("main selector = %v, want the smart line first", proxy)
+	}
+}
