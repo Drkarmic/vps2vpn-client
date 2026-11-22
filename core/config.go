@@ -350,10 +350,9 @@ func patchTun(target *LC.Tun, params *tunSchema) {
 func routeConfig(cfg *config.Config) *route.Config {
 	controller := cfg.Controller
 	routeCfg := &route.Config{
+		// No TLS, unix or pipe controller: mihomo serves the last two without
+		// the secret, and the app uses none of them.
 		Addr:        controller.ExternalController,
-		TLSAddr:     controller.ExternalControllerTLS,
-		UnixAddr:    controller.ExternalControllerUnix,
-		PipeAddr:    controller.ExternalControllerPipe,
 		RoutingMark: controller.ExternalControllerRoutingMark,
 		Secret:      controller.Secret,
 		DohServer:   controller.ExternalDohServer,

@@ -64,11 +64,11 @@ func TestRouteConfigCarriesControllerCredentials(t *testing.T) {
 	if got.Secret != "s3cret" {
 		t.Errorf("Secret = %q, want it preserved; an empty secret unauthenticates the controller", got.Secret)
 	}
-	if got.Addr != "127.0.0.1:9090" || got.TLSAddr != "127.0.0.1:9443" {
-		t.Errorf("addresses = %q/%q, want the controller's own listen addresses", got.Addr, got.TLSAddr)
+	if got.Addr != "127.0.0.1:9090" {
+		t.Errorf("Addr = %q, want the controller's own listen address", got.Addr)
 	}
-	if got.UnixAddr != "/tmp/flclash.sock" || got.PipeAddr != `\\.\pipe\flclash` {
-		t.Errorf("local addresses = %q/%q, want them preserved", got.UnixAddr, got.PipeAddr)
+	if got.TLSAddr != "" || got.UnixAddr != "" || got.PipeAddr != "" {
+		t.Errorf("tls/unix/pipe = %q/%q/%q, want none served", got.TLSAddr, got.UnixAddr, got.PipeAddr)
 	}
 	if got.RoutingMark != 1234 || got.DohServer != "/dns-query" {
 		t.Errorf("routingMark/dohServer = %d/%q, want 1234//dns-query", got.RoutingMark, got.DohServer)
